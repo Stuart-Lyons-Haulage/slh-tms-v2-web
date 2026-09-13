@@ -6,6 +6,8 @@ import { FuelCardsOperational } from './FuelCardsOperational';
 import { MarketsMasterClean } from './MarketsMasterClean';
 import { MasterDataOperational, type MasterDataTab } from './MasterDataOperational';
 import { GeofenceOperational } from './GeofenceOperational';
+import { useAccessToken } from '../lib/auth';
+import { request } from '../lib/api';
 
 type MasterSection = MasterDataTab | 'fuel-cards' | 'markets' | 'fuel-prices';
 
@@ -25,6 +27,22 @@ function canonicalSection(value: MasterSection): MasterSection {
 
 export function MasterDataHub({ initialSection = 'drivers' }: { initialSection?: MasterSection }) {
   const [section, setSection] = useState<MasterSection>(() => canonicalSection(initialSection));
+  const [syncingDrivers, setSyncingDrivers] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string>();
+  const token = useAccessToken();
+
+  async function syncDriverIdentities() {
+    setSyncingDrivers(true);
+    setSyncMessage(undefined);
+    try {
+      const job = await request<{ message?: string }>('/api/v1/driver-master/tachomaster/sync', await token(), { method: 'POST' }, 15000);
+      setSyncMessage(job.message || 'Canonical TachoMaster driver reconciliation queued. Refresh shortly to see the verified result.');
+    } catch (error) {
+      setSyncMessage(error instanceof Error ? error.message : 'Canonical driver reconciliation could not be queued.');
+    } finally {
+      setSyncingDrivers(false);
+    }
+  }
 
   useEffect(() => { setSection(canonicalSection(initialSection)); }, [initialSection]);
 
@@ -53,6 +71,13 @@ export function MasterDataHub({ initialSection = 'drivers' }: { initialSection?:
     <div className="notice inline-notice" style={{ marginBottom: 18 }}>
       <strong>Read only in TMS.</strong> Changes made here are intentionally disabled to prevent SQL and Microsoft Lists drifting apart.
     </div>
+
+    {section === 'drivers' && <div className="actions" style={{ marginBottom: 18 }}>
+      <button className="primary" onClick={() => void syncDriverIdentities()} disabled={syncingDrivers}>
+        {syncingDrivers ? 'Queuing reconciliation…' : 'Reconcile TachoMaster driver identities'}
+      </button>
+      {syncMessage && <span className="notice inline-notice">{syncMessage}</span>}
+    </div>}
 
     <div aria-readonly="true" style={{ pointerEvents: 'none' }}>
       {section === 'drivers' && <DriversMasterCompact />}
