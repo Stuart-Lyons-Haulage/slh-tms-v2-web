@@ -8,6 +8,7 @@ import { SourceEmailEvidenceDrawer } from "../components/SourceEmailEvidenceDraw
 import { IntakeHealthPanel } from "../components/IntakeHealthPanel";
 import { JobsOperational } from "./JobsOperational";
 import { OrderReviewBulk } from "./OrderReviewBulk";
+import { UndatedOrderReviewQueue } from "./UndatedOrderReviewQueue";
 
 type OrderControlTab = "review" | "live";
 type NwfRepairResponse = { repaired: number; message: string };
@@ -57,7 +58,7 @@ export function OrderControl({ initialTab = "review" }: { initialTab?: OrderCont
       {repairNotice && <p className="notice inline-notice" style={{ marginBottom: 0 }}>{repairNotice}</p>}
     </section>
     <IntakeHealthPanel />
-    {tab === "review" ? <OrderReviewBulk /> : <JobsOperational />}
+    {tab === "review" ? <><UndatedOrderReviewQueue /><OrderReviewBulk /></> : <JobsOperational />}
     {sourceEmailStagingId && <SourceEmailEvidenceDrawer stagingId={sourceEmailStagingId} onClose={closeSourceEmail} />}
   </>;
 }
