@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 
 function source(relative: string) {
   return readFileSync(new URL(relative, import.meta.url), "utf8");
@@ -22,7 +22,12 @@ describe("Order Review pagination", () => {
   });
 
   it("removes the unused legacy 2000-row Order Review implementation", () => {
-    const legacy = new URL("../pages/OrderReviewOperational.tsx", import.meta.url);
-    expect(existsSync(legacy)).toBe(false);
+    let legacyExists = true;
+    try {
+      readFileSync(new URL("../pages/OrderReviewOperational.tsx", import.meta.url), "utf8");
+    } catch {
+      legacyExists = false;
+    }
+    expect(legacyExists).toBe(false);
   });
 });
