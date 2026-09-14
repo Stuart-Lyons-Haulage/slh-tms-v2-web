@@ -5,7 +5,6 @@ import { FleetMasterUnified } from './FleetMasterUnified';
 import { FuelCardsOperational } from './FuelCardsOperational';
 import { MarketsMasterClean } from './MarketsMasterClean';
 import { MasterDataOperational, type MasterDataTab } from './MasterDataOperational';
-import { GeofenceOperational } from './GeofenceOperational';
 import { useAccessToken } from '../lib/auth';
 import { request } from '../lib/api';
 
@@ -57,7 +56,7 @@ export function MasterDataHub({ initialSection = 'drivers' }: { initialSection?:
       </div>
       <div>
         <span className="status approved">SQL is authoritative</span>
-        <p className="hint" style={{ maxWidth: 320, marginTop: 10 }}>Edit and reconcile records in the TMS. TachoMaster and Fleetio continue to provide their integration-owned fields.</p>
+        <p className="hint" style={{ maxWidth: 320, marginTop: 10 }}>Edit and reconcile records in the TMS. TachoMaster, Fleetio and RoadTech continue to provide only the fields and execution evidence they own.</p>
       </div>
     </div>
 
@@ -69,7 +68,7 @@ export function MasterDataHub({ initialSection = 'drivers' }: { initialSection?:
     </div>
 
     <div className="notice inline-notice" style={{ marginBottom: 18 }}>
-      <strong>One source of truth.</strong> Changes made here are saved directly to the SQL master used by the TMS. Microsoft Lists is not used as a competing write source.
+      <strong>One source of truth.</strong> Changes made here are saved directly to the SQL master used by the TMS. Microsoft Lists / SharePoint is not part of the operational master-data flow.
     </div>
 
     {section === 'drivers' && <div className="actions" style={{ marginBottom: 18 }}>
@@ -83,15 +82,7 @@ export function MasterDataHub({ initialSection = 'drivers' }: { initialSection?:
       {section === 'drivers' && <DriversMasterCompact />}
       {section === 'vehicles' && <FleetMasterUnified kind="vehicles" />}
       {section === 'trailers' && <FleetMasterUnified kind="trailers" />}
-      {section === 'sites' && <>
-        <MasterDataOperational initialTab="sites" showCategoryButtons={false} showHeading={false} />
-        <div className="panel" style={{ marginTop: 18, marginBottom: 18 }}>
-          <p className="eyebrow">Site execution evidence</p>
-          <h2>Geofences attached to Site Master</h2>
-          <p className="hint">RoadTech polygons remain execution evidence linked to the canonical Site record. Site and geofence master corrections are maintained through the governed Lists/integration process rather than edited in TMS.</p>
-        </div>
-        <GeofenceOperational />
-      </>}
+      {section === 'sites' && <MasterDataOperational initialTab="sites" showCategoryButtons={false} showHeading={false} />}
       {section === 'fuel-cards' && <FuelCardsOperational />}
       {section === 'markets' && <MarketsMasterClean />}
       {section === 'fuel-prices' && <FuelMaster />}
