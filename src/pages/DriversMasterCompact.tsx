@@ -256,7 +256,7 @@ export function DriversMasterCompact() {
       <div className="title-actions">
         <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search driver…" aria-label="Search drivers" />
         <button onClick={() => void Promise.all([drivers.refresh(), quality.refresh()])} disabled={drivers.loading}>Refresh</button><MasterDataExportButton section="drivers" label="Drivers" rows={(drivers.data || []) as unknown as Record<string, unknown>[]} />
-        <button className="primary" onClick={() => void syncTacho()} disabled={syncing}>{syncing ? 'Canonicalising…' : 'Sync & cleanse TachoMaster'}</button>
+        <button className="primary" onClick={() => void syncTacho()} disabled={syncing}>{syncing ? 'Refreshing eligible drivers…' : 'Refresh drivers with recent card reads'}</button>
       </div>
     </div>
 

@@ -20,6 +20,10 @@ export function MarketsMasterClean() {
   const token = useAccessToken();
   const contacts = useApi(useCallback(async () => api.marketContacts(await token()), [token]));
   const [activeMarket, setActiveMarket] = useState(ALL_MARKETS);
+  const [editing, setEditing] = useState<MarketContact>();
+  const [draft, setDraft] = useState<MarketContact>();
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string>();
   const rows = useMemo(() => contacts.data || [], [contacts.data]);
   const tabs = useMemo(() => marketTabs(rows), [rows]);
   const visibleRows = useMemo(() => marketRowsForTab(rows, activeMarket), [rows, activeMarket]);
@@ -35,6 +39,24 @@ export function MarketsMasterClean() {
     const missingSalesman = rows.filter(row => clean(row.market).toLowerCase() !== "sender" && !clean(row.salesman)).length;
     return { total: rows.length, blocking: missingRequired + duplicateGroups, missingRequired, duplicateGroups, missingStand, missingSalesman };
   }, [rows]);
+
+  async function saveMarketContact() {
+    if (!draft) return;
+    setSaving(true);
+    setMessage(undefined);
+    try {
+      const { id, ...payload } = draft;
+      await api.updateMarketContact(id, payload, await token());
+      setEditing(undefined);
+      setDraft(undefined);
+      await contacts.refresh();
+      setMessage("Market details saved to the SQL master.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Market details could not be saved.");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return <div className="market-clean-wrapper">
     <section className="panel" style={{ marginBottom: 18 }}>
@@ -57,6 +79,20 @@ export function MarketsMasterClean() {
       </div>
       <p className="intro">Market orders use this list for sellers, stall details, salesman and sender dropdowns. Choose a market below to work with one list at a time.</p>
 
+      {editing && draft && <section className="panel" style={{ marginBottom: 18 }}>
+        <div className="title-row"><div><p className="eyebrow">Edit SQL market master</p><h2>{editing.name}</h2></div><button type="button" disabled={saving} onClick={() => { setEditing(undefined); setDraft(undefined); }}>Close</button></div>
+        <div className="form-grid">
+          <label>Market<input value={draft.market} onChange={event => setDraft({ ...draft, market: event.target.value })} /></label>
+          <label>Seller / sender<input value={draft.name} onChange={event => setDraft({ ...draft, name: event.target.value })} /></label>
+          <label>Stall / stand<input value={draft.standOrLocation || ""} onChange={event => setDraft({ ...draft, standOrLocation: event.target.value })} /></label>
+          <label>Salesman<input value={draft.salesman || ""} onChange={event => setDraft({ ...draft, salesman: event.target.value })} /></label>
+          <label>Sender<input value={draft.sender || ""} onChange={event => setDraft({ ...draft, sender: event.target.value })} /></label>
+          <label className="checkbox-label"><input type="checkbox" checked={draft.active} onChange={event => setDraft({ ...draft, active: event.target.checked })} /> Active</label>
+        </div>
+        <button type="button" className="primary" disabled={saving || !clean(draft.market) || !clean(draft.name)} onClick={() => void saveMarketContact()}>{saving ? "Saving…" : "Save market"}</button>
+      </section>}
+      {message && <p className="notice inline-notice">{message}</p>}
+
       <div className="market-subtabs" role="tablist" aria-label="Markets">
         <button type="button" role="tab" aria-selected={activeMarket === ALL_MARKETS} className={activeMarket === ALL_MARKETS ? "primary" : ""} onClick={() => setActiveMarket(ALL_MARKETS)}>All Markets <span>{rows.length}</span></button>
         {tabs.map(market => {
@@ -70,8 +106,8 @@ export function MarketsMasterClean() {
       {!contacts.loading && !contacts.error && visibleRows.length === 0 && <div className="state">No records are available for this market.</div>}
       {!contacts.loading && !contacts.error && visibleRows.length > 0 && <div className="master-table-wrap">
         <table className="master-table">
-          <thead><tr>{activeMarket === ALL_MARKETS && <th>Market</th>}<th>{activeMarket === "Sender" ? "Sender" : "Seller / sender"}</th><th>Stall / stand</th><th>Salesman</th><th>Sender</th><th>Active</th></tr></thead>
-          <tbody>{visibleRows.map(row => <tr key={row.id}>{activeMarket === ALL_MARKETS && <td>{row.market}</td>}<td>{row.name || "—"}</td><td>{row.standOrLocation || "—"}</td><td>{row.salesman || "—"}</td><td>{row.sender || "—"}</td><td>{row.active ? "Yes" : "No"}</td></tr>)}</tbody>
+          <thead><tr>{activeMarket === ALL_MARKETS && <th>Market</th>}<th>{activeMarket === "Sender" ? "Sender" : "Seller / sender"}</th><th>Stall / stand</th><th>Salesman</th><th>Sender</th><th>Active</th><th>Action</th></tr></thead>
+          <tbody>{visibleRows.map(row => <tr key={row.id}>{activeMarket === ALL_MARKETS && <td>{row.market}</td>}<td>{row.name || "—"}</td><td>{row.standOrLocation || "—"}</td><td>{row.salesman || "—"}</td><td>{row.sender || "—"}</td><td>{row.active ? "Yes" : "No"}</td><td><button type="button" onClick={() => { setEditing(row); setDraft({ ...row }); setMessage(undefined); }}>Edit</button></td></tr>)}</tbody>
         </table>
       </div>}
 

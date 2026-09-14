@@ -55,6 +55,13 @@ describe("operations housekeeping contract", () => {
     expect(imports).toContain("Master data CSV");
   });
 
+  it("uses SQL as the sole master-data write authority and keeps master controls usable", () => {
+    expect(master).toContain("SQL is the single operational master");
+    expect(master).toContain("SQL is authoritative");
+    expect(master).not.toContain("pointerEvents: 'none'");
+    expect(master).not.toContain("Lists is the editable master-data authority");
+  });
+
   it("keeps Imports in Admin navigation and makes Control Centre one page", () => {
     expect(app).toContain("['/planner-import', 'Imports']");
     expect(control).not.toContain("useState");

@@ -12,13 +12,13 @@ import { request } from '../lib/api';
 type MasterSection = MasterDataTab | 'fuel-cards' | 'markets' | 'fuel-prices';
 
 const sections: Array<{ key: MasterSection; label: string; detail: string }> = [
-  { key: 'drivers', label: 'Drivers', detail: 'Read-only operational driver register. Driver identity is enriched by TachoMaster; editable CRM fields are maintained in Microsoft Lists.' },
-  { key: 'vehicles', label: 'Vehicles', detail: 'Read-only vehicle projection combining planning identity and Fleetio operational data.' },
-  { key: 'trailers', label: 'Trailers', detail: 'Read-only trailer projection combining SLH identity, capacity and Fleetio data.' },
-  { key: 'fuel-cards', label: 'Fuel cards & PINs', detail: 'Read-only vehicle fuel-card projection. Maintain governed values in Microsoft Lists.' },
-  { key: 'sites', label: 'Sites', detail: 'Read-only operational site register including site wording, address, planning data and linked execution geofences.' },
-  { key: 'markets', label: 'Markets', detail: 'Read-only market and contact projection from the governed Lists CRM.' },
-  { key: 'fuel-prices', label: 'Fuel prices', detail: 'Read-only fuel pricing reference data.' },
+  { key: 'drivers', label: 'Drivers', detail: 'SQL driver register. TachoMaster updates tachograph identity; approved staff maintain operational details here.' },
+  { key: 'vehicles', label: 'Vehicles', detail: 'SQL vehicle register linked to Fleetio operational data.' },
+  { key: 'trailers', label: 'Trailers', detail: 'SQL trailer register for identity, capacity and Fleetio links.' },
+  { key: 'fuel-cards', label: 'Fuel cards & PINs', detail: 'Restricted SQL fuel register for vehicle fuel-card details and PINs.' },
+  { key: 'sites', label: 'Sites', detail: 'SQL site register for aliases, addresses, planning data and linked execution geofences.' },
+  { key: 'markets', label: 'Markets', detail: 'SQL market and contact register used by order intake and planning.' },
+  { key: 'fuel-prices', label: 'Fuel prices', detail: 'SQL fuel pricing reference data.' },
 ];
 
 function canonicalSection(value: MasterSection): MasterSection {
@@ -51,13 +51,13 @@ export function MasterDataHub({ initialSection = 'drivers' }: { initialSection?:
   return <section>
     <div className="title-row">
       <div>
-        <p className="eyebrow">Microsoft Lists CRM · read-only TMS projection</p>
+        <p className="eyebrow">TMS master data · SQL authority</p>
         <h1>Master data</h1>
-        <p className="intro">Microsoft Lists is the editable master-data authority. TMS keeps a read-only operational copy for planning, dispatch and integrations, refreshed automatically from Lists every 10 minutes.</p>
+        <p className="intro">SQL is the single operational master for the TMS. Planning, dispatch and integrations read and update the same records directly.</p>
       </div>
       <div>
-        <span className="status approved">Lists is authoritative</span>
-        <p className="hint" style={{ maxWidth: 320, marginTop: 10 }}>Add, edit, archive and correct master records in Microsoft Lists. Integration-owned data such as TachoMaster and Fleetio continues to synchronise automatically.</p>
+        <span className="status approved">SQL is authoritative</span>
+        <p className="hint" style={{ maxWidth: 320, marginTop: 10 }}>Edit and reconcile records in the TMS. TachoMaster and Fleetio continue to provide their integration-owned fields.</p>
       </div>
     </div>
 
@@ -69,7 +69,7 @@ export function MasterDataHub({ initialSection = 'drivers' }: { initialSection?:
     </div>
 
     <div className="notice inline-notice" style={{ marginBottom: 18 }}>
-      <strong>Read only in TMS.</strong> Changes made here are intentionally disabled to prevent SQL and Microsoft Lists drifting apart.
+      <strong>One source of truth.</strong> Changes made here are saved directly to the SQL master used by the TMS. Microsoft Lists is not used as a competing write source.
     </div>
 
     {section === 'drivers' && <div className="actions" style={{ marginBottom: 18 }}>
@@ -79,7 +79,7 @@ export function MasterDataHub({ initialSection = 'drivers' }: { initialSection?:
       {syncMessage && <span className="notice inline-notice">{syncMessage}</span>}
     </div>}
 
-    <div aria-readonly="true" style={{ pointerEvents: 'none' }}>
+    <div>
       {section === 'drivers' && <DriversMasterCompact />}
       {section === 'vehicles' && <FleetMasterUnified kind="vehicles" />}
       {section === 'trailers' && <FleetMasterUnified kind="trailers" />}

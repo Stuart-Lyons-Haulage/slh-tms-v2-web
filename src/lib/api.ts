@@ -146,6 +146,7 @@ export interface TmsApi {
   sites(token?: string): Promise<Site[]>;
   updateSite(id: string, payload: SiteUpdate, token?: string): Promise<Site>;
   marketContacts(token?: string): Promise<MarketContact[]>;
+  updateMarketContact(id: string, payload: Omit<MarketContact, 'id'>, token?: string): Promise<MarketContact>;
   fuelPrices(token?: string): Promise<FuelPrice[]>;
   saveFuelPrice(payload: { weekCommencing: string; provider: string; pricePencePerLitre: number; isPricingMaximum: boolean; source?: string; notes?: string }, token?: string): Promise<FuelPrice>;
   staging(token?: string, status?: string, entityType?: string, take?: number): Promise<StagedImport[]>;
@@ -155,7 +156,6 @@ export interface TmsApi {
   stageBatch(records: StageBatchRequest[], token?: string): Promise<StageBatchResponse>;
   applyMasterData(records: StageBatchRequest[], token?: string): Promise<MasterApplyResponse>;
   linkMasterRegister(token?: string): Promise<{ linked: number; message: string }>;
-  publishSharePointMasterData(token?: string): Promise<{ listsWritten: number; rowsWritten: number; rowsByList: Record<string, number>; message: string }>;
   telemetry(token?: string): Promise<Telemetry>;
   fleetStatus(token?: string): Promise<FleetStatus>;
   trackingHistory(date: string, token?: string): Promise<Telemetry>;
@@ -198,16 +198,16 @@ export const api: TmsApi = {
   sites: token => request<Site[]>('/api/v1/sites', token),
   updateSite: (id, payload, token) => request<Site>(`/api/v1/sites/${id}`, token, { method: 'PUT', body: JSON.stringify(payload) }),
   marketContacts: async token => normaliseMarketContacts(await request<MarketContact[]>('/api/v1/market-contacts', token)),
+  updateMarketContact: (id, payload, token) => request<MarketContact>(`/api/v1/market-contacts/${id}`, token, { method: 'PUT', body: JSON.stringify(payload) }),
   fuelPrices: token => request<FuelPrice[]>('/api/v1/fuel-prices', token),
   saveFuelPrice: (payload, token) => request<FuelPrice>('/api/v1/fuel-prices', token, { method: 'POST', body: JSON.stringify(payload) }),
-  staging: (token, status = 'PendingReview', entityType = '', take = 1000) => request<StagedImport[]>(`/api/v1/staging?take=${take}${status ? `&status=${encodeURIComponent(status)}` : ''}${entityType ? `&entityType=${encodeURIComponent(entityType)}` : ''}`, token),
+  staging: (token, status = 'PendingReview', entityType = '', take = 100) => request<StagedImport[]>(`/api/v1/staging?take=${Math.min(Math.max(take, 1), 200)}${status ? `&status=${encodeURIComponent(status)}` : ''}${entityType ? `&entityType=${encodeURIComponent(entityType)}` : ''}`, token),
   orders: (from, to, token) => request<TransportOrder[]>(`/api/v1/orders?${new URLSearchParams({ ...(from ? { from } : {}), ...(to ? { to } : {}) })}`, token),
   stageOrder: (payload, idempotencyKey, token) => request<StageImportResponse>('/api/v1/staging', token, { method: 'POST', body: JSON.stringify({ entityType: 'order', idempotencyKey, source: 'SLH TMS Web/CSV', payload }) }),
   stageRecord: (entityType, payload, idempotencyKey, token) => request<StageImportResponse>('/api/v1/staging', token, { method: 'POST', body: JSON.stringify({ entityType, idempotencyKey, source: 'SLH TMS Web', payload }) }),
   stageBatch: (records, token) => request<StageBatchResponse>('/api/v1/staging/batch', token, { method: 'POST', body: JSON.stringify(normaliseMarketMasterRecords(records)) }),
   applyMasterData: (records, token) => request<MasterApplyResponse>('/api/v1/master-data/apply', token, { method: 'POST', body: JSON.stringify(normaliseMarketMasterRecords(records)) }),
   linkMasterRegister: token => request<{ linked: number; message: string }>('/api/v1/master-data/register/link', token, { method: 'POST' }),
-  publishSharePointMasterData: token => request<{ listsWritten: number; rowsWritten: number; rowsByList: Record<string, number>; message: string }>('/api/v1/sharepoint/master-data/publish', token, { method: 'POST' }),
   telemetry: token => request<Telemetry>('/api/v1/tracking/dot/telemetry', token),
   fleetStatus: token => request<FleetStatus>('/api/v1/tracking/dot/fleet-status', token),
   trackingHistory: (date, token) => request<Telemetry>(`/api/v1/tracking/dot/history?date=${encodeURIComponent(date)}`, token),

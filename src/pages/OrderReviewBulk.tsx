@@ -245,7 +245,7 @@ export function OrderReviewBulk() {
   const [sourceEmailStagingId, setSourceEmailStagingId] = useState<string>();
 
   const queue = useApi(useCallback(async () =>
-    api.staging(await token(), "PendingReview", "order", 2000), [token]));
+    api.staging(await token(), "PendingReview", "order", 100), [token]));
 
   const rows = useMemo(() => (queue.data || []).map(parse), [queue.data]);
   const dateRange = useMemo(rollingDates, []);
