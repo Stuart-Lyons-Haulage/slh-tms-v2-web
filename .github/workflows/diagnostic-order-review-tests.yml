@@ -1,0 +1,38 @@
+name: Diagnostic Order Review Tests
+
+on:
+  push:
+    branches: [perf/order-review-pagination-v2]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  unit-test-diagnostic:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Capture unit test output
+        shell: bash
+        run: |
+          set +e
+          pnpm test > test.log 2>&1
+          result=$?
+          cat test.log
+          echo "$result" > test.exit
+          exit 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: order-review-tests
+          path: |
+            test.log
+            test.exit
