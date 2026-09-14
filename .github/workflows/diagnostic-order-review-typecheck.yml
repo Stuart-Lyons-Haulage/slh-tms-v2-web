@@ -1,0 +1,38 @@
+name: Diagnostic Order Review Typecheck
+
+on:
+  push:
+    branches: [perf/order-review-pagination-v2]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  typecheck-diagnostic:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Capture TypeScript output
+        shell: bash
+        run: |
+          set +e
+          pnpm typecheck > typecheck.log 2>&1
+          result=$?
+          cat typecheck.log
+          echo "$result" > typecheck.exit
+          exit 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: order-review-typecheck
+          path: |
+            typecheck.log
+            typecheck.exit
