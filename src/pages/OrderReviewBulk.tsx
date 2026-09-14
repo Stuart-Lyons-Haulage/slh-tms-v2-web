@@ -6,6 +6,19 @@ import { SourceEmailEvidenceDrawer } from "../components/SourceEmailEvidenceDraw
 import { resolveSourceEvidence } from "../sourceEvidence";
 import "../order-control.css";
 
+type RouteAlternative = {
+  id?: string;
+  score?: number;
+  customerCode?: string;
+  originSiteCode?: string;
+  originSiteName?: string;
+  retailerCode?: string;
+  destinationSiteCode?: string;
+  destinationCode?: string;
+  destinationName?: string;
+  destinationPostcode?: string;
+};
+
 type Payload = Record<string, unknown> & {
   poNumber?: string;
   customerPo?: string;
@@ -34,6 +47,12 @@ type Payload = Record<string, unknown> & {
   sourceSubject?: string;
   sourceWebLink?: string;
   sourceAttachmentName?: string;
+  orderIntakeRouteRuleId?: string;
+  orderIntakeRouteConfidenceScore?: number;
+  orderIntakeRouteMatchedDimensions?: number;
+  orderIntakeRouteRequiresReview?: boolean;
+  orderIntakeRouteExplanation?: string[];
+  orderIntakeRouteAlternatives?: RouteAlternative[];
 };
 
 type ParsedRow = {
@@ -214,7 +233,7 @@ function blockingReason(row: ParsedRow, date: string) {
   if (!text(payload.poNumber)) return "TMS reference is missing";
   if (!text(payload.customerCode)) return "Customer is missing";
   if (!isBackhaul(payload) && palletCount(payload) <= 0) return "Zero or missing pallets";
-  if (payload.plannerReady === false) return "Pre-order / not planner-ready";
+  if (payload.plannerReady === false && !payload.orderIntakeRouteRequiresReview) return "Pre-order / not planner-ready";
   if (text(payload.intakeStatus).toLowerCase() === "preorder") return "Pre-order awaiting instruction";
   return undefined;
 }
@@ -223,6 +242,7 @@ function reviewFlagReason(row: ParsedRow) {
   const payload = row.payload;
   const sourceWarnings = reviewWarnings(payload);
   if (sourceWarnings.length) return sourceWarnings[0];
+  if (payload.orderIntakeRouteRequiresReview) return "Route match needs planner review";
   const confidence = text(payload.intakeConfidence);
   if (confidence && confidence.toLowerCase() !== "high" && warnings(payload).length > 0 && sourceWarnings.length === 0) return undefined;
   if (!confidence || confidence.toLowerCase() !== "high") return confidence ? `${confidence} confidence — check source` : "Source confidence not set — check source";
@@ -231,6 +251,13 @@ function reviewFlagReason(row: ParsedRow) {
 
 function displayReference(payload: Payload) {
   return text(payload.customerPo) || text(payload.poNumber) || "Reference missing";
+}
+
+function routeAlternativeLabel(value: RouteAlternative) {
+  const origin = text(value.originSiteCode) || text(value.originSiteName) || "origin not specified";
+  const destination = text(value.destinationCode) || text(value.destinationSiteCode) || text(value.destinationName) || text(value.destinationPostcode) || "destination not specified";
+  const retailer = text(value.retailerCode);
+  return `${origin} → ${destination}${retailer ? ` · ${retailer}` : ""}`;
 }
 
 function amendmentPrompt(items: Array<{ row: ParsedRow; comparison: ApprovalComparison }>) {
@@ -557,6 +584,10 @@ export function OrderReviewBulk() {
         const hasSourceIdentity = Boolean(sourceEvidence.messageId || sourceEvidence.internetMessageId || sourceLink);
         const statusClass = blocked ? "blocked" : reviewFlag ? "review" : "ready";
         const statusText = blocked ? blocked : reviewFlag ? `Check: ${reviewFlag}` : "Ready to approve";
+        const routeScore = row.payload.orderIntakeRouteConfidenceScore;
+        const routeExplanation = Array.isArray(row.payload.orderIntakeRouteExplanation) ? row.payload.orderIntakeRouteExplanation : [];
+        const routeAlternatives = Array.isArray(row.payload.orderIntakeRouteAlternatives) ? row.payload.orderIntakeRouteAlternatives : [];
+        const hasRouteEvidence = Boolean(row.payload.orderIntakeRouteRuleId || routeScore != null || routeExplanation.length || routeAlternatives.length);
 
         return <article className={`bulk-order-row ${selectable ? "selectable" : "held"} ${selected ? "selected" : ""} ${isEditing ? "editing" : ""}`} key={row.item.id} role="listitem">
           <input
@@ -584,6 +615,13 @@ export function OrderReviewBulk() {
             <strong>{reviewFlag ? "Why this needs checking" : "Source warning"}</strong>
             {sourceWarnings.length > 0 ? sourceWarnings.map((warning, index) => <span key={`${row.item.id}-warning-${index}`}>{warning}</span>) : <span>{reviewFlag}</span>}
             {hasSourceIdentity && <button type="button" className="source-email-review-button" onClick={() => setSourceEmailStagingId(row.item.id)}>Review source email</button>}
+          </div>}
+
+          {hasRouteEvidence && <div className={`bulk-row-warning ${row.payload.orderIntakeRouteRequiresReview ? "attention" : ""}`}>
+            <strong>SQL route match {routeScore != null ? `· ${routeScore}% confidence` : ""}</strong>
+            <span>{row.payload.orderIntakeRouteMatchedDimensions != null ? `${row.payload.orderIntakeRouteMatchedDimensions} route dimensions matched. ` : ""}{row.payload.orderIntakeRouteRequiresReview ? "Planner confirmation is required before approval." : "The best rule supplied missing route values only."}</span>
+            {routeExplanation.map((explanation, index) => <span key={`${row.item.id}-route-explanation-${index}`}>{explanation}</span>)}
+            {routeAlternatives.length > 1 && <span><strong>Alternatives:</strong> {routeAlternatives.slice(0, 3).map((alternative) => `${routeAlternativeLabel(alternative)}${alternative.score != null ? ` (${alternative.score}%)` : ""}`).join(" · ")}</span>}
           </div>}
 
           {isEditing && <div className="bulk-order-editor">
