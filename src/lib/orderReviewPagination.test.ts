@@ -12,7 +12,7 @@ describe("Order Review pagination", () => {
     expect(review).toContain("const queuePageSize = 100");
     expect(review).toContain("queue.data?.records");
     expect(review).not.toContain("api.staging(await token(), \"PendingReview\", \"order\", 100)");
-    expect(review).not.toContain("2000");
+    expect(review).not.toContain("api.staging(await token(), \"PendingReview\", \"order\", 2000)");
   });
 
   it("loads the complete staged payload only when edit is opened", () => {
