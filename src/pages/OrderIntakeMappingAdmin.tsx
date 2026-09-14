@@ -95,6 +95,8 @@ export function OrderIntakeMappingAdmin() {
     return rules.filter(row => [row.customerCode, row.originSiteCode, row.originSiteName, row.retailerCode, row.destinationSiteCode, row.destinationCode, row.destinationName, row.destinationPostcode].some(value => clean(value).toLowerCase().includes(needle)));
   }, [rules, filter]);
 
+  const ruleHasDimension = [ruleDraft.originSiteCode, ruleDraft.originSiteName, ruleDraft.retailerCode, ruleDraft.destinationSiteCode, ruleDraft.destinationCode, ruleDraft.destinationName, ruleDraft.destinationPostcode].some(value => clean(value));
+
   async function saveMapping() {
     if (!clean(mappingDraft.customerCode) || (!clean(mappingDraft.emailAddress) && !clean(mappingDraft.emailDomain))) return;
     setSaving(true); setMessage(undefined);
@@ -111,13 +113,17 @@ export function OrderIntakeMappingAdmin() {
   }
 
   async function saveRule() {
-    const hasDimension = [ruleDraft.originSiteCode, ruleDraft.originSiteName, ruleDraft.retailerCode, ruleDraft.destinationSiteCode, ruleDraft.destinationCode, ruleDraft.destinationName, ruleDraft.destinationPostcode].some(value => clean(value));
-    if (!clean(ruleDraft.customerCode) || !hasDimension) return;
+    if (!clean(ruleDraft.customerCode) || !ruleHasDimension) return;
     setSaving(true); setMessage(undefined);
     try {
       const access = await token();
       const path = ruleId ? `/api/v1/order-intake-route-rules/${ruleId}` : '/api/v1/order-intake-route-rules';
-      await request(path, access, { method: ruleId ? 'PATCH' : 'POST', body: JSON.stringify(ruleDraft) });
+      const payload = {
+        ...ruleDraft,
+        effectiveFrom: clean(ruleDraft.effectiveFrom) || null,
+        effectiveTo: clean(ruleDraft.effectiveTo) || null,
+      };
+      await request(path, access, { method: ruleId ? 'PATCH' : 'POST', body: JSON.stringify(payload) });
       setRuleId(undefined); setRuleDraft(emptyRule);
       await load();
       setMessage('Route rule saved to SQL.');
@@ -204,7 +210,7 @@ export function OrderIntakeMappingAdmin() {
           <label style={{ gridColumn: '1 / -1' }}>Notes<textarea value={ruleDraft.notes || ''} onChange={event => setRuleDraft({ ...ruleDraft, notes: event.target.value })} /></label>
           <label className="checkbox-label"><input type="checkbox" checked={ruleDraft.active} onChange={event => setRuleDraft({ ...ruleDraft, active: event.target.checked })} /> Active</label>
         </div>
-        <button className="primary" disabled={saving || !clean(ruleDraft.customerCode)} onClick={() => void saveRule()}>{saving ? 'Saving…' : ruleId ? 'Save route rule' : 'Add route rule'}</button>
+        <button className="primary" disabled={saving || !clean(ruleDraft.customerCode) || !ruleHasDimension} onClick={() => void saveRule()}>{saving ? 'Saving…' : ruleId ? 'Save route rule' : 'Add route rule'}</button>
       </section>
       <div className="master-table-wrap"><table className="master-table"><thead><tr><th>Customer</th><th>Origin</th><th>Retailer</th><th>Destination</th><th>Priority</th><th>Confidence</th><th>Active</th><th>Action</th></tr></thead><tbody>{visibleRules.map(row => <tr key={row.id}><td>{row.customerCode}</td><td>{row.originSiteCode || row.originSiteName || '—'}</td><td>{row.retailerCode || '—'}</td><td>{row.destinationCode || row.destinationSiteCode || row.destinationName || row.destinationPostcode || '—'}</td><td>{row.priority}</td><td>{row.confidenceScore}%</td><td>{row.active ? 'Yes' : 'No'}</td><td><div className="actions"><button onClick={() => editRule(row)}>Edit</button>{row.active && <button disabled={saving} onClick={() => void deactivate('rule', row.id)}>Deactivate</button>}</div></td></tr>)}</tbody></table></div>
     </>}
