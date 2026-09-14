@@ -15,9 +15,10 @@ describe("mailbox intake health and review performance", () => {
     expect(panel).toContain("Orders extracted");
   });
 
-  it("keeps the active Order Review queue bounded and never requests 2000 rows", () => {
+  it("uses the lightweight paged Order Review queue and never requests 2000 staging rows", () => {
     const review = source("./pages/OrderReviewBulk.tsx");
-    expect(review).toContain('api.staging(await token(), "PendingReview", "order", 100)');
-    expect(review).not.toContain('"order", 2000');
+    expect(review).toContain('/api/v1/staging/queue?status=PendingReview&entityType=order&page=');
+    expect(review).toContain("const queuePageSize = 100");
+    expect(review).not.toContain('api.staging(await token(), "PendingReview", "order", 2000)');
   });
 });
