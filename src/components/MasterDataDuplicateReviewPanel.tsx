@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { request } from '../lib/api';
 import { useAccessToken } from '../lib/auth';
 
@@ -39,7 +39,7 @@ export function MasterDataDuplicateReviewPanel({ entityType = 'sites' }: { entit
   const [notice, setNotice] = useState<string>();
   const [error, setError] = useState<string>();
 
-  async function load() {
+  const load = useCallback(async () => {
     setError(undefined);
     try {
       const access = await token();
@@ -48,9 +48,9 @@ export function MasterDataDuplicateReviewPanel({ entityType = 'sites' }: { entit
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Duplicate check failed.');
     }
-  }
+  }, [entityType, token]);
 
-  useEffect(() => { void load(); }, [entityType]);
+  useEffect(() => { void load(); }, [load]);
 
   async function autoMerge() {
     setBusy(true); setError(undefined); setNotice(undefined);
