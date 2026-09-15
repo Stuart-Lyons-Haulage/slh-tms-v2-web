@@ -18,7 +18,7 @@ export function isPagedStagingQueueRequest(url: string) {
   return url.includes("/api/v1/staging/queue");
 }
 
-export function shouldRewriteListPayload(_url: string) {
+export function shouldRewriteListPayload() {
   return false;
 }
 
