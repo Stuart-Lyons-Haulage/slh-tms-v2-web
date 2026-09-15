@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, request, type StagedImport } from "../lib/api";
 import { useAccessToken } from "../lib/auth";
 import { useApi } from "../lib/useApi";
+import { matchesPlanningDate, planningDates } from "../lib/orderReviewDates";
 import { SourceEmailEvidenceDrawer } from "../components/SourceEmailEvidenceDrawer";
 import { resolveSourceEvidence } from "../sourceEvidence";
 import "../order-control.css";
@@ -290,10 +291,9 @@ export function OrderReviewBulk() {
   const rows = useMemo(() => (queue.data?.records || []).map(parse), [queue.data]);
   const dateRange = useMemo(rollingDates, []);
   const today = useMemo(todayDate, []);
-  const pendingOrderDates = useMemo(() => Array.from(new Set(rows.flatMap((row) => [text(row.payload.collectionDate), text(row.payload.deliveryDate)]).filter(Boolean))).sort(), [rows]);
+  const pendingOrderDates = useMemo(() => Array.from(new Set(rows.flatMap((row) => planningDates(row.payload)))).sort(), [rows]);
   const visibleDates = useMemo(() => Array.from(new Set([...dateRange, ...pendingOrderDates, date])).sort(), [date, dateRange, pendingOrderDates]);
-  const datedRows = useMemo(() => rows.filter((row) =>
-    text(row.payload.collectionDate) === date || text(row.payload.deliveryDate) === date), [date, rows]);
+  const datedRows = useMemo(() => rows.filter((row) => matchesPlanningDate(row.payload, date)), [date, rows]);
   const selectableRows = useMemo(() => datedRows.filter((row) => !blockingReason(row, date)), [date, datedRows]);
   const cleanRows = useMemo(() => selectableRows.filter((row) => !reviewFlagReason(row)), [selectableRows]);
   const flaggedRows = useMemo(() => selectableRows.filter((row) => Boolean(reviewFlagReason(row))), [selectableRows]);
@@ -304,7 +304,7 @@ export function OrderReviewBulk() {
   const allCleanSelected = cleanRows.length > 0 && cleanRows.every((row) => selectedIds.has(row.item.id));
 
   const summaries = useMemo(() => visibleDates.map<DateSummary>((planningDate) => {
-    const pending = rows.filter((row) => text(row.payload.collectionDate) === planningDate);
+    const pending = rows.filter((row) => matchesPlanningDate(row.payload, planningDate));
     const selectable = pending.filter((row) => !blockingReason(row, planningDate));
     return {
       date: planningDate,
