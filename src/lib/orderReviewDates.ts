@@ -69,6 +69,12 @@ export function inferredPlanningWindow(order: OrderDates): "AM" | "PM" | "Market
   if (isCrossDate(order)) return "PM";
   if ([" pm ", " afternoon ", " evening ", " night ", " overnight ", " backhaul ", " backload "].some((term) => haystack.includes(term))) return "PM";
   if (haystack.includes(" barefoots ") && !haystack.includes(" am ")) return "PM";
+
+  // Delivery-date-only staged orders are PM candidates until the planner confirms
+  // the collection detail. This mirrors the API classifier and keeps them visible
+  // on the prior PM collection-date board as well as their stated delivery date.
+  if (!text(order.collectionDate) && text(order.deliveryDate)) return "PM";
+
   return "AM";
 }
 
