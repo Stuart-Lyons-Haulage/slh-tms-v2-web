@@ -69,7 +69,21 @@ describe("resolveSourceEvidence", () => {
     expect(html).toContain("Waitrose order O78442");
     expect(html).toContain("Please collect two pallets from Sefter");
     expect(html).toContain("booking.pdf");
+    expect(html).toContain("copy not retained");
     expect(html).toContain("Open original message in Outlook");
+  });
+
+  it("renders retained attachment copies as download links", () => {
+    const result = resolve?.({
+      sourceSubject: "Order with attachment",
+      sourceBodyText: "Please review the attached booking form.",
+      sourceAttachments: [{ name: "booking.pdf", contentType: "application/pdf", contentBase64: "SGVsbG8=", size: 5, isInline: false }],
+    });
+
+    const html = decodeURIComponent(result?.webLink.split(",", 2)[1] || "");
+    expect(html).toContain("booking.pdf");
+    expect(html).toContain("Download copy");
+    expect(html).toContain("data:application/pdf;base64,SGVsbG8=");
   });
 
   it("escapes retained email content before rendering the snapshot", () => {
