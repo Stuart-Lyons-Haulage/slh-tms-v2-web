@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isPagedStagingQueueRequest, normaliseListPayload, shouldRewriteListPayload } from "./orderReviewRecovery";
+import { installOrderReviewRecovery, isPagedStagingQueueRequest, normaliseListPayload, shouldRewriteListPayload } from "./orderReviewRecovery";
 
 describe("normaliseListPayload", () => {
   it("keeps array responses unchanged", () => {
@@ -7,7 +7,7 @@ describe("normaliseListPayload", () => {
     expect(normaliseListPayload(rows)).toBe(rows);
   });
 
-  it("unwraps common API list envelopes", () => {
+  it("can still read legacy envelopes for deliberate local callers", () => {
     expect(normaliseListPayload({ items: [{ id: "1" }] })).toEqual([{ id: "1" }]);
     expect(normaliseListPayload({ records: [{ id: "2" }] })).toEqual([{ id: "2" }]);
     expect(normaliseListPayload({ data: [{ id: "3" }] })).toEqual([{ id: "3" }]);
@@ -28,8 +28,13 @@ describe("Order Review recovery endpoint handling", () => {
     expect(shouldRewriteListPayload(url)).toBe(false);
   });
 
-  it("continues to rewrite only legacy list endpoints that still return envelopes to array-only callers", () => {
-    expect(shouldRewriteListPayload("/api/v1/staging?status=PendingReview&entityType=order")).toBe(true);
-    expect(shouldRewriteListPayload("/api/v1/operational-master-data/sites/search?q=coop")).toBe(true);
+  it("does not rewrite legacy staging or master-data list endpoints", () => {
+    expect(shouldRewriteListPayload("/api/v1/staging?status=PendingReview&entityType=order")).toBe(false);
+    expect(shouldRewriteListPayload("/api/v1/operational-master-data/sites/search?q=coop")).toBe(false);
+    expect(shouldRewriteListPayload("/api/v1/operational-master-data/geofences/search?q=coop")).toBe(false);
+  });
+
+  it("keeps the compatibility installer as a no-op", () => {
+    expect(() => installOrderReviewRecovery()).not.toThrow();
   });
 });

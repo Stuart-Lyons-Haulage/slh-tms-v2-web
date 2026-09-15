@@ -11,7 +11,7 @@ import { EmailIntakeMappings } from './EmailIntakeMappings';
 import { useAccessToken } from '../lib/auth';
 import { request } from '../lib/api';
 
-type MasterSection = MasterDataTab | 'fuel-cards' | 'markets' | 'fuel-prices' | 'email-intake';
+type MasterSection = MasterDataTab | 'fuel-cards' | 'markets' | 'fuel-prices' | 'email-intake' | 'intake-rules';
 
 const sections: Array<{ key: MasterSection; label: string; detail: string }> = [
   { key: 'drivers', label: 'Drivers', detail: 'SQL driver register. TachoMaster updates tachograph identity; approved staff maintain operational details here.' },
