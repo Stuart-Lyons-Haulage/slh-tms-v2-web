@@ -68,10 +68,10 @@ jobs:
             exit 1
           fi
 
-          # Four legacy request-resilience wrappers pre-date this guard. Track them explicitly
+          # Remaining legacy request-resilience wrappers pre-date this guard. Track them explicitly
           # so CI blocks any new global fetch patch while releases remain deployable. These files
           # should be migrated to scoped request helpers and removed from this allow-list over time.
-          allowed_fetch_patch_files='^(src/orderReviewRecovery\.ts|src/pages/EtaLearningBridge\.tsx|src/pages/OperationsWallboard\.tsx|src/pages/PublicTvBoard\.tsx):'
+          allowed_fetch_patch_files='^(src/pages/EtaLearningBridge\.tsx|src/pages/OperationsWallboard\.tsx|src/pages/PublicTvBoard\.tsx):'
           fetch_matches="$(git grep -n -E "$fetch_patch" -- ':!pnpm-lock.yaml' || true)"
           if test -n "$fetch_matches"; then
             unexpected="$(printf '%s\n' "$fetch_matches" | grep -Ev "$allowed_fetch_patch_files" || true)"
