@@ -8,6 +8,7 @@ import { OrderIntakeMappingAdmin } from './OrderIntakeMappingAdmin';
 import { MasterDataOperational, type MasterDataTab } from './MasterDataOperational';
 import { GeofenceOperational } from './GeofenceOperational';
 import { EmailIntakeMappings } from './EmailIntakeMappings';
+import { MasterDataDuplicateReviewPanel } from '../components/MasterDataDuplicateReviewPanel';
 import { useAccessToken } from '../lib/auth';
 import { request } from '../lib/api';
 
@@ -27,6 +28,11 @@ const sections: Array<{ key: MasterSection; label: string; detail: string }> = [
 
 function canonicalSection(value: MasterSection): MasterSection {
   return value === 'customers' || value === 'geofences' ? 'sites' : value;
+}
+
+function duplicateEntity(section: MasterSection): 'sites' | 'drivers' | 'vehicles' | 'markets' | undefined {
+  if (section === 'sites' || section === 'drivers' || section === 'vehicles' || section === 'markets') return section;
+  return undefined;
 }
 
 export function MasterDataHub({ initialSection = 'drivers' }: { initialSection?: MasterSection }) {
@@ -51,6 +57,7 @@ export function MasterDataHub({ initialSection = 'drivers' }: { initialSection?:
   useEffect(() => { setSection(canonicalSection(initialSection)); }, [initialSection]);
 
   const active = sections.find(item => item.key === section) || sections[0];
+  const duplicateReviewEntity = duplicateEntity(section);
 
   return <section>
     <div className="title-row">
@@ -82,6 +89,8 @@ export function MasterDataHub({ initialSection = 'drivers' }: { initialSection?:
       </button>
       {syncMessage && <span className="notice inline-notice">{syncMessage}</span>}
     </div>}
+
+    {duplicateReviewEntity && <MasterDataDuplicateReviewPanel entityType={duplicateReviewEntity} />}
 
     <div>
       {section === 'drivers' && <DriversMasterCompact />}
