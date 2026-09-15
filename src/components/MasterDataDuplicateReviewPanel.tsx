@@ -1,4 +1,3 @@
-/* eslint-disable */
 import { useCallback, useEffect, useState } from 'react';
 import { request } from '../lib/api';
 import { useAccessToken } from '../lib/auth';
