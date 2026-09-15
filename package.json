@@ -18,7 +18,7 @@
     "@vitejs/plugin-react": "^5.2.0",
     "azure-maps-control": "^3.7.4",
     "react": "^19.0.0",
-    "react-dom": "^19.2.1",
+    "react-dom": "^19.0.0",
     "react-router-dom": "^7.18.3",
     "vite": "^6.2.2",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
