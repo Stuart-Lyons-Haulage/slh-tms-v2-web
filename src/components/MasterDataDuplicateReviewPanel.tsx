@@ -23,6 +23,7 @@ type DuplicateCandidate = {
   preservedFields: string[];
 };
 
+type DuplicateEntityType = 'sites' | 'drivers' | 'vehicles' | 'trailers' | 'markets';
 type MergeResult = { merged: number; reviewed: number; messages: string[] };
 
 function fieldValue(value: unknown) {
@@ -31,7 +32,7 @@ function fieldValue(value: unknown) {
   return String(value);
 }
 
-export function MasterDataDuplicateReviewPanel({ entityType = 'sites' }: { entityType?: 'sites' | 'drivers' | 'vehicles' | 'markets' }) {
+export function MasterDataDuplicateReviewPanel({ entityType = 'sites' }: { entityType?: DuplicateEntityType }) {
   const token = useAccessToken();
   const [candidates, setCandidates] = useState<DuplicateCandidate[]>([]);
   const [open, setOpen] = useState(false);
@@ -98,7 +99,7 @@ export function MasterDataDuplicateReviewPanel({ entityType = 'sites' }: { entit
       <div>
         <p className="eyebrow">Master data duplicate control</p>
         <h2>{candidates.length} possible duplicate{candidates.length === 1 ? '' : 's'} need review</h2>
-        <p className="hint">The sync now checks SQL master data for duplicate sites, drivers, vehicles and markets. High-confidence matches can merge automatically; uncertain matches open here for planner review. Existing address, map, geofence and routing fields are preserved.</p>
+        <p className="hint">The sync now checks SQL master data for duplicate sites, drivers, vehicles, trailers and markets. High-confidence matches can merge automatically; uncertain matches open here for planner review. Existing address, map, geofence and routing fields are preserved.</p>
       </div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
         <button onClick={() => void load()} disabled={busy}>Refresh duplicate scan</button>

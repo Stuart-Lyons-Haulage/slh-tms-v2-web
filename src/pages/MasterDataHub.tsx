@@ -13,6 +13,7 @@ import { useAccessToken } from '../lib/auth';
 import { request } from '../lib/api';
 
 type MasterSection = MasterDataTab | 'fuel-cards' | 'markets' | 'fuel-prices' | 'email-intake' | 'intake-rules';
+type DuplicateEntity = 'sites' | 'drivers' | 'vehicles' | 'trailers' | 'markets';
 
 const sections: Array<{ key: MasterSection; label: string; detail: string }> = [
   { key: 'drivers', label: 'Drivers', detail: 'SQL driver register. TachoMaster updates tachograph identity; approved staff maintain operational details here.' },
@@ -30,8 +31,8 @@ function canonicalSection(value: MasterSection): MasterSection {
   return value === 'customers' || value === 'geofences' ? 'sites' : value;
 }
 
-function duplicateEntity(section: MasterSection): 'sites' | 'drivers' | 'vehicles' | 'markets' | undefined {
-  if (section === 'sites' || section === 'drivers' || section === 'vehicles' || section === 'markets') return section;
+function duplicateEntity(section: MasterSection): DuplicateEntity | undefined {
+  if (section === 'sites' || section === 'drivers' || section === 'vehicles' || section === 'trailers' || section === 'markets') return section;
   return undefined;
 }
 
