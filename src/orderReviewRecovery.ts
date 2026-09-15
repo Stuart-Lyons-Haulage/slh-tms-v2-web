@@ -20,8 +20,17 @@ export function normaliseListPayload(value: unknown): unknown[] {
   return [];
 }
 
-function isListRequest(url: string) {
+export function isPagedStagingQueueRequest(url: string) {
+  return url.includes("/api/v1/staging/queue");
+}
+
+export function shouldRewriteListPayload(url: string) {
+  if (isPagedStagingQueueRequest(url)) return false;
   return LIST_ENDPOINTS.some((endpoint) => url.includes(endpoint));
+}
+
+function shouldInspectPayload(url: string) {
+  return shouldRewriteListPayload(url) || isPagedStagingQueueRequest(url);
 }
 
 function reviewIdFromLocation() {
@@ -268,13 +277,13 @@ export function installOrderReviewRecovery() {
     const url = typeof input === "string" ? input : input instanceof Request ? input.url : String(input);
     if (url.includes("/api/v1/staging")) captureStagingRequest(url, input, init);
     const response = await originalFetch(...args);
-    if (!response.ok || !isListRequest(url)) return response;
+    if (!response.ok || !shouldInspectPayload(url)) return response;
 
     try {
       const payload = await response.clone().json();
       const rows = normaliseListPayload(payload);
       if (url.includes("/api/v1/staging")) captureTargetReview(rows);
-      if (Array.isArray(payload)) return response;
+      if (Array.isArray(payload) || !shouldRewriteListPayload(url)) return response;
       return new Response(JSON.stringify(rows), {
         status: response.status,
         statusText: response.statusText,
