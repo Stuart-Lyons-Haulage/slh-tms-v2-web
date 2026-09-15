@@ -15,6 +15,8 @@ type Attachment = {
   contentId?: string;
   size?: number;
   isInline?: boolean;
+  contentBase64?: string;
+  contentBytes?: string;
 };
 
 type SourceEmailEvidence = {
@@ -97,6 +99,26 @@ function formatSize(value?: number) {
   return `${(value / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function normaliseBase64(value?: string) {
+  const raw = text(value);
+  if (!raw) return "";
+  const comma = raw.indexOf(",");
+  if (comma >= 0 && raw.slice(0, comma).toLowerCase().includes("base64")) return raw.slice(comma + 1).trim();
+  return raw;
+}
+
+function safeDownloadName(name?: string) {
+  const cleaned = text(name).replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_").trim();
+  return cleaned || "source-email-attachment";
+}
+
+function attachmentCopyHref(attachment: Attachment) {
+  const base64 = normaliseBase64(attachment.contentBase64 || attachment.contentBytes);
+  if (!base64) return "";
+  const contentType = text(attachment.contentType) || "application/octet-stream";
+  return `data:${contentType};base64,${base64}`;
+}
+
 export function SourceEmailEvidenceDrawer({ stagingId, onClose }: { stagingId: string; onClose: () => void }) {
   const token = useAccessToken();
   const [evidence, setEvidence] = useState<SourceEmailEvidence>();
@@ -155,8 +177,17 @@ export function SourceEmailEvidenceDrawer({ stagingId, onClose }: { stagingId: s
 
         <section className="source-email-attachments">
           <div className="source-email-section-heading"><strong>Attachments</strong><span>{attachments.length}</span></div>
-          {attachments.length > 0 ? <ul>{attachments.map((attachment, index) => <li key={`${attachment.name || "attachment"}-${index}`}><strong>{attachment.name || "Unnamed attachment"}</strong><span>{[attachment.contentType, formatSize(attachment.size)].filter(Boolean).join(" · ")}</span></li>)}</ul> : <p>No non-inline attachments were recorded.</p>}
-          <small>Attachment names and metadata are retained here. File bytes stay with the original mailbox message so the TMS does not duplicate large files into SQL.</small>
+          {attachments.length > 0 ? <ul>{attachments.map((attachment, index) => {
+            const copyHref = attachmentCopyHref(attachment);
+            return <li key={`${attachment.name || "attachment"}-${index}`}>
+              <strong>{attachment.name || "Unnamed attachment"}</strong>
+              <span>{[attachment.contentType, formatSize(attachment.size)].filter(Boolean).join(" · ")}</span>
+              {copyHref
+                ? <a href={copyHref} download={safeDownloadName(attachment.name)}>Download copy</a>
+                : <em>Copy not retained</em>}
+            </li>;
+          })}</ul> : <p>No non-inline attachments were recorded.</p>}
+          <small>Attachment copies are shown when Power Automate supplied Base64 content to TMS source evidence. Older records may show metadata only.</small>
         </section>
 
         <footer>
