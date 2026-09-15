@@ -4,6 +4,7 @@ import { DriversMasterCompact } from './DriversMasterCompact';
 import { FleetMasterUnified } from './FleetMasterUnified';
 import { FuelCardsOperational } from './FuelCardsOperational';
 import { MarketsMasterClean } from './MarketsMasterClean';
+import { OrderIntakeMappingAdmin } from './OrderIntakeMappingAdmin';
 import { MasterDataOperational, type MasterDataTab } from './MasterDataOperational';
 import { GeofenceOperational } from './GeofenceOperational';
 import { EmailIntakeMappings } from './EmailIntakeMappings';
@@ -19,6 +20,7 @@ const sections: Array<{ key: MasterSection; label: string; detail: string }> = [
   { key: 'fuel-cards', label: 'Fuel cards & PINs', detail: 'Restricted SQL fuel register for vehicle fuel-card details and PINs.' },
   { key: 'sites', label: 'Sites', detail: 'SQL site register for aliases, addresses, planning data and linked execution geofences.' },
   { key: 'markets', label: 'Markets', detail: 'SQL market and contact register used by order intake and planning.' },
+  { key: 'intake-rules', label: 'Email & route rules', detail: 'SQL sender-to-customer mappings and evidence-based route rules used by email intake.' },
   { key: 'fuel-prices', label: 'Fuel prices', detail: 'SQL fuel pricing reference data.' },
   { key: 'email-intake', label: 'Email intake', detail: 'SQL sender/customer mappings and planner-controlled route rules for staged email orders.' },
 ];
@@ -55,11 +57,11 @@ export function MasterDataHub({ initialSection = 'drivers' }: { initialSection?:
       <div>
         <p className="eyebrow">TMS master data · SQL authority</p>
         <h1>Master data</h1>
-        <p className="intro">SQL is the single operational master for the TMS. Planning, dispatch and integrations read and update the same records directly.</p>
+        <p className="intro">SQL is the single operational master for the TMS. Planning, dispatch, order intake and integrations read and update the same controlled records.</p>
       </div>
       <div>
         <span className="status approved">SQL is authoritative</span>
-        <p className="hint" style={{ maxWidth: 320, marginTop: 10 }}>Edit and reconcile records in the TMS. TachoMaster and Fleetio continue to provide their integration-owned fields.</p>
+        <p className="hint" style={{ maxWidth: 320, marginTop: 10 }}>Edit and reconcile records in the TMS. TachoMaster, Fleetio and RoadTech provide only the identity, vehicle and execution evidence they own.</p>
       </div>
     </div>
 
@@ -71,7 +73,7 @@ export function MasterDataHub({ initialSection = 'drivers' }: { initialSection?:
     </div>
 
     <div className="notice inline-notice" style={{ marginBottom: 18 }}>
-      <strong>One source of truth.</strong> Changes made here are saved directly to the SQL master used by the TMS. Microsoft Lists is not used as a competing write source.
+      <strong>One source of truth.</strong> Changes made here are validated and saved to the SQL master before anything downstream can use them.
     </div>
 
     {section === 'drivers' && <div className="actions" style={{ marginBottom: 18 }}>
@@ -96,6 +98,7 @@ export function MasterDataHub({ initialSection = 'drivers' }: { initialSection?:
       </>}
       {section === 'fuel-cards' && <FuelCardsOperational />}
       {section === 'markets' && <MarketsMasterClean />}
+      {section === 'intake-rules' && <OrderIntakeMappingAdmin />}
       {section === 'fuel-prices' && <FuelMaster />}
       {section === 'email-intake' && <EmailIntakeMappings />}
     </div>

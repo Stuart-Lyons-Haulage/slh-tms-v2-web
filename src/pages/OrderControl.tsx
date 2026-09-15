@@ -5,8 +5,10 @@ import { useAccessToken } from "../lib/auth";
 import { SILENT_API_REFRESH_EVENT } from "../lib/useApi";
 import { startVisiblePolling } from "../lib/visiblePolling";
 import { SourceEmailEvidenceDrawer } from "../components/SourceEmailEvidenceDrawer";
+import { IntakeHealthPanel } from "../components/IntakeHealthPanel";
 import { JobsOperational } from "./JobsOperational";
 import { OrderReviewBulk } from "./OrderReviewBulk";
+import { UndatedOrderReviewQueue } from "./UndatedOrderReviewQueue";
 
 type OrderControlTab = "review" | "live";
 type NwfRepairResponse = { repaired: number; message: string };
@@ -55,7 +57,8 @@ export function OrderControl({ initialTab = "review" }: { initialTab?: OrderCont
       <p className="hint" style={{ marginBottom: 0 }}>{tab === "review" ? "Review, amend, reject or approve staged load instructions. Approval remains mandatory before the work enters live planning." : "Amend or cancel already-approved work without leaving Load Review; the source and audit history are retained."}</p>
       {repairNotice && <p className="notice inline-notice" style={{ marginBottom: 0 }}>{repairNotice}</p>}
     </section>
-    {tab === "review" ? <OrderReviewBulk /> : <JobsOperational />}
+    <IntakeHealthPanel />
+    {tab === "review" ? <><UndatedOrderReviewQueue /><OrderReviewBulk /></> : <JobsOperational />}
     {sourceEmailStagingId && <SourceEmailEvidenceDrawer stagingId={sourceEmailStagingId} onClose={closeSourceEmail} />}
   </>;
 }

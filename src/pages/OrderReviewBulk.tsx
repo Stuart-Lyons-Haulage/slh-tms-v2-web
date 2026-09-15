@@ -2,9 +2,23 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, request, type StagedImport } from "../lib/api";
 import { useAccessToken } from "../lib/auth";
 import { useApi } from "../lib/useApi";
+import { matchesPlanningDate, planningDates } from "../lib/orderReviewDates";
 import { SourceEmailEvidenceDrawer } from "../components/SourceEmailEvidenceDrawer";
 import { resolveSourceEvidence } from "../sourceEvidence";
 import "../order-control.css";
+
+type RouteAlternative = {
+  id?: string;
+  score?: number;
+  customerCode?: string;
+  originSiteCode?: string;
+  originSiteName?: string;
+  retailerCode?: string;
+  destinationSiteCode?: string;
+  destinationCode?: string;
+  destinationName?: string;
+  destinationPostcode?: string;
+};
 
 type Payload = Record<string, unknown> & {
   poNumber?: string;
@@ -34,12 +48,26 @@ type Payload = Record<string, unknown> & {
   sourceSubject?: string;
   sourceWebLink?: string;
   sourceAttachmentName?: string;
+  orderIntakeRouteRuleId?: string;
+  orderIntakeRouteConfidenceScore?: number;
+  orderIntakeRouteMatchedDimensions?: number;
+  orderIntakeRouteRequiresReview?: boolean;
+  orderIntakeRouteExplanation?: string[];
+  orderIntakeRouteAlternatives?: RouteAlternative[];
 };
 
 type ParsedRow = {
   item: StagedImport;
   payload: Payload;
   parseError?: string;
+};
+
+type StagingQueuePage = {
+  page: number;
+  pageSize: number;
+  total: number;
+  hasMore: boolean;
+  records: StagedImport[];
 };
 
 type BulkApproveResponse = {
@@ -75,6 +103,7 @@ type DateSummary = {
 
 const text = (value: unknown) => String(value ?? "").trim();
 const numberText = (value: unknown) => value == null || value === "" ? "" : String(value);
+const queuePageSize = 100;
 
 function dateKey(value: Date) {
   return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
@@ -205,7 +234,7 @@ function blockingReason(row: ParsedRow, date: string) {
   if (!text(payload.poNumber)) return "TMS reference is missing";
   if (!text(payload.customerCode)) return "Customer is missing";
   if (!isBackhaul(payload) && palletCount(payload) <= 0) return "Zero or missing pallets";
-  if (payload.plannerReady === false) return "Pre-order / not planner-ready";
+  if (payload.plannerReady === false && !payload.orderIntakeRouteRequiresReview) return "Pre-order / not planner-ready";
   if (text(payload.intakeStatus).toLowerCase() === "preorder") return "Pre-order awaiting instruction";
   return undefined;
 }
@@ -214,6 +243,7 @@ function reviewFlagReason(row: ParsedRow) {
   const payload = row.payload;
   const sourceWarnings = reviewWarnings(payload);
   if (sourceWarnings.length) return sourceWarnings[0];
+  if (payload.orderIntakeRouteRequiresReview) return "Route match needs planner review";
   const confidence = text(payload.intakeConfidence);
   if (confidence && confidence.toLowerCase() !== "high" && warnings(payload).length > 0 && sourceWarnings.length === 0) return undefined;
   if (!confidence || confidence.toLowerCase() !== "high") return confidence ? `${confidence} confidence — check source` : "Source confidence not set — check source";
@@ -222,6 +252,13 @@ function reviewFlagReason(row: ParsedRow) {
 
 function displayReference(payload: Payload) {
   return text(payload.customerPo) || text(payload.poNumber) || "Reference missing";
+}
+
+function routeAlternativeLabel(value: RouteAlternative) {
+  const origin = text(value.originSiteCode) || text(value.originSiteName) || "origin not specified";
+  const destination = text(value.destinationCode) || text(value.destinationSiteCode) || text(value.destinationName) || text(value.destinationPostcode) || "destination not specified";
+  const retailer = text(value.retailerCode);
+  return `${origin} → ${destination}${retailer ? ` · ${retailer}` : ""}`;
 }
 
 function amendmentPrompt(items: Array<{ row: ParsedRow; comparison: ApprovalComparison }>) {
@@ -236,6 +273,7 @@ function amendmentPrompt(items: Array<{ row: ParsedRow; comparison: ApprovalComp
 export function OrderReviewBulk() {
   const token = useAccessToken();
   const [date, setDate] = useState(tomorrowDate());
+  const [queuePage, setQueuePage] = useState(1);
   const [busy, setBusy] = useState(false);
   const [busyId, setBusyId] = useState<string>();
   const [notice, setNotice] = useState<string>();
@@ -245,15 +283,17 @@ export function OrderReviewBulk() {
   const [sourceEmailStagingId, setSourceEmailStagingId] = useState<string>();
 
   const queue = useApi(useCallback(async () =>
-    api.staging(await token(), "PendingReview", "order", 100), [token]));
+    request<StagingQueuePage>(
+      `/api/v1/staging/queue?status=PendingReview&entityType=order&page=${queuePage}&pageSize=${queuePageSize}`,
+      await token(),
+    ), [queuePage, token]));
 
-  const rows = useMemo(() => (queue.data || []).map(parse), [queue.data]);
+  const rows = useMemo(() => (queue.data?.records || []).map(parse), [queue.data]);
   const dateRange = useMemo(rollingDates, []);
   const today = useMemo(todayDate, []);
-  const pendingOrderDates = useMemo(() => Array.from(new Set(rows.flatMap((row) => [text(row.payload.collectionDate), text(row.payload.deliveryDate)]).filter(Boolean))).sort(), [rows]);
+  const pendingOrderDates = useMemo(() => Array.from(new Set(rows.flatMap((row) => planningDates(row.payload)))).sort(), [rows]);
   const visibleDates = useMemo(() => Array.from(new Set([...dateRange, ...pendingOrderDates, date])).sort(), [date, dateRange, pendingOrderDates]);
-  const datedRows = useMemo(() => rows.filter((row) =>
-    text(row.payload.collectionDate) === date || text(row.payload.deliveryDate) === date), [date, rows]);
+  const datedRows = useMemo(() => rows.filter((row) => matchesPlanningDate(row.payload, date)), [date, rows]);
   const selectableRows = useMemo(() => datedRows.filter((row) => !blockingReason(row, date)), [date, datedRows]);
   const cleanRows = useMemo(() => selectableRows.filter((row) => !reviewFlagReason(row)), [selectableRows]);
   const flaggedRows = useMemo(() => selectableRows.filter((row) => Boolean(reviewFlagReason(row))), [selectableRows]);
@@ -264,7 +304,7 @@ export function OrderReviewBulk() {
   const allCleanSelected = cleanRows.length > 0 && cleanRows.every((row) => selectedIds.has(row.item.id));
 
   const summaries = useMemo(() => visibleDates.map<DateSummary>((planningDate) => {
-    const pending = rows.filter((row) => text(row.payload.collectionDate) === planningDate);
+    const pending = rows.filter((row) => matchesPlanningDate(row.payload, planningDate));
     const selectable = pending.filter((row) => !blockingReason(row, planningDate));
     return {
       date: planningDate,
@@ -293,6 +333,15 @@ export function OrderReviewBulk() {
     setSourceEmailStagingId(undefined);
   }
 
+  function changeQueuePage(nextPage: number) {
+    if (nextPage < 1 || busy || busyId) return;
+    setQueuePage(nextPage);
+    setSelectedIds(new Set());
+    setEditingId(undefined);
+    setDraft(undefined);
+    setSourceEmailStagingId(undefined);
+  }
+
   function toggleRow(id: string) {
     if (!selectableIds.has(id) || busy || busyId) return;
     setSelectedIds((current) => {
@@ -313,10 +362,20 @@ export function OrderReviewBulk() {
     });
   }
 
-  function beginEdit(row: ParsedRow) {
-    setEditingId(row.item.id);
-    setDraft({ ...row.payload });
+  async function beginEdit(row: ParsedRow) {
+    setBusyId(row.item.id);
     setNotice(undefined);
+    try {
+      const detail = await request<StagedImport>(`/api/v1/staging/${row.item.id}`, await token());
+      const parsedDetail = parse(detail);
+      if (parsedDetail.parseError) throw new Error("The complete staged order could not be read.");
+      setEditingId(row.item.id);
+      setDraft(parsedDetail.payload);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "The complete staged order could not be loaded for editing.");
+    } finally {
+      setBusyId(undefined);
+    }
   }
 
   async function saveEdit(row: ParsedRow) {
@@ -430,14 +489,14 @@ export function OrderReviewBulk() {
       <div>
         <p className="eyebrow">Waiting for approval</p>
         <h2>Review and approve orders</h2>
-        <p className="hint">Scroll the date bubbles for recent history and every day that still has work waiting. Use Jump to date for any other historical day.</p>
+        <p className="hint">Scroll the date bubbles for recent history and dates visible on this queue page. Use the queue pager when more than 100 orders are waiting.</p>
       </div>
     </div>
 
     <div className="order-date-history-controls">
       <label>Jump to date <input type="date" value={date} onChange={(event) => selectDate(event.target.value)} disabled={busy || Boolean(busyId)} /></label>
       <button type="button" onClick={() => selectDate(today)} disabled={busy || Boolean(busyId)}>Today</button>
-      <small>45 days of recent history + all dates still waiting</small>
+      <small>45 days of recent history + dates represented on this queue page</small>
     </div>
 
     <div className="order-date-strip" role="tablist" aria-label="Order review planning dates">
@@ -464,7 +523,7 @@ export function OrderReviewBulk() {
     </div>
 
     <div className="order-waiting-band" aria-label="Dates with orders waiting">
-      <div><strong>Orders waiting</strong><small>Jump straight to a day with work in the queue</small></div>
+      <div><strong>Orders waiting</strong><small>Jump straight to a day with work on this queue page</small></div>
       <div className="order-waiting-bubbles">
         {waitingDates.length > 0 ? waitingDates.map((summary) => {
           const label = dateLabel(summary.date);
@@ -473,7 +532,7 @@ export function OrderReviewBulk() {
             <strong>{summary.waiting}</strong>
             {(summary.flagged > 0 || summary.blocked > 0) && <small>{summary.flagged + summary.blocked} need check</small>}
           </button>;
-        }) : <span className="hint">No orders are waiting in this 11-day window.</span>}
+        }) : <span className="hint">No orders are waiting on this queue page.</span>}
       </div>
     </div>
 
@@ -486,6 +545,12 @@ export function OrderReviewBulk() {
 
     {notice && <p className="notice inline-notice">{notice}</p>}
     {queue.error && <p className="review-error">{queue.error}</p>}
+
+    {queue.data && queue.data.total > queue.data.pageSize && <div className="order-date-history-controls" aria-label="Order review queue pages">
+      <button type="button" onClick={() => changeQueuePage(queuePage - 1)} disabled={queuePage <= 1 || busy || Boolean(busyId)}>Previous 100</button>
+      <small>Queue page {queue.data.page} · showing {((queue.data.page - 1) * queue.data.pageSize) + 1}–{Math.min(queue.data.page * queue.data.pageSize, queue.data.total)} of {queue.data.total}</small>
+      <button type="button" onClick={() => changeQueuePage(queuePage + 1)} disabled={!queue.data.hasMore || busy || Boolean(busyId)}>Next 100</button>
+    </div>}
 
     <div className="bulk-selection-toolbar">
       <label className="bulk-select-all">
@@ -502,7 +567,7 @@ export function OrderReviewBulk() {
     {flaggedRows.length > 0 && <p className="order-review-explainer">The {flaggedRows.length} amber jobs are <strong>not locked</strong>. Use Review source email to compare the booking with the original message, then Edit if a field needs correcting. They are deliberately excluded from “Select all clean”.</p>}
 
     {queue.loading && !queue.data && <div className="state">Loading orders waiting for approval…</div>}
-    {!queue.loading && datedRows.length === 0 && <div className="state">No orders are waiting for approval for this date.</div>}
+    {!queue.loading && datedRows.length === 0 && <div className="state">No orders are waiting for approval for this date on the current queue page.</div>}
 
     {datedRows.length > 0 && <div className="bulk-order-list" role="list" aria-label="Orders waiting for approval">
       {datedRows.map((row) => {
@@ -519,6 +584,10 @@ export function OrderReviewBulk() {
         const hasSourceIdentity = Boolean(sourceEvidence.messageId || sourceEvidence.internetMessageId || sourceLink);
         const statusClass = blocked ? "blocked" : reviewFlag ? "review" : "ready";
         const statusText = blocked ? blocked : reviewFlag ? `Check: ${reviewFlag}` : "Ready to approve";
+        const routeScore = row.payload.orderIntakeRouteConfidenceScore;
+        const routeExplanation = Array.isArray(row.payload.orderIntakeRouteExplanation) ? row.payload.orderIntakeRouteExplanation : [];
+        const routeAlternatives = Array.isArray(row.payload.orderIntakeRouteAlternatives) ? row.payload.orderIntakeRouteAlternatives : [];
+        const hasRouteEvidence = Boolean(row.payload.orderIntakeRouteRuleId || routeScore != null || routeExplanation.length || routeAlternatives.length);
 
         return <article className={`bulk-order-row ${selectable ? "selectable" : "held"} ${selected ? "selected" : ""} ${isEditing ? "editing" : ""}`} key={row.item.id} role="listitem">
           <input
@@ -534,7 +603,7 @@ export function OrderReviewBulk() {
           <span className={`bulk-order-status ${statusClass}`}>{statusText}</span>
           <div className="bulk-order-actions">
             {hasSourceIdentity && <button type="button" className="source-email-review-button" onClick={() => setSourceEmailStagingId(row.item.id)} disabled={busy || Boolean(busyId)}>Review source email</button>}
-            {!isEditing && <button type="button" onClick={() => beginEdit(row)} disabled={busy || Boolean(busyId)}>Edit</button>}
+            {!isEditing && <button type="button" onClick={() => void beginEdit(row)} disabled={busy || Boolean(busyId)}>{rowBusy ? "Loading…" : "Edit"}</button>}
             {isEditing && <>
               <button type="button" onClick={() => { setEditingId(undefined); setDraft(undefined); }} disabled={rowBusy}>Cancel</button>
               <button type="button" className="primary" onClick={() => void saveEdit(row)} disabled={rowBusy}>{rowBusy ? "Saving…" : "Save"}</button>
@@ -546,6 +615,13 @@ export function OrderReviewBulk() {
             <strong>{reviewFlag ? "Why this needs checking" : "Source warning"}</strong>
             {sourceWarnings.length > 0 ? sourceWarnings.map((warning, index) => <span key={`${row.item.id}-warning-${index}`}>{warning}</span>) : <span>{reviewFlag}</span>}
             {hasSourceIdentity && <button type="button" className="source-email-review-button" onClick={() => setSourceEmailStagingId(row.item.id)}>Review source email</button>}
+          </div>}
+
+          {hasRouteEvidence && <div className={`bulk-row-warning ${row.payload.orderIntakeRouteRequiresReview ? "attention" : ""}`}>
+            <strong>SQL route match {routeScore != null ? `· ${routeScore}% confidence` : ""}</strong>
+            <span>{row.payload.orderIntakeRouteMatchedDimensions != null ? `${row.payload.orderIntakeRouteMatchedDimensions} route dimensions matched. ` : ""}{row.payload.orderIntakeRouteRequiresReview ? "Planner confirmation is required before approval." : "The best rule supplied missing route values only."}</span>
+            {routeExplanation.map((explanation, index) => <span key={`${row.item.id}-route-explanation-${index}`}>{explanation}</span>)}
+            {routeAlternatives.length > 1 && <span><strong>Alternatives:</strong> {routeAlternatives.slice(0, 3).map((alternative) => `${routeAlternativeLabel(alternative)}${alternative.score != null ? ` (${alternative.score}%)` : ""}`).join(" · ")}</span>}
           </div>}
 
           {isEditing && <div className="bulk-order-editor">
