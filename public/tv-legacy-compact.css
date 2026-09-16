@@ -1,9 +1,0 @@
-/* Compact modular summary and run rows, while keeping exceptions readable. */
-#legacy-kpis{gap:6px;padding-bottom:8px}
-#legacy-kpis .kpi{min-height:56px;padding:6px 8px}
-#legacy-kpis .kpi-icon{width:24px;height:24px;min-width:24px;margin-right:6px;font-size:12px}
-#legacy-kpis .kpi b{font-size:19px;line-height:20px}
-#legacy-board thead tr{height:32px}
-#legacy-board td{height:56px;padding:4px 8px}
-#legacy-board td b{font-size:14px}
-#legacy-board tr.exception td{height:72px}

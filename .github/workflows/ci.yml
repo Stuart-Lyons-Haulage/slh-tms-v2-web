@@ -84,3 +84,15 @@ jobs:
 
           test ! -f src/runtimeGuards.ts
           test ! -f src/allocationResiliencePatch.ts
+          test ! -f src/orderReviewRecovery.ts
+          test ! -f src/orderReviewRecovery.test.ts
+
+          # Retired TV patch assets must not be reintroduced. The supported paths are
+          # React PublicTvBoard plus tv-wallboard-v4.js / tv-wallboard-v2.css fallback.
+          test ! -f public/tv-legacy.js
+          test ! -f public/tv-legacy.css
+          test ! -f public/tv-legacy-compact.css
+          test ! -f public/tv-final-timing-patch.js
+          test ! -f public/tv-run-labels-patch.js
+          test ! -f public/tv-timezone-patch.js
+          test ! -f public/tv-brand-refresh.css
