@@ -8,6 +8,8 @@ const localDate = () => {
 };
 
 function assistantActionRoute(item: { id: string; area: string }) {
+  if (item.id === "drivers-tacho-new") return { path: "/drivers/tacho-review", label: "Tacho Review" };
+  if (item.id === "drivers-tacho-stale") return { path: "/driver-master/tachomaster/sync", label: "TachoMaster Sync" };
   if (item.id === "loads-unallocated") return { path: "/driver-dispatch", label: "Driver Dispatch" };
   const routes: Record<string, string> = {
     Sites: "/sites",
