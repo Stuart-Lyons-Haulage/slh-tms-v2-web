@@ -6,10 +6,12 @@ function source(relative: string) {
 }
 
 describe("mailbox intake health and review performance", () => {
-  it("shows the intake health panel inside Load Review", () => {
+  it("shows the intake health panel in Operations Control, not Order Review", () => {
     const control = source("./pages/OrderControl.tsx");
+    const operations = source("./pages/OperationsControlClean.tsx");
     const panel = source("./components/IntakeHealthPanel.tsx");
-    expect(control).toContain("<IntakeHealthPanel />");
+    expect(control).not.toContain("<IntakeHealthPanel />");
+    expect(operations).toContain("<IntakeHealthPanel />");
     expect(panel).toContain('/api/v1/intake-health');
     expect(panel).toContain("Mapping exceptions");
     expect(panel).toContain("Orders extracted");

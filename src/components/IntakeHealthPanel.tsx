@@ -35,7 +35,7 @@ export function IntakeHealthPanel() {
   return <section className="panel" style={{ marginBottom: 18 }}>
     <div className="title-row" style={{ alignItems: "end" }}>
       <div>
-        <p className="eyebrow">Info mailbox health · last 24 hours</p>
+        <p className="eyebrow">Info mailbox health · last 7 days</p>
         <h2 style={{ marginBottom: 4 }}>Order intake health</h2>
         <p className="hint" style={{ marginBottom: 0 }}>Shows retained inbound evidence, staged orders and anything needing mapping attention.</p>
       </div>
@@ -53,7 +53,7 @@ export function IntakeHealthPanel() {
         <article className={health.data.failed ? "attention" : ""}><span>Failed</span><strong>{health.data.failed}</strong><small>Require investigation</small></article>
       </div>
       <div style={{ marginTop: 12, display: "grid", gap: 4 }}>
-        <small>Last retained email: <b>{time(health.data.lastEmailReceivedUtc)}</b> · Last staged order: <b>{time(health.data.lastOrderStagedUtc)}</b> · Last promoted: <b>{time(health.data.lastPromotedUtc)}</b></small>
+        <small>Window from: <b>{time(health.data.fromUtc)}</b> · Last retained email: <b>{time(health.data.lastEmailReceivedUtc)}</b> · Last staged order: <b>{time(health.data.lastOrderStagedUtc)}</b> · Last promoted: <b>{time(health.data.lastPromotedUtc)}</b></small>
         <small>Known sender fast-path orders: <b>{health.data.fastPathOrders}</b></small>
       </div>
       {health.data.warnings.length > 0 && <div className="warning-list" style={{ marginTop: 12 }}>{health.data.warnings.map((warning) => <span key={warning}>{warning}</span>)}</div>}

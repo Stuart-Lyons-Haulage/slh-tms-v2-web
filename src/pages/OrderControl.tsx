@@ -5,7 +5,6 @@ import { useAccessToken } from "../lib/auth";
 import { SILENT_API_REFRESH_EVENT } from "../lib/useApi";
 import { startVisiblePolling } from "../lib/visiblePolling";
 import { SourceEmailEvidenceDrawer } from "../components/SourceEmailEvidenceDrawer";
-import { IntakeHealthPanel } from "../components/IntakeHealthPanel";
 import { JobsOperational } from "./JobsOperational";
 import { OrderReviewBulk } from "./OrderReviewBulk";
 import { UndatedOrderReviewQueue } from "./UndatedOrderReviewQueue";
@@ -78,7 +77,6 @@ export function OrderControl({ initialTab = "review" }: { initialTab?: OrderCont
       </div>
       {repairNotice && <p className="notice inline-notice" style={{ marginBottom: 0 }}>{repairNotice}</p>}
     </section>
-    <IntakeHealthPanel />
     {tab === "review" ? <><UndatedOrderReviewQueue /><OrderReviewBulk date={selectedDate} /></> : <JobsOperational date={selectedDate} />}
     {sourceEmailStagingId && <SourceEmailEvidenceDrawer stagingId={sourceEmailStagingId} onClose={closeSourceEmail} />}
   </>;
