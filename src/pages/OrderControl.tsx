@@ -13,6 +13,11 @@ import { UndatedOrderReviewQueue } from "./UndatedOrderReviewQueue";
 type OrderControlTab = "review" | "live";
 type NwfRepairResponse = { repaired: number; message: string };
 
+function localDate() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 function refreshVisibleReviewData() {
   window.dispatchEvent(new Event(SILENT_API_REFRESH_EVENT));
 }
@@ -24,6 +29,7 @@ export function OrderControl({ initialTab = "review" }: { initialTab?: OrderCont
   const [repairNotice, setRepairNotice] = useState<string>();
   const reviewId = searchParams.get("reviewId")?.trim() || undefined;
   const sourceEmailStagingId = searchParams.get("sourceEmail") === "1" ? reviewId : undefined;
+  const selectedDate = searchParams.get("date") || localDate();
 
   useEffect(() => { if (reviewId) setTab("review"); }, [reviewId]);
 
@@ -42,6 +48,13 @@ export function OrderControl({ initialTab = "review" }: { initialTab?: OrderCont
 
   useEffect(() => startVisiblePolling(refreshVisibleReviewData, 60_000), []);
 
+  function updateDate(nextDate: string) {
+    const next = new URLSearchParams(searchParams);
+    if (nextDate) next.set("date", nextDate);
+    else next.delete("date");
+    setSearchParams(next, { replace: true });
+  }
+
   function closeSourceEmail() {
     const next = new URLSearchParams(searchParams);
     next.delete("sourceEmail");
@@ -50,15 +63,23 @@ export function OrderControl({ initialTab = "review" }: { initialTab?: OrderCont
 
   return <>
     <section className="panel" style={{ marginBottom: 18 }}>
-      <div className="title-row" style={{ alignItems: "end" }}>
-        <div><p className="eyebrow">Info mailbox → load review → live planning</p><h1>Load Review</h1><p className="hint">Review incoming transport work before it reaches the plan. This covers pallets, trays, trolleys, crates, mixed loads, markets, transfers and amendments rather than treating everything as a pallet order.</p></div>
-        <div className="title-actions" role="tablist" aria-label="Load Review view"><button type="button" className={tab === "review" ? "primary" : ""} onClick={() => setTab("review")} role="tab" aria-selected={tab === "review"}>Waiting for review</button><button type="button" className={tab === "live" ? "primary" : ""} onClick={() => setTab("live")} role="tab" aria-selected={tab === "live"}>Approved / live loads</button></div>
+      <div className="title-row" style={{ alignItems: "end", gap: 16 }}>
+        <div>
+          <p className="eyebrow">Order control</p>
+          <h1>Manage imported jobs</h1>
+        </div>
+        <div className="title-actions" style={{ alignItems: "center", gap: 8 }}>
+          <label className="dashboard-date">Date <input type="date" value={selectedDate} onChange={(event) => updateDate(event.target.value)} /></label>
+          <div role="tablist" aria-label="Order control view" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button type="button" className={tab === "review" ? "primary" : ""} onClick={() => setTab("review")} role="tab" aria-selected={tab === "review"}>Waiting for review</button>
+            <button type="button" className={tab === "live" ? "primary" : ""} onClick={() => setTab("live")} role="tab" aria-selected={tab === "live"}>Approved / live loads</button>
+          </div>
+        </div>
       </div>
-      <p className="hint" style={{ marginBottom: 0 }}>{tab === "review" ? "Review, amend, reject or approve staged load instructions. Approval remains mandatory before the work enters live planning." : "Amend or cancel already-approved work without leaving Load Review; the source and audit history are retained."}</p>
       {repairNotice && <p className="notice inline-notice" style={{ marginBottom: 0 }}>{repairNotice}</p>}
     </section>
     <IntakeHealthPanel />
-    {tab === "review" ? <><UndatedOrderReviewQueue /><OrderReviewBulk /></> : <JobsOperational />}
+    {tab === "review" ? <><UndatedOrderReviewQueue /><OrderReviewBulk date={selectedDate} /></> : <JobsOperational date={selectedDate} />}
     {sourceEmailStagingId && <SourceEmailEvidenceDrawer stagingId={sourceEmailStagingId} onClose={closeSourceEmail} />}
   </>;
 }

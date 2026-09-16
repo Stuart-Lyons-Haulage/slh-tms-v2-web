@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, request, type StagedImport } from "../lib/api";
 import { useAccessToken } from "../lib/auth";
 import { useApi } from "../lib/useApi";
-import { matchesPlanningDate, planningDates } from "../lib/orderReviewDates";
+import { matchesPlanningDate } from "../lib/orderReviewDates";
 import { SourceEmailEvidenceDrawer } from "../components/SourceEmailEvidenceDrawer";
 import { resolveSourceEvidence } from "../sourceEvidence";
 import "../order-control.css";
@@ -93,50 +93,12 @@ type ApprovalComparison = {
   changes?: AmendmentChange[];
 };
 
-type DateSummary = {
-  date: string;
-  waiting: number;
-  clean: number;
-  flagged: number;
-  blocked: number;
-};
-
 const text = (value: unknown) => String(value ?? "").trim();
 const numberText = (value: unknown) => value == null || value === "" ? "" : String(value);
 const queuePageSize = 100;
 
 function dateKey(value: Date) {
   return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
-}
-
-function todayDate() {
-  return dateKey(new Date());
-}
-
-function tomorrowDate() {
-  const value = new Date();
-  value.setDate(value.getDate() + 1);
-  return dateKey(value);
-}
-
-function rollingDates() {
-  const today = new Date();
-  today.setHours(12, 0, 0, 0);
-  return Array.from({ length: 15 }, (_, index) => {
-    const value = new Date(today);
-    value.setDate(today.getDate() + index - 7);
-    return dateKey(value);
-  });
-}
-
-function dateLabel(value: string) {
-  const [year, month, day] = value.split("-").map(Number);
-  const date = new Date(year, month - 1, day, 12);
-  return {
-    weekday: date.toLocaleDateString("en-GB", { weekday: "short" }),
-    day: String(day),
-    month: date.toLocaleDateString("en-GB", { month: "short" }),
-  };
 }
 
 function parse(item: StagedImport): ParsedRow {
@@ -270,9 +232,8 @@ function amendmentPrompt(items: Array<{ row: ParsedRow; comparison: ApprovalComp
   return `${sections.join("\n\n")}\n\nOK = approve the amendment. Cancel = keep the existing live order unchanged.`;
 }
 
-export function OrderReviewBulk() {
+export function OrderReviewBulk({ date }: { date: string }) {
   const token = useAccessToken();
-  const [date, setDate] = useState(tomorrowDate());
   const [queuePage, setQueuePage] = useState(1);
   const [busy, setBusy] = useState(false);
   const [busyId, setBusyId] = useState<string>();
@@ -284,15 +245,11 @@ export function OrderReviewBulk() {
 
   const queue = useApi(useCallback(async () =>
     request<StagingQueuePage>(
-      `/api/v1/staging/queue?status=PendingReview&entityType=order&planningDate=${encodeURIComponent(date)}&page=${queuePage}&pageSize=${queuePageSize}`,
+      `/api/v1/staging/queue?status=PendingReview&entityType=order&page=${queuePage}&pageSize=${queuePageSize}&planningDate=${encodeURIComponent(date)}`,
       await token(),
     ), [date, queuePage, token]));
 
   const rows = useMemo(() => (queue.data?.records || []).map(parse), [queue.data]);
-  const dateRange = useMemo(rollingDates, []);
-  const today = useMemo(todayDate, []);
-  const pendingOrderDates = useMemo(() => Array.from(new Set(rows.flatMap((row) => planningDates(row.payload)))).sort(), [rows]);
-  const visibleDates = useMemo(() => Array.from(new Set([...dateRange, ...pendingOrderDates, date])).sort(), [date, dateRange, pendingOrderDates]);
   const datedRows = useMemo(() => rows.filter((row) => matchesPlanningDate(row.payload, date)), [date, rows]);
   const selectableRows = useMemo(() => datedRows.filter((row) => !blockingReason(row, date)), [date, datedRows]);
   const cleanRows = useMemo(() => selectableRows.filter((row) => !reviewFlagReason(row)), [selectableRows]);
@@ -303,19 +260,13 @@ export function OrderReviewBulk() {
   const selectedPallets = selectedRows.reduce((sum, row) => sum + palletCount(row.payload), 0);
   const allCleanSelected = cleanRows.length > 0 && cleanRows.every((row) => selectedIds.has(row.item.id));
 
-  const summaries = useMemo(() => visibleDates.map<DateSummary>((planningDate) => {
-    const pending = rows.filter((row) => matchesPlanningDate(row.payload, planningDate));
-    const selectable = pending.filter((row) => !blockingReason(row, planningDate));
-    return {
-      date: planningDate,
-      waiting: pending.length,
-      clean: selectable.filter((row) => !reviewFlagReason(row)).length,
-      flagged: selectable.filter((row) => Boolean(reviewFlagReason(row))).length,
-      blocked: pending.length - selectable.length,
-    };
-  }), [rows, visibleDates]);
-
-  const waitingDates = useMemo(() => summaries.filter((item) => item.waiting > 0), [summaries]);
+  useEffect(() => {
+    setQueuePage(1);
+    setSelectedIds(new Set());
+    setEditingId(undefined);
+    setDraft(undefined);
+    setSourceEmailStagingId(undefined);
+  }, [date]);
 
   useEffect(() => {
     setSelectedIds((current) => {
@@ -324,15 +275,6 @@ export function OrderReviewBulk() {
       return next;
     });
   }, [selectableIds]);
-
-  function selectDate(nextDate: string) {
-    setDate(nextDate);
-    setQueuePage(1);
-    setSelectedIds(new Set());
-    setEditingId(undefined);
-    setDraft(undefined);
-    setSourceEmailStagingId(undefined);
-  }
 
   function changeQueuePage(nextPage: number) {
     if (nextPage < 1 || busy || busyId) return;
@@ -486,59 +428,8 @@ export function OrderReviewBulk() {
   }
 
   return <section className="panel order-selection-panel">
-    <div className="title-row" style={{ alignItems: "end" }}>
-      <div>
-        <p className="eyebrow">Waiting for approval</p>
-        <h2>Review and approve orders</h2>
-        <p className="hint">Scroll the date bubbles for the clean review window and dates returned by the selected planning-date queue.</p>
-      </div>
-    </div>
-
-    <div className="order-date-history-controls">
-      <label>Jump to date <input type="date" value={date} onChange={(event) => selectDate(event.target.value)} disabled={busy || Boolean(busyId)} /></label>
-      <button type="button" onClick={() => selectDate(today)} disabled={busy || Boolean(busyId)}>Today</button>
-      <small>7 days back + today + 7 days ahead, plus dates represented by the selected planning-date queue</small>
-    </div>
-
-    <div className="order-date-strip" role="tablist" aria-label="Order review planning dates">
-      {summaries.map((summary) => {
-        const label = dateLabel(summary.date);
-        const isToday = summary.date === today;
-        const selected = summary.date === date;
-        return <button
-          type="button"
-          key={summary.date}
-          role="tab"
-          aria-selected={selected}
-          className={`${selected ? "selected" : ""} ${isToday ? "today" : ""} ${summary.waiting > 0 ? "has-orders" : "empty"}`}
-          onClick={() => selectDate(summary.date)}
-          disabled={busy || Boolean(busyId)}
-        >
-          <span>{isToday ? "TODAY" : label.weekday}</span>
-          <strong>{label.day}</strong>
-          <small>{label.month}</small>
-          <b>{summary.waiting}</b>
-          <em>waiting</em>
-        </button>;
-      })}
-    </div>
-
-    <div className="order-waiting-band" aria-label="Dates with orders waiting">
-      <div><strong>Orders waiting</strong><small>Jump straight to a day with work on this planning-date queue</small></div>
-      <div className="order-waiting-bubbles">
-        {waitingDates.length > 0 ? waitingDates.map((summary) => {
-          const label = dateLabel(summary.date);
-          return <button type="button" key={summary.date} className={summary.date === date ? "selected" : ""} onClick={() => selectDate(summary.date)} disabled={busy || Boolean(busyId)}>
-            <span>{summary.date === today ? "Today" : `${label.weekday} ${label.day}`}</span>
-            <strong>{summary.waiting}</strong>
-            {(summary.flagged > 0 || summary.blocked > 0) && <small>{summary.flagged + summary.blocked} need check</small>}
-          </button>;
-        }) : <span className="hint">No orders are waiting for this planning date.</span>}
-      </div>
-    </div>
-
     <div className="review-metrics" style={{ marginTop: 2 }}>
-      <article><span>Waiting</span><strong>{datedRows.length}</strong><small>Pending on selected date</small></article>
+      <article><span>Waiting</span><strong>{datedRows.length}</strong><small>Pending on {date}</small></article>
       <article><span>Clean</span><strong>{cleanRows.length}</strong><small>Can be selected together</small></article>
       <article className={flaggedRows.length ? "attention" : ""}><span>Check then approve</span><strong>{flaggedRows.length}</strong><small>Individually selectable after review</small></article>
       {blockedRows > 0 && <article className="attention"><span>Blocked</span><strong>{blockedRows}</strong><small>Must be corrected first</small></article>}

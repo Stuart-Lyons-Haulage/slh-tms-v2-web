@@ -6,11 +6,6 @@ import { orderMaintenance, type OrderUpdatePayload } from "../lib/orderMaintenan
 import { useAccessToken } from "../lib/auth";
 import { useApi } from "../lib/useApi";
 
-function localDate() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
 function tagged(notes: string | undefined, label: string) {
   if (!notes) return "";
   const prefix = `${label}:`;
@@ -61,9 +56,8 @@ function aliases(value?: string) {
   return String(value || "").split(/[,;|\n\r]+/).map(item => item.trim()).filter(Boolean);
 }
 
-export function JobsOperational() {
+export function JobsOperational({ date }: { date: string }) {
   const token = useAccessToken();
-  const [date, setDate] = useState(localDate());
   const [query, setQuery] = useState("");
   const [editingId, setEditingId] = useState<string>();
   const [form, setForm] = useState<OrderUpdatePayload>();
@@ -188,17 +182,11 @@ export function JobsOperational() {
   const unitLabel = form?.unitType || "Pallets";
 
   return <section>
-    <div className="title-row">
-      <div><p className="eyebrow">Order control</p><h1>Manage imported jobs</h1><p className="intro">Amend imported work or remove it from planning without destroying the audit record.</p></div>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <button onClick={() => void Promise.all([orders.refresh(), geofenceCoverage.refresh()])} disabled={orders.loading || saving || aliasBusy}>Refresh jobs</button>
-        <button onClick={() => void clearAllOpenJobs()} disabled={saving || aliasBusy}>Clear all open jobs</button>
-      </div>
-    </div>
     <div className="planner-toolbar">
-      <label>Job date <input type="date" value={date} onChange={(event) => { setDate(event.target.value); setEditingId(undefined); setForm(undefined); }} /></label>
       <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search customer, order, market, stall, address…" />
-      <span>{rows.length} active job{rows.length === 1 ? "" : "s"}</span>
+      <span>{rows.length} active job{rows.length === 1 ? "" : "s"} for {date}</span>
+      <button onClick={() => void Promise.all([orders.refresh(), geofenceCoverage.refresh()])} disabled={orders.loading || saving || aliasBusy}>Refresh jobs</button>
+      <button onClick={() => void clearAllOpenJobs()} disabled={saving || aliasBusy}>Clear all open jobs</button>
     </div>
     {message && <p className="notice inline-notice">{message}</p>}
     {orders.error && <p className="notice inline-notice">{orders.error}</p>}
