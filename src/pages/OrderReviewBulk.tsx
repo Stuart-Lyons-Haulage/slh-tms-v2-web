@@ -122,9 +122,9 @@ function tomorrowDate() {
 function rollingDates() {
   const today = new Date();
   today.setHours(12, 0, 0, 0);
-  return Array.from({ length: 53 }, (_, index) => {
+  return Array.from({ length: 15 }, (_, index) => {
     const value = new Date(today);
-    value.setDate(today.getDate() + index - 45);
+    value.setDate(today.getDate() + index - 7);
     return dateKey(value);
   });
 }
@@ -284,9 +284,9 @@ export function OrderReviewBulk() {
 
   const queue = useApi(useCallback(async () =>
     request<StagingQueuePage>(
-      `/api/v1/staging/queue?status=PendingReview&entityType=order&page=${queuePage}&pageSize=${queuePageSize}`,
+      `/api/v1/staging/queue?status=PendingReview&entityType=order&planningDate=${encodeURIComponent(date)}&page=${queuePage}&pageSize=${queuePageSize}`,
       await token(),
-    ), [queuePage, token]));
+    ), [date, queuePage, token]));
 
   const rows = useMemo(() => (queue.data?.records || []).map(parse), [queue.data]);
   const dateRange = useMemo(rollingDates, []);
@@ -327,6 +327,7 @@ export function OrderReviewBulk() {
 
   function selectDate(nextDate: string) {
     setDate(nextDate);
+    setQueuePage(1);
     setSelectedIds(new Set());
     setEditingId(undefined);
     setDraft(undefined);
@@ -489,14 +490,14 @@ export function OrderReviewBulk() {
       <div>
         <p className="eyebrow">Waiting for approval</p>
         <h2>Review and approve orders</h2>
-        <p className="hint">Scroll the date bubbles for recent history and dates visible on this queue page. Use the queue pager when more than 100 orders are waiting.</p>
+        <p className="hint">Scroll the date bubbles for the clean review window and dates returned by the selected planning-date queue.</p>
       </div>
     </div>
 
     <div className="order-date-history-controls">
       <label>Jump to date <input type="date" value={date} onChange={(event) => selectDate(event.target.value)} disabled={busy || Boolean(busyId)} /></label>
       <button type="button" onClick={() => selectDate(today)} disabled={busy || Boolean(busyId)}>Today</button>
-      <small>45 days of recent history + dates represented on this queue page</small>
+      <small>7 days back + today + 7 days ahead, plus dates represented by the selected planning-date queue</small>
     </div>
 
     <div className="order-date-strip" role="tablist" aria-label="Order review planning dates">
@@ -523,7 +524,7 @@ export function OrderReviewBulk() {
     </div>
 
     <div className="order-waiting-band" aria-label="Dates with orders waiting">
-      <div><strong>Orders waiting</strong><small>Jump straight to a day with work on this queue page</small></div>
+      <div><strong>Orders waiting</strong><small>Jump straight to a day with work on this planning-date queue</small></div>
       <div className="order-waiting-bubbles">
         {waitingDates.length > 0 ? waitingDates.map((summary) => {
           const label = dateLabel(summary.date);
@@ -532,7 +533,7 @@ export function OrderReviewBulk() {
             <strong>{summary.waiting}</strong>
             {(summary.flagged > 0 || summary.blocked > 0) && <small>{summary.flagged + summary.blocked} need check</small>}
           </button>;
-        }) : <span className="hint">No orders are waiting on this queue page.</span>}
+        }) : <span className="hint">No orders are waiting for this planning date.</span>}
       </div>
     </div>
 
@@ -548,7 +549,7 @@ export function OrderReviewBulk() {
 
     {queue.data && queue.data.total > queue.data.pageSize && <div className="order-date-history-controls" aria-label="Order review queue pages">
       <button type="button" onClick={() => changeQueuePage(queuePage - 1)} disabled={queuePage <= 1 || busy || Boolean(busyId)}>Previous 100</button>
-      <small>Queue page {queue.data.page} · showing {((queue.data.page - 1) * queue.data.pageSize) + 1}–{Math.min(queue.data.page * queue.data.pageSize, queue.data.total)} of {queue.data.total}</small>
+      <small>Queue page {queue.data.page} · showing {((queue.data.page - 1) * queue.data.pageSize) + 1}–{Math.min(queue.data.page * queue.data.pageSize, queue.data.total)} of {queue.data.total} for {date}</small>
       <button type="button" onClick={() => changeQueuePage(queuePage + 1)} disabled={!queue.data.hasMore || busy || Boolean(busyId)}>Next 100</button>
     </div>}
 
@@ -567,7 +568,7 @@ export function OrderReviewBulk() {
     {flaggedRows.length > 0 && <p className="order-review-explainer">The {flaggedRows.length} amber jobs are <strong>not locked</strong>. Use Review source email to compare the booking with the original message, then Edit if a field needs correcting. They are deliberately excluded from “Select all clean”.</p>}
 
     {queue.loading && !queue.data && <div className="state">Loading orders waiting for approval…</div>}
-    {!queue.loading && datedRows.length === 0 && <div className="state">No orders are waiting for approval for this date on the current queue page.</div>}
+    {!queue.loading && datedRows.length === 0 && <div className="state">No orders are waiting for approval for this planning date.</div>}
 
     {datedRows.length > 0 && <div className="bulk-order-list" role="list" aria-label="Orders waiting for approval">
       {datedRows.map((row) => {
