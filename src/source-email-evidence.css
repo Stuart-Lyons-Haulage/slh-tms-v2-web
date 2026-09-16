@@ -127,10 +127,29 @@
   border-bottom: 0;
 }
 
+.source-email-attachments li > div:first-child {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
 .source-email-attachments li span,
 .source-email-attachments small,
 .source-email-attachments p {
   color: #637786;
+}
+
+.source-email-attachment-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  white-space: nowrap;
+}
+
+.source-email-attachment-actions button {
+  min-width: 110px;
 }
 
 .source-email-drawer > footer {
@@ -144,6 +163,74 @@
 
 .source-email-review-button {
   white-space: nowrap;
+}
+
+.source-email-preview-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 1250;
+  display: grid;
+  place-items: center;
+  background: rgba(9, 30, 45, 0.45);
+  padding: 24px;
+}
+
+.source-email-preview-modal {
+  display: flex;
+  flex-direction: column;
+  width: min(1080px, 96vw);
+  height: min(760px, 92vh);
+  background: #fff;
+  border: 1px solid #cfd9e3;
+  border-radius: 14px;
+  box-shadow: 0 22px 60px rgba(16, 43, 63, 0.26);
+  overflow: hidden;
+}
+
+.source-email-preview-modal > header,
+.source-email-preview-modal > footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid #d7e0e8;
+}
+
+.source-email-preview-modal > footer {
+  justify-content: flex-end;
+  border-top: 1px solid #d7e0e8;
+  border-bottom: 0;
+}
+
+.source-email-preview-modal h3 {
+  margin: 2px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.source-email-preview-modal iframe {
+  flex: 1;
+  width: 100%;
+  border: 0;
+}
+
+.source-email-preview-modal > pre {
+  flex: 1;
+  margin: 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding: 16px;
+  font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: #17324d;
+  background: #fff;
+}
+
+.source-email-preview-modal .state {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding: 24px;
 }
 
 @media (max-width: 720px) {
@@ -162,6 +249,19 @@
 
   .source-email-attachments li {
     flex-direction: column;
-    gap: 3px;
+    gap: 8px;
+  }
+
+  .source-email-attachment-actions {
+    justify-content: flex-start;
+  }
+
+  .source-email-preview-scrim {
+    padding: 10px;
+  }
+
+  .source-email-preview-modal {
+    width: 100%;
+    height: 96vh;
   }
 }

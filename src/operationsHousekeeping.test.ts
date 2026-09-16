@@ -26,9 +26,11 @@ describe("operations housekeeping contract", () => {
     expect(optimiser).toContain("180000");
   });
 
-  it("makes order history navigable beyond the fixed eleven-day strip", () => {
-    expect(review).toContain("Jump to date");
-    expect(review).toContain("pendingOrderDates");
+  it("keeps Order Review scoped by a single parent planning date rather than loading every order", () => {
+    expect(review).toContain("export function OrderReviewBulk({ date }: { date: string })");
+    expect(review).toContain("planningDate=${encodeURIComponent(date)}");
+    expect(review).not.toContain("pendingOrderDates");
+    expect(review).not.toContain("api.staging(await accessToken(), 'PendingReview', 'order', 2000)");
   });
 
   it("keeps Pallet Order as three stacked event-driven boards with Site Master delivery headings", () => {

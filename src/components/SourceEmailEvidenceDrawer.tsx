@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { request } from "../lib/api";
 import { useAccessToken } from "../lib/auth";
 import "../source-email-evidence.css";
@@ -39,6 +39,18 @@ type SourceEmailEvidence = {
   bodyTruncated?: boolean;
   evidenceAvailable?: boolean;
 };
+
+type PreviewState = {
+  attachment: Attachment;
+  href: string;
+  mode: "pdf" | "text" | "unsupported";
+  text?: string;
+};
+
+const orderDocumentExtensions = new Set(["pdf", "csv", "xls", "xlsx", "xlsm"]);
+const previewTextExtensions = new Set(["csv", "txt", "text"]);
+const imageContentTypes = ["image/", "application/octet-stream; image"];
+const invalidDownloadNameChars = new Set(["\\", "/", ":", "*", "?", "\"", "<", ">", "|"]);
 
 function text(value: unknown) {
   return String(value ?? "").trim();
@@ -107,8 +119,49 @@ function normaliseBase64(value?: string) {
   return raw;
 }
 
+function attachmentExtension(attachment: Attachment) {
+  const name = text(attachment.name).toLowerCase();
+  const match = name.match(/\.([a-z0-9]+)$/i);
+  if (match) return match[1];
+  const contentType = text(attachment.contentType).toLowerCase();
+  if (contentType.includes("pdf")) return "pdf";
+  if (contentType.includes("csv")) return "csv";
+  if (contentType.includes("spreadsheet") || contentType.includes("excel")) return "xlsx";
+  if (contentType.startsWith("text/")) return "txt";
+  return "";
+}
+
+function looksLikeInlineImage(attachment: Attachment) {
+  const contentType = text(attachment.contentType).toLowerCase();
+  const name = text(attachment.name).toLowerCase();
+  if (attachment.isInline === true) return true;
+  if (imageContentTypes.some((prefix) => contentType.startsWith(prefix))) return true;
+  if (/\.(png|jpe?g|gif|bmp|webp|svg|ico)$/i.test(name)) return true;
+  if (text(attachment.contentId)) return true;
+  if (/\b(signature|logo|facebook|linkedin|twitter|instagram|image\d*|cid)\b/i.test(name)) return true;
+  return false;
+}
+
+function isOperationalAttachment(attachment: Attachment) {
+  const extension = attachmentExtension(attachment);
+  return !looksLikeInlineImage(attachment) && orderDocumentExtensions.has(extension);
+}
+
+function displayAttachmentName(attachment: Attachment, index: number, evidence?: SourceEmailEvidence) {
+  const name = text(attachment.name);
+  if (name) return name;
+  const extension = attachmentExtension(attachment) || "bin";
+  const ref = text(evidence?.subject).match(/\b[A-Z]{2,}[A-Z0-9/-]{3,}\b/i)?.[0]
+    || text(evidence?.messageId).replace(/[^a-z0-9]+/gi, "").slice(-12)
+    || "source-email";
+  return `${ref}_attachment_${index + 1}.${extension}`;
+}
+
 function safeDownloadName(name?: string) {
-  const cleaned = text(name).replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_").trim();
+  const cleaned = Array.from(text(name))
+    .map((char) => invalidDownloadNameChars.has(char) || char.charCodeAt(0) < 32 ? "_" : char)
+    .join("")
+    .trim();
   return cleaned || "source-email-attachment";
 }
 
@@ -119,17 +172,38 @@ function attachmentCopyHref(attachment: Attachment) {
   return `data:${contentType};base64,${base64}`;
 }
 
+function decodeBase64Text(value: string) {
+  try {
+    const binary = atob(value);
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+    return new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+  } catch {
+    return "This attachment copy could not be decoded for preview. Use Download copy instead.";
+  }
+}
+
+function previewMode(attachment: Attachment): PreviewState["mode"] {
+  const extension = attachmentExtension(attachment);
+  const contentType = text(attachment.contentType).toLowerCase();
+  if (extension === "pdf" || contentType.includes("pdf")) return "pdf";
+  if (previewTextExtensions.has(extension) || contentType.startsWith("text/") || contentType.includes("csv")) return "text";
+  return "unsupported";
+}
+
 export function SourceEmailEvidenceDrawer({ stagingId, onClose }: { stagingId: string; onClose: () => void }) {
   const token = useAccessToken();
   const [evidence, setEvidence] = useState<SourceEmailEvidence>();
   const [error, setError] = useState<string>();
   const [loading, setLoading] = useState(true);
+  const [preview, setPreview] = useState<PreviewState>();
 
   useEffect(() => {
     let active = true;
     setLoading(true);
     setError(undefined);
     setEvidence(undefined);
+    setPreview(undefined);
     void (async () => {
       try {
         const result = await request<SourceEmailEvidence>(`/api/v1/order-intake/source-email/${encodeURIComponent(stagingId)}`, await token());
@@ -144,7 +218,22 @@ export function SourceEmailEvidenceDrawer({ stagingId, onClose }: { stagingId: s
   }, [stagingId, token]);
 
   const body = bodyAsText(evidence);
-  const attachments = normaliseArray<Attachment>(evidence?.attachments).filter((item) => item.isInline !== true);
+  const allAttachments = normaliseArray<Attachment>(evidence?.attachments);
+  const attachments = useMemo(() => normaliseArray<Attachment>(evidence?.attachments).filter(isOperationalAttachment), [evidence?.attachments]);
+  const hiddenAttachmentCount = Math.max(0, allAttachments.length - attachments.length);
+
+  function openPreview(attachment: Attachment) {
+    const base64 = normaliseBase64(attachment.contentBase64 || attachment.contentBytes);
+    const href = attachmentCopyHref(attachment);
+    if (!base64 || !href) return;
+    const mode = previewMode(attachment);
+    setPreview({
+      attachment,
+      href,
+      mode,
+      text: mode === "text" ? decodeBase64Text(base64) : undefined,
+    });
+  }
 
   return <div className="source-email-scrim" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
     <aside className="source-email-drawer" role="dialog" aria-modal="true" aria-label="Source email evidence">
@@ -176,18 +265,26 @@ export function SourceEmailEvidenceDrawer({ stagingId, onClose }: { stagingId: s
         </section>
 
         <section className="source-email-attachments">
-          <div className="source-email-section-heading"><strong>Attachments</strong><span>{attachments.length}</span></div>
+          <div className="source-email-section-heading"><strong>Order documents</strong><span>{attachments.length}</span></div>
           {attachments.length > 0 ? <ul>{attachments.map((attachment, index) => {
+            const name = displayAttachmentName(attachment, index, evidence);
             const copyHref = attachmentCopyHref(attachment);
-            return <li key={`${attachment.name || "attachment"}-${index}`}>
-              <strong>{attachment.name || "Unnamed attachment"}</strong>
-              <span>{[attachment.contentType, formatSize(attachment.size)].filter(Boolean).join(" · ")}</span>
-              {copyHref
-                ? <a href={copyHref} download={safeDownloadName(attachment.name)}>Download copy</a>
-                : <em>Copy not retained</em>}
+            const mode = previewMode(attachment);
+            return <li key={`${name}-${index}`}>
+              <div>
+                <strong>{name}</strong>
+                <span>{[attachment.contentType, formatSize(attachment.size)].filter(Boolean).join(" · ")}</span>
+              </div>
+              <div className="source-email-attachment-actions">
+                {copyHref && <button type="button" onClick={() => openPreview(attachment)}>{mode === "unsupported" ? "Preview" : "Open preview"}</button>}
+                {copyHref
+                  ? <a href={copyHref} download={safeDownloadName(name)}>Download copy</a>
+                  : <em>Copy not retained</em>}
+              </div>
             </li>;
-          })}</ul> : <p>No non-inline attachments were recorded.</p>}
-          <small>Attachment copies are shown when Power Automate supplied Base64 content to TMS source evidence. Older records may show metadata only.</small>
+          })}</ul> : <p>No PDF, Excel or CSV order documents were recorded.</p>}
+          {hiddenAttachmentCount > 0 && <small>{hiddenAttachmentCount} inline image/signature attachment{hiddenAttachmentCount === 1 ? " was" : "s were"} hidden from this planner list. Raw email evidence is still retained.</small>}
+          <small>PDF and CSV copies can be previewed here. Excel files are retained for download/opening outside the browser.</small>
         </section>
 
         <footer>
@@ -195,5 +292,24 @@ export function SourceEmailEvidenceDrawer({ stagingId, onClose }: { stagingId: s
         </footer>
       </>}
     </aside>
+
+    {preview && <div className="source-email-preview-scrim" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPreview(undefined); }}>
+      <div className="source-email-preview-modal" role="dialog" aria-modal="true" aria-label="Attachment preview">
+        <header>
+          <div>
+            <p className="eyebrow">Attachment preview</p>
+            <h3>{displayAttachmentName(preview.attachment, 0, evidence)}</h3>
+          </div>
+          <button type="button" className="source-email-close" onClick={() => setPreview(undefined)} aria-label="Close attachment preview">×</button>
+        </header>
+        {preview.mode === "pdf" && <iframe title="PDF attachment preview" src={preview.href} />}
+        {preview.mode === "text" && <pre>{preview.text}</pre>}
+        {preview.mode === "unsupported" && <div className="state">Preview is not available for Excel attachments in the browser. Use Download copy and open it in Excel.</div>}
+        <footer>
+          <a href={preview.href} download={safeDownloadName(displayAttachmentName(preview.attachment, 0, evidence))}>Download copy</a>
+          <button type="button" className="primary" onClick={() => setPreview(undefined)}>Close</button>
+        </footer>
+      </div>
+    </div>}
   </div>;
 }
