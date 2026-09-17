@@ -54,7 +54,7 @@ describe("operations housekeeping contract", () => {
   it("removes destructive master uploads and keeps a CSV contingency import", () => {
     expect(master).not.toContain("MasterDataResetImportPanel");
     expect(master).not.toContain("MasterDataUploadSmall");
-    expect(imports).toContain("Master data CSV");
+    expect(imports).toContain("Master data workbook");
   });
 
   it("uses SQL as the sole master-data write authority and keeps master controls usable", () => {
