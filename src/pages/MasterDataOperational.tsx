@@ -3,6 +3,7 @@ import { request } from '../lib/api';
 import { useAccessToken } from '../lib/auth';
 import { MasterDocuments } from '../components/MasterDocuments';
 import { MasterDataExportButton } from '../components/MasterDataExportButton';
+import { SiteTimingProfilePanel } from '../components/SiteTimingProfilePanel';
 
 export type MasterDataTab = 'drivers' | 'vehicles' | 'trailers' | 'sites' | 'geofences' | 'customers';
 type Row = Record<string, unknown> & { id: string; active: boolean };
@@ -286,6 +287,7 @@ export function MasterDataOperational({ initialTab = 'drivers', showCategoryButt
               {current.editable.map(([key,label,type]) => <label key={key}>{label}{type === 'textarea' ? <textarea rows={3} value={String(draft[key] ?? '')} onChange={e => setDraft(v => ({...v,[key]:e.target.value}))} /> : type === 'checkbox' ? <input type="checkbox" checked={Boolean(draft[key])} onChange={e => setDraft(v => ({...v,[key]:e.target.checked}))} /> : type === 'region' ? <select value={String(draft[key] ?? 'Other')} onChange={e => setDraft(v => ({...v,[key]:e.target.value}))}>{regions.map(item => <option key={item}>{item}</option>)}</select> : <input type={type} step={key === 'defaultTemperatureC' ? '0.5' : undefined} value={String(draft[key] ?? '')} onChange={e => setDraft(v => ({...v,[key]: type === 'number' ? (e.target.value === '' ? null : Number(e.target.value)) : e.target.value}))} />}</label>)}
             </div>
           </section>
+          {tab === 'sites' && <SiteTimingProfilePanel siteId={selected.id} />}
           <section><h3>Audit</h3>{audit.length ? <div className="crm-audit-list">{audit.slice(0, 8).map(item => <article key={item.id}><strong>{item.action}</strong><span>{isoDate(item.changedAtUtc)}</span><small>{item.changedBy || '—'}</small></article>)}</div> : <p className="hint">No recorded changes yet.</p>}</section>
           {documentEntity && <section className="crm-documents"><MasterDocuments entityType={documentEntity} entityId={selected.id} title={String(selected[current.columns[0][0]] ?? documentEntity)} /></section>}
         </div>
