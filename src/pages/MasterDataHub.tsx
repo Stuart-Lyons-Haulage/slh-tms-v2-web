@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { FuelMaster } from './Pages';
-import { DriversMasterCompact } from './DriversMasterCompact';
+import { DriversMasterOperational } from './DriversMasterOperational';
 import { FleetMasterUnified } from './FleetMasterUnified';
 import { FuelCardsOperational } from './FuelCardsOperational';
 import { MarketsMasterClean } from './MarketsMasterClean';
@@ -16,7 +16,7 @@ type MasterSection = MasterDataTab | 'fuel-cards' | 'markets' | 'fuel-prices' | 
 type DuplicateEntity = 'sites' | 'drivers' | 'vehicles' | 'trailers' | 'markets';
 
 const sections: Array<{ key: MasterSection; label: string; detail: string }> = [
-  { key: 'drivers', label: 'Drivers', detail: 'SQL driver register. TachoMaster updates tachograph identity; approved staff maintain operational details here.' },
+  { key: 'drivers', label: 'Drivers', detail: 'SQL Driver Master is operational authority. Sage HR maintains employed staff; TachoMaster enriches member, card, duty and hours evidence.' },
   { key: 'vehicles', label: 'Vehicles', detail: 'SQL vehicle register linked to Fleetio operational data.' },
   { key: 'trailers', label: 'Trailers', detail: 'SQL trailer register for identity, capacity and Fleetio links.' },
   { key: 'fuel-cards', label: 'Fuel cards & PINs', detail: 'Restricted SQL fuel register for vehicle fuel-card details and PINs.' },
@@ -47,9 +47,9 @@ export function MasterDataHub({ initialSection = 'drivers' }: { initialSection?:
     setSyncMessage(undefined);
     try {
       const job = await request<{ message?: string }>('/api/v1/driver-master/tachomaster/sync', await token(), { method: 'POST' }, 15000);
-      setSyncMessage(job.message || 'Canonical TachoMaster driver reconciliation queued. Refresh shortly to see the verified result.');
+      setSyncMessage(job.message || 'TachoMaster identity enrichment queued. Driver Master rows remain live while the match refreshes.');
     } catch (error) {
-      setSyncMessage(error instanceof Error ? error.message : 'Canonical driver reconciliation could not be queued.');
+      setSyncMessage(error instanceof Error ? error.message : 'TachoMaster driver enrichment could not be queued.');
     } finally {
       setSyncingDrivers(false);
     }
@@ -69,7 +69,7 @@ export function MasterDataHub({ initialSection = 'drivers' }: { initialSection?:
       </div>
       <div>
         <span className="status approved">SQL is authoritative</span>
-        <p className="hint" style={{ maxWidth: 320, marginTop: 10 }}>Edit and reconcile records in the TMS. TachoMaster, Fleetio and RoadTech provide only the identity, vehicle and execution evidence they own.</p>
+        <p className="hint" style={{ maxWidth: 320, marginTop: 10 }}>Edit and reconcile records in the TMS. Sage HR, TachoMaster, Fleetio and RoadTech each provide only the employment, identity, vehicle and execution evidence they own.</p>
       </div>
     </div>
 
@@ -77,7 +77,7 @@ export function MasterDataHub({ initialSection = 'drivers' }: { initialSection?:
       <div className="master-section-tabs horizontal-tabs" role="tablist" aria-label="Master data sections">
         {sections.map(item => <button key={item.key} role="tab" aria-selected={section === item.key} className={section === item.key ? 'primary' : ''} onClick={() => setSection(item.key)}>{item.label}</button>)}
       </div>
-        <p className="hint master-section-hint"><strong>{active.label}:</strong> {active.detail}</p>
+      <p className="hint master-section-hint"><strong>{active.label}:</strong> {active.detail}</p>
     </div>
 
     <div className="notice inline-notice" style={{ marginBottom: 18 }}>
@@ -86,7 +86,7 @@ export function MasterDataHub({ initialSection = 'drivers' }: { initialSection?:
 
     {section === 'drivers' && <div className="actions" style={{ marginBottom: 18 }}>
       <button className="primary" onClick={() => void syncDriverIdentities()} disabled={syncingDrivers}>
-        {syncingDrivers ? 'Queuing reconciliation…' : 'Reconcile TachoMaster driver identities'}
+        {syncingDrivers ? 'Queuing enrichment…' : 'Reconcile TachoMaster driver identities'}
       </button>
       {syncMessage && <span className="notice inline-notice">{syncMessage}</span>}
     </div>}
@@ -94,7 +94,7 @@ export function MasterDataHub({ initialSection = 'drivers' }: { initialSection?:
     {duplicateReviewEntity && <MasterDataDuplicateReviewPanel entityType={duplicateReviewEntity} />}
 
     <div>
-      {section === 'drivers' && <DriversMasterCompact />}
+      {section === 'drivers' && <DriversMasterOperational />}
       {section === 'vehicles' && <FleetMasterUnified kind="vehicles" />}
       {section === 'trailers' && <FleetMasterUnified kind="trailers" />}
       {section === 'sites' && <>
