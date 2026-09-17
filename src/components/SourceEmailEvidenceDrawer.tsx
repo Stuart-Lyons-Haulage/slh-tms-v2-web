@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import * as XLSX from "xlsx";
 import { request } from "../lib/api";
 import { useAccessToken } from "../lib/auth";
 import "../source-email-evidence.css";
@@ -40,17 +41,29 @@ export type SourceEmailEvidence = {
   evidenceAvailable?: boolean;
 };
 
+type ExcelSheetPreview = {
+  name: string;
+  rows: string[][];
+  truncated: boolean;
+};
+
 type PreviewState = {
   attachment: Attachment;
   href: string;
-  mode: "pdf" | "text" | "unsupported";
+  mode: "pdf" | "text" | "excel" | "unsupported";
   text?: string;
+  sheets?: ExcelSheetPreview[];
+  activeSheetIndex?: number;
+  error?: string;
 };
 
 const orderDocumentExtensions = new Set(["pdf", "csv", "xls", "xlsx", "xlsm"]);
 const previewTextExtensions = new Set(["csv", "txt", "text"]);
+const excelExtensions = new Set(["xls", "xlsx", "xlsm"]);
 const imageContentTypes = ["image/", "application/octet-stream; image"];
 const invalidDownloadNameChars = new Set(["\\", "/", ":", "*", "?", "\"", "<", ">", "|"]);
+const excelPreviewRowLimit = 500;
+const excelPreviewColumnLimit = 60;
 
 function text(value: unknown) {
   return String(value ?? "").trim();
@@ -99,8 +112,6 @@ export function stripHtmlForDisplay(value: string) {
     container.innerHTML = raw;
     return (container.textContent || container.innerText || "").replace(/\s+/g, " ").trim();
   }
-  // Test/server fallback: remove tags and normalise only non-breaking spaces. Do not
-  // decode general entities here; browsers safely decode them through textContent.
   return raw
     .replace(/<[^>]+>/g, " ")
     .replace(/&nbsp;/gi, " ")
@@ -157,8 +168,6 @@ export function looksLikeInlineImage(attachment: Attachment) {
   if (attachment.isInline === true) return true;
   if (imageContentTypes.some((prefix) => contentType.startsWith(prefix))) return true;
   if (/\.(png|jpe?g|gif|bmp|webp|svg|ico)$/i.test(name)) return true;
-  // Some Outlook tenants populate contentId on normal PDF/Excel attachments. Do not
-  // hide an operational document merely because contentId is present.
   if (/\b(signature|logo|facebook|linkedin|twitter|instagram|image\d*|cid)\b/i.test(name)) return true;
   return false;
 }
@@ -193,23 +202,54 @@ function attachmentCopyHref(attachment: Attachment) {
   return `data:${contentType};base64,${base64}`;
 }
 
+function decodeBase64Bytes(value: string) {
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return bytes;
+}
+
 function decodeBase64Text(value: string) {
   try {
-    const binary = atob(value);
-    const bytes = new Uint8Array(binary.length);
-    for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
-    return new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+    return new TextDecoder("utf-8", { fatal: false }).decode(decodeBase64Bytes(value));
   } catch {
     return "This attachment copy could not be decoded for preview. Use Download copy instead.";
   }
 }
 
-function previewMode(attachment: Attachment): PreviewState["mode"] {
+export function previewMode(attachment: Attachment): PreviewState["mode"] {
   const extension = attachmentExtension(attachment);
   const contentType = text(attachment.contentType).toLowerCase();
   if (extension === "pdf" || contentType.includes("pdf")) return "pdf";
+  if (excelExtensions.has(extension)) return "excel";
   if (previewTextExtensions.has(extension) || contentType.startsWith("text/") || contentType.includes("csv")) return "text";
   return "unsupported";
+}
+
+export function buildExcelPreview(base64: string): ExcelSheetPreview[] {
+  const bytes = decodeBase64Bytes(base64);
+  const workbook = XLSX.read(bytes, {
+    type: "array",
+    cellFormula: false,
+    cellHTML: false,
+    cellNF: false,
+    cellStyles: false,
+  });
+
+  return workbook.SheetNames.map((name) => {
+    const sheet = workbook.Sheets[name];
+    const rawRows = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
+      header: 1,
+      raw: false,
+      defval: "",
+      blankrows: false,
+    });
+    const truncated = rawRows.length > excelPreviewRowLimit || rawRows.some((row) => row.length > excelPreviewColumnLimit);
+    const rows = rawRows
+      .slice(0, excelPreviewRowLimit)
+      .map((row) => row.slice(0, excelPreviewColumnLimit).map((value) => text(value)));
+    return { name, rows, truncated };
+  });
 }
 
 export function SourceEmailEvidenceDrawer({ stagingId, onClose }: { stagingId: string; onClose: () => void }) {
@@ -248,6 +288,14 @@ export function SourceEmailEvidenceDrawer({ stagingId, onClose }: { stagingId: s
     const href = attachmentCopyHref(attachment);
     if (!base64 || !href) return;
     const mode = previewMode(attachment);
+    if (mode === "excel") {
+      try {
+        setPreview({ attachment, href, mode, sheets: buildExcelPreview(base64), activeSheetIndex: 0 });
+      } catch {
+        setPreview({ attachment, href, mode, sheets: [], activeSheetIndex: 0, error: "This Excel attachment could not be rendered in the browser. Download the retained copy and open it in Excel." });
+      }
+      return;
+    }
     setPreview({
       attachment,
       href,
@@ -255,6 +303,10 @@ export function SourceEmailEvidenceDrawer({ stagingId, onClose }: { stagingId: s
       text: mode === "text" ? decodeBase64Text(base64) : undefined,
     });
   }
+
+  const activeExcelSheet = preview?.mode === "excel" && preview.sheets?.length
+    ? preview.sheets[Math.min(preview.activeSheetIndex ?? 0, preview.sheets.length - 1)]
+    : undefined;
 
   return <div className="source-email-scrim" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
     <aside className="source-email-drawer" role="dialog" aria-modal="true" aria-label="Source email evidence">
@@ -290,14 +342,13 @@ export function SourceEmailEvidenceDrawer({ stagingId, onClose }: { stagingId: s
           {attachments.length > 0 ? <ul>{attachments.map((attachment, index) => {
             const name = displayAttachmentName(attachment, index, evidence);
             const copyHref = attachmentCopyHref(attachment);
-            const mode = previewMode(attachment);
             return <li key={`${name}-${index}`}>
               <div>
                 <strong>{name}</strong>
                 <span>{[attachment.contentType, formatSize(attachment.size)].filter(Boolean).join(" · ")}</span>
               </div>
               <div className="source-email-attachment-actions">
-                {copyHref && <button type="button" onClick={() => openPreview(attachment)}>{mode === "unsupported" ? "Preview" : "Open preview"}</button>}
+                {copyHref && <button type="button" onClick={() => openPreview(attachment)}>Open preview</button>}
                 {copyHref
                   ? <a href={copyHref} download={safeDownloadName(name)}>Download copy</a>
                   : <em>Copy not retained</em>}
@@ -305,7 +356,7 @@ export function SourceEmailEvidenceDrawer({ stagingId, onClose }: { stagingId: s
             </li>;
           })}</ul> : <p>No PDF, Excel or CSV order documents were recorded.</p>}
           {hiddenAttachmentCount > 0 && <small>{hiddenAttachmentCount} inline image/signature attachment{hiddenAttachmentCount === 1 ? " was" : "s were"} hidden from this planner list. Raw email evidence is still retained.</small>}
-          <small>PDF and CSV copies can be previewed here. Excel files are retained for download/opening outside the browser.</small>
+          <small>PDF, CSV and Excel order documents can be previewed here. The original retained copy remains available for download.</small>
         </section>
 
         <footer>
@@ -325,7 +376,31 @@ export function SourceEmailEvidenceDrawer({ stagingId, onClose }: { stagingId: s
         </header>
         {preview.mode === "pdf" && <iframe title="PDF attachment preview" src={preview.href} />}
         {preview.mode === "text" && <pre>{preview.text}</pre>}
-        {preview.mode === "unsupported" && <div className="state">Preview is not available for Excel attachments in the browser. Use Download copy and open it in Excel.</div>}
+        {preview.mode === "excel" && <div className="source-email-excel-preview">
+          {preview.error && <div className="state">{preview.error}</div>}
+          {!preview.error && (preview.sheets?.length ?? 0) === 0 && <div className="state">No readable worksheets were found in this Excel attachment.</div>}
+          {!preview.error && (preview.sheets?.length ?? 0) > 0 && <>
+            <div className="source-email-sheet-tabs" role="tablist" aria-label="Workbook sheets">
+              {preview.sheets!.map((sheet, index) => <button
+                key={`${sheet.name}-${index}`}
+                type="button"
+                role="tab"
+                aria-selected={(preview.activeSheetIndex ?? 0) === index}
+                className={(preview.activeSheetIndex ?? 0) === index ? "active" : ""}
+                onClick={() => setPreview((current) => current ? { ...current, activeSheetIndex: index } : current)}
+              >{sheet.name}</button>)}
+            </div>
+            {activeExcelSheet && <div className="source-email-excel-grid">
+              <table><tbody>{activeExcelSheet.rows.map((row, rowIndex) => <tr key={`row-${rowIndex}`}>
+                {row.map((cell, cellIndex) => rowIndex === 0
+                  ? <th key={`cell-${rowIndex}-${cellIndex}`}>{cell}</th>
+                  : <td key={`cell-${rowIndex}-${cellIndex}`}>{cell}</td>)}
+              </tr>)}</tbody></table>
+              {activeExcelSheet.truncated && <p className="source-email-excel-note">Preview limited to the first {excelPreviewRowLimit} rows and {excelPreviewColumnLimit} columns. Download the retained copy for the full workbook.</p>}
+            </div>}
+          </>}
+        </div>}
+        {preview.mode === "unsupported" && <div className="state">Preview is not available for this attachment type. Use Download copy instead.</div>}
         <footer>
           <a href={preview.href} download={safeDownloadName(displayAttachmentName(preview.attachment, 0, evidence))}>Download copy</a>
           <button type="button" className="primary" onClick={() => setPreview(undefined)}>Close</button>

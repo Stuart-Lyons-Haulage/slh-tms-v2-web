@@ -233,6 +233,71 @@
   padding: 24px;
 }
 
+.source-email-excel-preview {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.source-email-sheet-tabs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 10px 12px;
+  border-bottom: 1px solid #d7e0e8;
+  background: #f7f9fb;
+}
+
+.source-email-sheet-tabs button {
+  white-space: nowrap;
+}
+
+.source-email-sheet-tabs button.active {
+  font-weight: 700;
+  border-color: #315169;
+}
+
+.source-email-excel-grid {
+  flex: 1;
+  overflow: auto;
+  padding: 12px;
+}
+
+.source-email-excel-grid table {
+  border-collapse: collapse;
+  width: max-content;
+  min-width: 100%;
+  font-size: 12px;
+  background: #fff;
+}
+
+.source-email-excel-grid th,
+.source-email-excel-grid td {
+  border: 1px solid #d7e0e8;
+  padding: 5px 7px;
+  text-align: left;
+  vertical-align: top;
+  max-width: 320px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.source-email-excel-grid th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #eef3f7;
+  font-weight: 700;
+}
+
+.source-email-excel-note {
+  margin: 10px 0 0;
+  color: #637786;
+  font-size: 12px;
+}
+
 @media (max-width: 720px) {
   .source-email-drawer {
     width: 100vw;
