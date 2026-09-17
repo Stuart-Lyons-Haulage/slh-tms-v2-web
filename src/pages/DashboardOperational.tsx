@@ -7,6 +7,7 @@ import { todayIsoDate, formatDateLong } from "../lib/dateUtils";
 import { useApi } from "../lib/useApi";
 import { startVisiblePolling } from "../lib/visiblePolling";
 import { DailyAllocationViewer } from "../components/DailyAllocationViewer";
+import { SageHrLeavePanel } from "../components/SageHrLeavePanel";
 
 type DailyComplianceSummary = {
   generatedAtUtc: string;
@@ -74,6 +75,7 @@ export function DashboardOperational() {
     {syncState.error && <p className="notice inline-notice">Canonical integration state could not refresh: {syncState.error}</p>}
     {compliance.error && <p className="notice inline-notice">Driver compliance could not refresh; the dashboard is temporarily using the readiness fallback: {compliance.error}</p>}
     {snapshot && <><div className={`dashboard-health-state ${operationalReady ? "good" : "attention"}`}><div><span>{operationalReady ? "✓" : "!"}</span><div><small>Operational health</small><strong>{operationalReady ? "READY TO OPERATE" : "ACTION REQUIRED"}</strong></div></div><p>{snapshot.runs} runs today · {readyRuns} fully allocated · {attention.data?.count || 0} active exception{attention.data?.count === 1 ? "" : "s"}</p></div><div className="dashboard-health-grid"><Link to="/staging"><article className={snapshot.unreviewedOrders ? "attention" : "good"}><span>Loads waiting</span><strong>{snapshot.unreviewedOrders}</strong><small>Need review / approval</small></article></Link><Link to="/driver-dispatch"><article className={snapshot.missingAllocations ? "attention" : "good"}><span>Runs ready</span><strong>{readyRuns}/{snapshot.runs}</strong><small>{snapshot.missingAllocations} need allocation</small></article></Link><Link to="/fleet-assets"><article className={liveVorConflicts ? "attention" : "good"}><span>Fleet / VOR</span><strong>{liveVorConflicts}</strong><small>{fleetProvider ? `Fleetio master · ${checkedAt(fleetProvider.lastUpdatedUtc)}` : "Fleetio master state unavailable"}</small></article></Link><Link to="/compliance"><article className={complianceBlocking ? "attention" : complianceConcerns ? "neutral" : "good"}><span>Driver compliance</span><strong>{complianceConcerns}</strong><small>{compliance.data ? `${compliance.data.summary.red} action · ${compliance.data.summary.amber} review / paper` : "Tacho readiness fallback"}</small></article></Link><Link to="/attention"><article className={highAttention ? "attention" : "good"}><span>High priority</span><strong>{highAttention}</strong><small>{attention.data?.count || 0} total exceptions</small></article></Link></div></>}
+    <SageHrLeavePanel date={date} days={5} />
     <DailyAllocationViewer initialDate={date} />
     <div className="dashboard-refresh-strip" role="group" aria-label="Refresh dashboard panels">
       <span>Refresh a panel:</span>
