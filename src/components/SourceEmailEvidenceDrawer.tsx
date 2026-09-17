@@ -9,7 +9,7 @@ type Recipient = {
   emailAddress?: string | { address?: string; name?: string };
 };
 
-type Attachment = {
+export type Attachment = {
   name?: string;
   contentType?: string;
   contentId?: string;
@@ -19,7 +19,7 @@ type Attachment = {
   contentBytes?: string;
 };
 
-type SourceEmailEvidence = {
+export type SourceEmailEvidence = {
   messageId?: string;
   internetMessageId?: string;
   conversationId?: string;
@@ -87,13 +87,33 @@ function recipientsText(items?: unknown) {
   return normaliseArray<Recipient>(items).map(recipientText).filter(Boolean).join(", ");
 }
 
-function bodyAsText(source?: SourceEmailEvidence) {
+export function looksLikeHtmlBody(value: string) {
+  return /<\s*(?:!doctype|html|body|div|p|table|tr|td|span|br|strong|a)(?:\s|>|\/)/i.test(value);
+}
+
+export function stripHtmlForDisplay(value: string) {
+  const raw = text(value);
+  if (!raw) return "";
+  if (typeof document !== "undefined") {
+    const container = document.createElement("div");
+    container.innerHTML = raw;
+    return (container.textContent || container.innerText || "").replace(/\s+/g, " ").trim();
+  }
+  // Test/server fallback: remove tags and normalise only non-breaking spaces. Do not
+  // decode general entities here; browsers safely decode them through textContent.
+  return raw
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function bodyAsText(source?: SourceEmailEvidence) {
   if (!source) return "";
-  if (text(source.bodyText)) return text(source.bodyText);
-  if (!text(source.bodyHtml)) return "";
-  const container = document.createElement("div");
-  container.innerHTML = source.bodyHtml || "";
-  return (container.textContent || container.innerText || "").trim();
+  const retainedText = text(source.bodyText);
+  if (retainedText) return looksLikeHtmlBody(retainedText) ? stripHtmlForDisplay(retainedText) : retainedText;
+  const retainedHtml = text(source.bodyHtml);
+  return retainedHtml ? stripHtmlForDisplay(retainedHtml) : "";
 }
 
 function formatDateTime(value?: string) {
@@ -131,18 +151,19 @@ function attachmentExtension(attachment: Attachment) {
   return "";
 }
 
-function looksLikeInlineImage(attachment: Attachment) {
+export function looksLikeInlineImage(attachment: Attachment) {
   const contentType = text(attachment.contentType).toLowerCase();
   const name = text(attachment.name).toLowerCase();
   if (attachment.isInline === true) return true;
   if (imageContentTypes.some((prefix) => contentType.startsWith(prefix))) return true;
   if (/\.(png|jpe?g|gif|bmp|webp|svg|ico)$/i.test(name)) return true;
-  if (text(attachment.contentId)) return true;
+  // Some Outlook tenants populate contentId on normal PDF/Excel attachments. Do not
+  // hide an operational document merely because contentId is present.
   if (/\b(signature|logo|facebook|linkedin|twitter|instagram|image\d*|cid)\b/i.test(name)) return true;
   return false;
 }
 
-function isOperationalAttachment(attachment: Attachment) {
+export function isOperationalAttachment(attachment: Attachment) {
   const extension = attachmentExtension(attachment);
   return !looksLikeInlineImage(attachment) && orderDocumentExtensions.has(extension);
 }
