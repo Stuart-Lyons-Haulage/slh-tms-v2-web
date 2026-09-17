@@ -19,7 +19,7 @@ export function ImportCentre({ initialTab = "planner" }: { initialTab?: ImportTa
         <button type="button" className={tab === "planner" ? "primary" : ""} onClick={() => setTab("planner")}>Planner plan</button>
         <button type="button" className={tab === "orders" ? "primary" : ""} onClick={() => setTab("orders")}>Orders</button>
         <button type="button" className={tab === "contingency" ? "primary" : ""} onClick={() => setTab("contingency")}>Manual contingency</button>
-        <button type="button" className={tab === "master-csv" ? "primary" : ""} onClick={() => setTab("master-csv")}>Master data CSV</button>
+        <button type="button" className={tab === "master-csv" ? "primary" : ""} onClick={() => setTab("master-csv")}>Master data workbook</button>
       </div>
     </section>
     <div className="import-centre-body">
