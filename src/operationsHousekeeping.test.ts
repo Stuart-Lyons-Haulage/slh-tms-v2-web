@@ -51,7 +51,7 @@ describe("operations housekeeping contract", () => {
     expect(palletControl).not.toContain("Current orders");
   });
 
-  it("removes destructive master uploads and keeps a CSV contingency import", () => {
+  it("removes destructive master uploads and keeps a workbook master import", () => {
     expect(master).not.toContain("MasterDataResetImportPanel");
     expect(master).not.toContain("MasterDataUploadSmall");
     expect(imports).toContain("Master data workbook");
