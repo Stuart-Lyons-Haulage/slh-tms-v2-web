@@ -10,6 +10,35 @@ export type IntakeReviewRecord = {
   updatedAtUtc: string;
 };
 
+export type MasterRecord = Record<string, unknown> & {
+  id: string;
+  active?: boolean;
+};
+
+export type MasterReviewItem = MasterRecord & {
+  key: string;
+  category: string;
+  entityType: string;
+  sourceReference?: string | null;
+  summary: string;
+  payloadJson?: string | null;
+  resolved: boolean;
+  resolutionNotes?: string | null;
+  createdAtUtc: string;
+  updatedAtUtc: string;
+};
+
+export type SiteCrmProfile = {
+  site: MasterRecord;
+  customer?: MasterRecord | null;
+  aliases: MasterRecord[];
+  cutoffs: MasterRecord[];
+  markets: MasterRecord[];
+  externalIdentities: MasterRecord[];
+  routeTimes: MasterRecord[];
+  reviewItems: MasterReviewItem[];
+};
+
 export type MasterCounts = {
   customers: number;
   sites: number;
@@ -23,6 +52,7 @@ export type MasterCounts = {
   routeTimes: number;
   fuelPrices: number;
   aliasCandidates: number;
+  reviewItems: number;
 };
 
 export type MasterWorkbookImportResult = {
@@ -73,12 +103,20 @@ export const api = {
   promoteIntake: (id: string) =>
     request(`/api/v2/intake/${id}/promote`, { method: 'POST' }),
 
-  customers: () => request<unknown[]>('/api/v2/master/customers'),
-  sites: () => request<unknown[]>('/api/v2/master/sites'),
-  markets: () => request<unknown[]>('/api/v2/master/markets'),
-  drivers: () => request<unknown[]>('/api/v2/master/drivers'),
-  vehicles: () => request<unknown[]>('/api/v2/master/vehicles'),
-  trailers: () => request<unknown[]>('/api/v2/master/trailers'),
+  customers: () => request<MasterRecord[]>('/api/v2/master/customers'),
+  sites: () => request<MasterRecord[]>('/api/v2/master/sites'),
+  markets: () => request<MasterRecord[]>('/api/v2/master/markets'),
+  drivers: () => request<MasterRecord[]>('/api/v2/master/drivers'),
+  vehicles: () => request<MasterRecord[]>('/api/v2/master/vehicles'),
+  trailers: () => request<MasterRecord[]>('/api/v2/master/trailers'),
+  customerContacts: () => request<MasterRecord[]>('/api/v2/master/customer-contacts'),
+  marketContacts: () => request<MasterRecord[]>('/api/v2/master/market-contacts'),
+  siteCutoffs: () => request<MasterRecord[]>('/api/v2/master/site-cutoffs'),
+  routeTimes: () => request<MasterRecord[]>('/api/v2/master/route-times'),
+  fuelPrices: () => request<MasterRecord[]>('/api/v2/master/fuel-prices'),
+  aliasCandidates: () => request<MasterRecord[]>('/api/v2/master/alias-candidates'),
+  masterReview: () => request<MasterReviewItem[]>('/api/v2/master/review'),
+  siteCrm: (id: string) => request<SiteCrmProfile>(`/api/v2/master/sites/${id}/crm`),
   masterCounts: () => request<MasterCounts>('/api/v2/master/summary'),
 
   uploadMasterWorkbook(file: File, commit: boolean) {
