@@ -513,6 +513,10 @@ export function MasterDataPage() {
   }
 
   const activeLabel = tabs.find(tab => tab.key === activeTab)?.label ?? 'Master Data';
+  const activeEditableFields: EditableField[] =
+    activeTab === 'review' || activeTab === 'import'
+      ? []
+      : editableFields[activeTab];
 
   return (
     <section>
@@ -796,7 +800,7 @@ export function MasterDataPage() {
                     </div>
                   </div>
                   <div className="crm-edit-grid">
-                    {editableFields[activeTab].map(field => {
+                    {activeEditableFields.map(field => {
                       const value = draft[field.key];
                       if (field.type === 'checkbox') {
                         return (
