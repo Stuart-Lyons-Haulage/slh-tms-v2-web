@@ -1,4 +1,4 @@
-import type { Driver, Site, TransportOrder, Vehicle } from '../lib/api';
+import type { Driver, RoadrunnerSiteProfile, Site, TransportOrder, Vehicle } from '../lib/api';
 import type { Run } from '../api/runs';
 
 export type RoadrunnerExportRow = Record<string, string | number | boolean | undefined>;
@@ -44,6 +44,172 @@ export const ROADRUNNER_ORDER_HEADERS: Array<keyof RoadrunnerOrderExportRow> = [
   'Cases',
   'Comment',
 ];
+
+
+export const ROADRUNNER_SITE_MASTER_HEADERS = [
+  'Code',
+  'Lookup Code',
+  'Company Letter',
+  'Company',
+  'Add1',
+  'Add2',
+  'Add3',
+  'AddTown',
+  'AddCounty',
+  'AddPostcode',
+  'AddCountry',
+  'Latitude',
+  'Longitude',
+  'Contact1',
+  'Contact2',
+  'Telephone',
+  'Fax',
+  'Email',
+  'Collect Time From 1',
+  'Collect Time To 1',
+  'Collect Time From 2',
+  'Collect Time To 2',
+  'Deliver Time From 1',
+  'Deliver Time To 1',
+  'Deliver Time From 2',
+  'Deliver Time To 2',
+  'Collect Turnaround',
+  'Collect Turnaround Per Pallet',
+  'Deliver Turnaround',
+  'Deliver Turnaround Per Pallet',
+  'Vehicle Type',
+  'TailLiftRequired',
+  'Grid Ref',
+  'Rate Area',
+  'Booking Required',
+  'Van Route Name',
+] as const;
+
+function parseCsvRows(text: string) {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = '';
+  let quoted = false;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    if (quoted) {
+      if (char === '"') {
+        if (text[index + 1] === '"') {
+          cell += '"';
+          index += 1;
+        } else {
+          quoted = false;
+        }
+      } else {
+        cell += char;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      quoted = true;
+    } else if (char === ',') {
+      row.push(cell);
+      cell = '';
+    } else if (char === '\n') {
+      row.push(cell.replace(/\r$/, ''));
+      if (row.some(value => value.trim().length > 0)) rows.push(row);
+      row = [];
+      cell = '';
+    } else {
+      cell += char;
+    }
+  }
+
+  row.push(cell.replace(/\r$/, ''));
+  if (row.some(value => value.trim().length > 0)) rows.push(row);
+  return rows;
+}
+
+function optionalText(value?: string) {
+  const trimmed = String(value || '').trim();
+  return trimmed || undefined;
+}
+
+function optionalNumber(value?: string) {
+  const trimmed = String(value || '').trim();
+  if (!trimmed) return undefined;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function optionalBoolean(value?: string) {
+  const normal = String(value || '').trim().toLowerCase();
+  if (!normal) return undefined;
+  if (['true', 'yes', 'y', '1'].includes(normal)) return true;
+  if (['false', 'no', 'n', '0'].includes(normal)) return false;
+  return undefined;
+}
+
+export function decodeRoadrunnerSiteMasterBytes(buffer: ArrayBuffer) {
+  const bytes = new Uint8Array(buffer);
+  const looksUtf16Le =
+    (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) ||
+    bytes.slice(0, Math.min(bytes.length, 200)).filter((_, index) => index % 2 === 1 && bytes[index] === 0).length > 20;
+  return new TextDecoder(looksUtf16Le ? 'utf-16le' : 'utf-8').decode(buffer).replace(/^\uFEFF/, '');
+}
+
+export function parseRoadrunnerSiteMasterCsv(text: string): RoadrunnerSiteProfile[] {
+  const rows = parseCsvRows(text);
+  if (!rows.length) return [];
+
+  const headers = rows[0].map(header => header.replace(/^\uFEFF/, '').trim());
+  const indexByHeader = new Map(headers.map((header, index) => [header.toLowerCase(), index]));
+  const missing = ROADRUNNER_SITE_MASTER_HEADERS
+    .filter(header => !indexByHeader.has(header.toLowerCase()));
+
+  if (missing.length) {
+    throw new Error(`This does not look like a Roadrunner Site Master export. Missing columns: ${missing.slice(0, 6).join(', ')}${missing.length > 6 ? '…' : ''}`);
+  }
+
+  const value = (row: string[], header: string) => row[indexByHeader.get(header.toLowerCase())!] || '';
+  return rows.slice(1)
+    .filter(row => optionalText(value(row, 'Code')) || optionalText(value(row, 'Company')))
+    .map(row => ({
+      code: optionalText(value(row, 'Code')),
+      lookupCode: optionalText(value(row, 'Lookup Code')),
+      companyLetter: optionalText(value(row, 'Company Letter')),
+      company: optionalText(value(row, 'Company')),
+      add1: optionalText(value(row, 'Add1')),
+      add2: optionalText(value(row, 'Add2')),
+      add3: optionalText(value(row, 'Add3')),
+      addTown: optionalText(value(row, 'AddTown')),
+      addCounty: optionalText(value(row, 'AddCounty')),
+      addPostcode: optionalText(value(row, 'AddPostcode')),
+      addCountry: optionalText(value(row, 'AddCountry')),
+      latitude: optionalNumber(value(row, 'Latitude')),
+      longitude: optionalNumber(value(row, 'Longitude')),
+      contact1: optionalText(value(row, 'Contact1')),
+      contact2: optionalText(value(row, 'Contact2')),
+      telephone: optionalText(value(row, 'Telephone')),
+      fax: optionalText(value(row, 'Fax')),
+      email: optionalText(value(row, 'Email')),
+      collectTimeFrom1: optionalText(value(row, 'Collect Time From 1')),
+      collectTimeTo1: optionalText(value(row, 'Collect Time To 1')),
+      collectTimeFrom2: optionalText(value(row, 'Collect Time From 2')),
+      collectTimeTo2: optionalText(value(row, 'Collect Time To 2')),
+      deliverTimeFrom1: optionalText(value(row, 'Deliver Time From 1')),
+      deliverTimeTo1: optionalText(value(row, 'Deliver Time To 1')),
+      deliverTimeFrom2: optionalText(value(row, 'Deliver Time From 2')),
+      deliverTimeTo2: optionalText(value(row, 'Deliver Time To 2')),
+      collectTurnaround: optionalText(value(row, 'Collect Turnaround')),
+      collectTurnaroundPerPallet: optionalText(value(row, 'Collect Turnaround Per Pallet')),
+      deliverTurnaround: optionalText(value(row, 'Deliver Turnaround')),
+      deliverTurnaroundPerPallet: optionalText(value(row, 'Deliver Turnaround Per Pallet')),
+      vehicleType: optionalText(value(row, 'Vehicle Type')),
+      tailLiftRequired: optionalBoolean(value(row, 'TailLiftRequired')),
+      gridRef: optionalText(value(row, 'Grid Ref')),
+      rateArea: optionalText(value(row, 'Rate Area')),
+      bookingRequired: optionalBoolean(value(row, 'Booking Required')),
+      vanRouteName: optionalText(value(row, 'Van Route Name')),
+    }));
+}
 
 function csvCell(value: unknown) {
   if (value === undefined || value === null) return '';

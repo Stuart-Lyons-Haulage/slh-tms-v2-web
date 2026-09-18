@@ -11,7 +11,66 @@ export type CustomerContact = { id: string; customerCode: string; name: string; 
 export type Vehicle = VehicleDto;
 export type Driver = DriverDto;
 export type Trailer = { id: string; trailerNumber: string; type?: string; standardCapacity?: number; euroCapacity?: number; notes?: string; active: boolean };
-export type Site = { id: string; externalCode: string; name: string; driverTextName?: string; collectionAddress?: string; collectionInstructions?: string; mapLink?: string; latitude?: number; longitude?: number; aliases?: string; customField1?: string; customField2?: string; customField3?: string; operationalRegion?: string; active: boolean };
+export type Site = { id: string; externalCode: string; name: string; driverTextName?: string; collectionAddress?: string; collectionInstructions?: string; mapLink?: string; latitude?: number; longitude?: number; aliases?: string; customField1?: string; customField2?: string; customField3?: string; roadrunnerCode?: string; roadrunnerProfileJson?: string; operationalRegion?: string; active: boolean };
+
+export type RoadrunnerSiteProfile = {
+  code?: string;
+  lookupCode?: string;
+  companyLetter?: string;
+  company?: string;
+  add1?: string;
+  add2?: string;
+  add3?: string;
+  addTown?: string;
+  addCounty?: string;
+  addPostcode?: string;
+  addCountry?: string;
+  latitude?: number;
+  longitude?: number;
+  contact1?: string;
+  contact2?: string;
+  telephone?: string;
+  fax?: string;
+  email?: string;
+  collectTimeFrom1?: string;
+  collectTimeTo1?: string;
+  collectTimeFrom2?: string;
+  collectTimeTo2?: string;
+  deliverTimeFrom1?: string;
+  deliverTimeTo1?: string;
+  deliverTimeFrom2?: string;
+  deliverTimeTo2?: string;
+  collectTurnaround?: string;
+  collectTurnaroundPerPallet?: string;
+  deliverTurnaround?: string;
+  deliverTurnaroundPerPallet?: string;
+  vehicleType?: string;
+  tailLiftRequired?: boolean;
+  gridRef?: string;
+  rateArea?: string;
+  bookingRequired?: boolean;
+  vanRouteName?: string;
+};
+
+export type RoadrunnerSiteReconcileResult = {
+  code?: string;
+  company?: string;
+  status: 'linked' | 'review' | 'unmatched';
+  confidence: number;
+  reason: string;
+  siteId?: string;
+  siteCode?: string;
+  siteName?: string;
+  candidates?: Array<{ id: string; externalCode: string; name: string }>;
+};
+
+export type RoadrunnerSiteReconcileResponse = {
+  received: number;
+  linked: number;
+  review: number;
+  unmatched: number;
+  results: RoadrunnerSiteReconcileResult[];
+};
 export type MarketContact = { id: string; market: string; name: string; standOrLocation?: string; salesman?: string; sender?: string; active: boolean };
 export type FuelPrice = { id: string; weekCommencing: string; provider: string; pricePencePerLitre: number; isPricingMaximum: boolean; source?: string; notes?: string; createdAtUtc: string };
 export type StagedImport = { id: string; entityType: string; idempotencyKey: string; payloadJson: string; status: string | number; source?: string; receivedAtUtc: string; reviewedAtUtc?: string; reviewedBy?: string; reviewNote?: string };
@@ -146,6 +205,7 @@ export interface TmsApi {
   trailers(token?: string): Promise<Trailer[]>;
   sites(token?: string): Promise<Site[]>;
   updateSite(id: string, payload: SiteUpdate, token?: string): Promise<Site>;
+  reconcileRoadrunnerSites(records: RoadrunnerSiteProfile[], token?: string): Promise<RoadrunnerSiteReconcileResponse>;
   marketContacts(token?: string): Promise<MarketContact[]>;
   updateMarketContact(id: string, payload: Omit<MarketContact, 'id'>, token?: string): Promise<MarketContact>;
   fuelPrices(token?: string): Promise<FuelPrice[]>;
@@ -198,6 +258,7 @@ export const api: TmsApi = {
   trailers: token => request<Trailer[]>('/api/v1/trailers', token),
   sites: token => request<Site[]>('/api/v1/sites', token),
   updateSite: (id, payload, token) => request<Site>(`/api/v1/sites/${id}`, token, { method: 'PUT', body: JSON.stringify(payload) }),
+  reconcileRoadrunnerSites: (records, token) => request<RoadrunnerSiteReconcileResponse>('/api/v1/sites/roadrunner-master/reconcile', token, { method: 'POST', body: JSON.stringify(records) }),
   marketContacts: async token => normaliseMarketContacts(await request<MarketContact[]>('/api/v1/market-contacts', token)),
   updateMarketContact: (id, payload, token) => request<MarketContact>(`/api/v1/market-contacts/${id}`, token, { method: 'PUT', body: JSON.stringify(payload) }),
   fuelPrices: token => request<FuelPrice[]>('/api/v1/fuel-prices', token),

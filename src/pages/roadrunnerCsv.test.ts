@@ -5,6 +5,8 @@ import {
   buildRoadrunnerOrdersExport,
   buildRoadrunnerRunExport,
   ROADRUNNER_ORDER_HEADERS,
+  decodeRoadrunnerSiteMasterBytes,
+  parseRoadrunnerSiteMasterCsv,
   roadRunnerOrderRowsToCsv,
   roadRunnerRowsToCsv,
 } from './roadrunnerCsv';
@@ -155,6 +157,42 @@ describe('Roadrunner CSV export', () => {
 
     expect(result.issues.map(issue => issue.message)).toContain('Delivery postcode could not be derived from the order or Site Master address.');
     expect(result.issues.map(issue => issue.message)).toContain('Delivery booked time is blank.');
+  });
+
+  it('parses the Roadrunner Site Master export and keeps the external site identity', () => {
+    const csv = [
+      'Code,Lookup Code,Company Letter,Company,Add1,Add2,Add3,AddTown,AddCounty,AddPostcode,AddCountry,Latitude,Longitude,Contact1,Contact2,Telephone,Fax,Email,Collect Time From 1,Collect Time To 1,Collect Time From 2,Collect Time To 2,Deliver Time From 1,Deliver Time To 1,Deliver Time From 2,Deliver Time To 2,Collect Turnaround,Collect Turnaround Per Pallet,Deliver Turnaround,Deliver Turnaround Per Pallet,Vehicle Type,TailLiftRequired,Grid Ref,Rate Area,Booking Required,Van Route Name',
+      'ALDIGOLD,ALDI-GOLD,A,"Aldi, Goldthorpe",Commercial Road,,,Goldthorpe,South Yorkshire,S63 9BL,GB,53.534,-1.302,Goods In,,0123456789,,goods@example.com,,,,,,,,,30,2,45,3,Artic,TRUE,,NORTH,TRUE,',
+    ].join('\r\n');
+
+    const records = parseRoadrunnerSiteMasterCsv(csv);
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({
+      code: 'ALDIGOLD',
+      lookupCode: 'ALDI-GOLD',
+      company: 'Aldi, Goldthorpe',
+      addTown: 'Goldthorpe',
+      addCounty: 'South Yorkshire',
+      addPostcode: 'S63 9BL',
+      latitude: 53.534,
+      longitude: -1.302,
+      telephone: '0123456789',
+      email: 'goods@example.com',
+      tailLiftRequired: true,
+      bookingRequired: true,
+    });
+  });
+
+  it('decodes UTF-16LE Roadrunner site exports', () => {
+    const source = 'Code,Company\r\nAYLESFOR,WAITROSE LTD.';
+    const bytes = new Uint8Array(source.length * 2 + 2);
+    bytes[0] = 0xff;
+    bytes[1] = 0xfe;
+    for (let index = 0; index < source.length; index += 1) {
+      bytes[2 + index * 2] = source.charCodeAt(index);
+    }
+
+    expect(decodeRoadrunnerSiteMasterBytes(bytes.buffer)).toBe(source);
   });
 
   it('writes exact order headers and escapes commas and quotes', () => {
