@@ -119,6 +119,28 @@ export const api = {
   siteCrm: (id: string) => request<SiteCrmProfile>(`/api/v2/master/sites/${id}/crm`),
   masterCounts: () => request<MasterCounts>('/api/v2/master/summary'),
 
+  updateMasterRecord: (entity: string, id: string, payload: Record<string, unknown>) =>
+    request<MasterRecord>(`/api/v2/master/${entity}/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }),
+
+  deleteMasterRecord: async (entity: string, id: string) => {
+    const response = await fetch(`${API_BASE}/api/v2/master/${entity}/${id}`, {
+      method: 'DELETE',
+    });
+    if (response.ok) return;
+
+    let message = `${response.status} ${response.statusText}`;
+    try {
+      const body = await response.json();
+      if (body?.error) message = body.error;
+    } catch {
+      // Keep HTTP status when the response has no JSON body.
+    }
+    throw new Error(message);
+  },
+
   uploadMasterWorkbook(file: File, commit: boolean) {
     const form = new FormData();
     form.append('file', file);
