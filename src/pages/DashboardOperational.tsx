@@ -105,6 +105,10 @@ function driverExpiryRisks(drivers: MasterDriver[] | undefined) {
   return risks.sort((left, right) => left.days - right.days || left.name.localeCompare(right.name));
 }
 
+function isAccessMessage(message: string) {
+  return message.toLowerCase().includes("api access") || message.toLowerCase().includes("sign-in");
+}
+
 export function DashboardOperational() {
   const token = useAccessToken();
   const date = todayIsoDate();
@@ -123,8 +127,11 @@ export function DashboardOperational() {
   const expiryRisks = driverExpiryRisks(masterData.data?.drivers);
   const expiredRiskCount = expiryRisks.filter(risk => risk.days < 0).length;
   const dueRiskCount = expiryRisks.filter(risk => risk.days >= 0).length;
+  const providerCount = syncState.data?.providers.length || 0;
+  const feedAttentionCount = syncState.data?.providers.filter(provider => feedClass(provider.state) !== "green").length || 0;
+  const accessOnlyMasterWarning = masterData.error ? isAccessMessage(masterData.error) : false;
   const operationalReady = snapshot
-    ? snapshot.runs > 0 && snapshot.missingAllocations === 0 && liveVorConflicts === 0 && walkroundAction === 0 && snapshot.geofenceGaps === 0 && snapshot.unreviewedOrders === 0
+    ? snapshot.runs > 0 && snapshot.missingAllocations === 0 && liveVorConflicts === 0 && walkroundAction === 0 && snapshot.geofenceGaps === 0 && snapshot.unreviewedOrders === 0 && highAttention === 0
     : false;
 
   const refreshReadiness = readiness.refresh;
@@ -141,12 +148,13 @@ export function DashboardOperational() {
   useEffect(() => startVisiblePolling(refreshCore, 60_000), [refreshCore]);
   useEffect(() => startVisiblePolling(refreshLiveCompliance, 300_000), [refreshLiveCompliance]);
 
-  return <section className="dashboard-health-page dashboard-command-view">
+  return <section className="dashboard-health-page dashboard-command-view dashboard-exec-view">
     <span className="dashboard-sr-only">Today's attention</span>
-    <div className="title-row dashboard-health-title">
+    <div className="dashboard-exec-header">
       <div>
         <p className="eyebrow">Operational health · {formatDateLong(date)}</p>
-        <h1>Today at a glance</h1>
+        <h1>Daily command dashboard</h1>
+        <p>Orders, allocation, walkrounds, driver compliance and system feeds in one control view.</p>
       </div>
       <div className="dashboard-refresh-summary">
         <small>Last refreshed {checkedAt(syncState.data?.generatedAtUtc)}</small>
@@ -154,48 +162,64 @@ export function DashboardOperational() {
       </div>
     </div>
 
-    {readiness.error && <p className="notice inline-notice">Operational health could not refresh: {readiness.error}</p>}
-    {syncState.error && <p className="notice inline-notice">Canonical integration state could not refresh: {syncState.error}</p>}
-    {compliance.error && <p className="notice inline-notice">Walkround compliance could not refresh; the dashboard is temporarily using the readiness fallback: {compliance.error}</p>}
-    {masterData.error && <p className="notice inline-notice">Driver expiry risk could not refresh: {masterData.error}</p>}
+    {readiness.error && <p className="notice inline-notice dashboard-warning">Operational health could not refresh: {readiness.error}</p>}
+    {syncState.error && <p className="notice inline-notice dashboard-warning">System feeds could not refresh: {syncState.error}</p>}
+    {compliance.error && <p className="notice inline-notice dashboard-warning">Walkround checks could not refresh; using readiness fallback: {compliance.error}</p>}
 
-    {snapshot && <>
-      <div className={`dashboard-health-state ${operationalReady ? "good" : "attention"}`}>
-        <div><span>{operationalReady ? "✓" : "!"}</span><div><small>Operational health</small><strong>{operationalReady ? "Ready to operate" : "Action required"}</strong></div></div>
-        <p>{snapshot.runs} runs today · {readyRuns} fully allocated · {highAttention} high priority</p>
+    {snapshot && <div className="dashboard-status-band">
+      <div className={`dashboard-status-card ${operationalReady ? "good" : "attention"}`}>
+        <span>{operationalReady ? "✓" : "!"}</span>
+        <div><small>Overall status</small><strong>{operationalReady ? "Ready to operate" : "Action required"}</strong></div>
       </div>
+      <div className="dashboard-status-point"><strong>{snapshot.runs}</strong><small>runs today</small></div>
+      <div className="dashboard-status-point"><strong>{readyRuns}</strong><small>fully allocated</small></div>
+      <div className="dashboard-status-point"><strong>{highAttention}</strong><small>high priority</small></div>
+      <div className="dashboard-status-point"><strong>{feedAttentionCount}</strong><small>feed issue{feedAttentionCount === 1 ? "" : "s"}</small></div>
+    </div>}
 
-      <div className="dashboard-health-grid dashboard-kpi-grid">
-        <Link to={`/staging?date=${encodeURIComponent(date)}`}><article className={snapshot.unreviewedOrders ? "attention" : "good"}><span>Orders to review</span><strong>{snapshot.unreviewedOrders}</strong><small>Need review / approval</small></article></Link>
-        <Link to="/driver-dispatch"><article className={snapshot.missingAllocations ? "attention" : "good"}><span>Runs ready</span><strong>{readyRuns}/{snapshot.runs}</strong><small>{snapshot.missingAllocations} need allocation</small></article></Link>
-        <Link to="/fleet-assets"><article className={liveVorConflicts ? "attention" : "good"}><span>Fleet / VOR</span><strong>{liveVorConflicts}</strong><small>{fleetProvider ? `Fleetio · ${checkedAt(fleetProvider.lastUpdatedUtc)}` : "Fleetio unavailable"}</small></article></Link>
-        <Link to="/compliance"><article className={walkroundAction ? "attention" : walkroundReview ? "neutral" : "good"}><span>Walkround checks</span><strong>{walkroundReview}</strong><small>{compliance.data ? `${walkroundAction} action · ${compliance.data.summary.amber} review` : "Compliance fallback"}</small></article></Link>
-        <Link to="/attention"><article className={highAttention ? "attention" : "good"}><span>High priority</span><strong>{highAttention}</strong><small>Open high risk exceptions</small></article></Link>
-      </div>
-    </>}
+    {snapshot && <div className="dashboard-kpi-grid dashboard-exec-kpis">
+      <Link to={`/staging?date=${encodeURIComponent(date)}`} className="dashboard-kpi-card priority"><span>Orders to review</span><strong>{snapshot.unreviewedOrders}</strong><small>Need approval before planning</small></Link>
+      <Link to="/driver-dispatch" className="dashboard-kpi-card"><span>Runs ready</span><strong>{readyRuns}/{snapshot.runs}</strong><small>{snapshot.missingAllocations} need allocation</small></Link>
+      <Link to="/compliance" className="dashboard-kpi-card"><span>Walkround checks</span><strong>{walkroundReview}</strong><small>{compliance.data ? `${walkroundAction} action · ${compliance.data.summary.amber} review` : "Compliance fallback"}</small></Link>
+      <Link to="/fleet-assets" className="dashboard-kpi-card"><span>Fleet / VOR</span><strong>{liveVorConflicts}</strong><small>{fleetProvider ? `Fleetio · ${checkedAt(fleetProvider.lastUpdatedUtc)}` : "Fleetio unavailable"}</small></Link>
+      <Link to="/attention" className="dashboard-kpi-card priority"><span>High priority</span><strong>{highAttention}</strong><small>Open high risk exceptions</small></Link>
+    </div>}
 
-    <div className="dashboard-command-grid dashboard-command-grid-refined">
-      <section className="dashboard-widget-wrap dashboard-allocated-runs"><DailyAllocationViewer initialDate={date} /></section>
+    <div className="dashboard-exec-grid">
+      <section className="panel dashboard-command-panel dashboard-allocated-runs">
+        <div className="dashboard-panel-head">
+          <div><p className="eyebrow">Today's allocated routes</p><h2>Driver, vehicle and run snapshot</h2></div>
+          <Link to="/driver-dispatch">Open Driver Dispatch →</Link>
+        </div>
+        <DailyAllocationViewer initialDate={date} />
+      </section>
 
       <aside className="dashboard-side-stack">
-        <section className="panel dashboard-expiry-panel">
-          <div className="title-row"><div><p className="eyebrow">Driver compliance risk</p><h2>CPC, tacho card & licence expiry</h2></div><Link to="/driver-master">Driver Master →</Link></div>
+        <section className="panel dashboard-command-panel dashboard-expiry-panel">
+          <div className="dashboard-panel-head">
+            <div><p className="eyebrow">Driver compliance risk</p><h2>CPC, tacho card & licence expiry</h2></div>
+            <Link to="/driver-master">Driver Master →</Link>
+          </div>
           <div className="dashboard-risk-summary">
             <span className={expiredRiskCount ? "risk-bad" : "risk-good"}><strong>{expiredRiskCount}</strong><small>Expired</small></span>
             <span className={dueRiskCount ? "risk-warn" : "risk-good"}><strong>{dueRiskCount}</strong><small>Due in 30 days</small></span>
           </div>
-          {expiryRisks.length ? <div className="dashboard-risk-list">
+          {masterData.error && <p className={`dashboard-inline-status ${accessOnlyMasterWarning ? "muted" : "warning"}`}>{accessOnlyMasterWarning ? "Driver expiry data needs TMS API access for this account." : masterData.error}</p>}
+          {!masterData.error && expiryRisks.length ? <div className="dashboard-risk-list">
             {expiryRisks.slice(0, 6).map(risk => <Link key={`${risk.driverId}-${risk.label}-${risk.date}`} to={`/driver-master?driverId=${encodeURIComponent(risk.driverId)}`} className={`dashboard-risk-row ${risk.days < 0 ? "expired" : "due"}`}>
               <span>{risk.days < 0 ? "Expired" : `${risk.days}d`}</span>
               <div><strong>{risk.name}</strong><small>{risk.label} · {dateLabel(risk.date)}</small></div>
               <b>→</b>
             </Link>)}
-          </div> : <p className="hint">No CPC, digital tacho card or licence expiries are due in the next 30 days.</p>}
+          </div> : !masterData.error && <p className="dashboard-empty">No CPC, digital tacho card or licence expiries are due in the next 30 days.</p>}
         </section>
 
-        <section className="panel dashboard-feed-panel">
-          <div className="title-row"><div><p className="eyebrow">System feeds</p><h2>Receiving current data</h2></div><Link to="/control-centre">Control centre →</Link></div>
-          {syncState.error && <p className="notice inline-notice">Feed health could not refresh: {syncState.error}</p>}
+        <section className="panel dashboard-command-panel dashboard-feed-panel">
+          <div className="dashboard-panel-head">
+            <div><p className="eyebrow">System feeds</p><h2>Data freshness</h2></div>
+            <Link to="/control-centre">Control centre →</Link>
+          </div>
+          <div className="dashboard-feed-score"><strong>{providerCount - feedAttentionCount}/{providerCount}</strong><small>feeds current</small></div>
           <div className="dashboard-feed-list compact-list">
             {syncState.data?.providers.map(feed => <div key={feed.name} className={`dashboard-feed-row feed-${feedClass(feed.state)}`} title={feed.detail || undefined}>
               <span aria-hidden="true" />
@@ -205,10 +229,10 @@ export function DashboardOperational() {
           </div>
         </section>
 
-        <SageHrLeavePanel date={date} days={5} maxItems={6} compact />
+        <SageHrLeavePanel date={date} days={5} maxItems={8} compact />
       </aside>
     </div>
 
-    <div className="dashboard-handoff-links"><Link to={`/staging?date=${encodeURIComponent(date)}`}>Load Review →</Link><Link to="/">Planner →</Link><Link to="/driver-dispatch">Driver Dispatch →</Link><Link to="/operations-wallboard">Live operations →</Link></div>
+    <div className="dashboard-handoff-links"><Link to={`/staging?date=${encodeURIComponent(date)}`}>Order Review →</Link><Link to="/">Planner →</Link><Link to="/driver-dispatch">Driver Dispatch →</Link><Link to="/operations-wallboard">Live operations →</Link></div>
   </section>;
 }
