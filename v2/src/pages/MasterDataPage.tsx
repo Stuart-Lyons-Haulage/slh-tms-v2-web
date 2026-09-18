@@ -23,6 +23,11 @@ type MasterTab =
   | 'import';
 
 type Column = [string, string];
+type EditableField = {
+  key: string;
+  label: string;
+  type?: 'text' | 'email' | 'tel' | 'number' | 'textarea' | 'checkbox' | 'date' | 'time';
+};
 
 const tabs: Array<{ key: MasterTab; label: string; count?: keyof MasterCounts }> = [
   { key: 'sites', label: 'Sites', count: 'sites' },
@@ -55,10 +60,11 @@ const columns: Record<Exclude<MasterTab, 'import'>, Column[]> = {
   drivers: [
     ['displayName', 'Driver'],
     ['employeeNumber', 'Employee'],
-    ['tachoName', 'Tacho name'],
+    ['mobileNumber', 'Mobile'],
+    ['email', 'Email'],
+    ['tachoMasterMemberCode', 'Member no.'],
+    ['tachoCardNumber', 'Tacho card'],
     ['driverType', 'Type'],
-    ['driverGroup', 'Group'],
-    ['skills', 'Skills'],
   ],
   vehicles: [
     ['registration', 'Registration'],
@@ -120,6 +126,127 @@ const columns: Record<Exclude<MasterTab, 'import'>, Column[]> = {
     ['source', 'Source'],
   ],
 };
+
+const editableFields: Record<Exclude<MasterTab, 'review' | 'import'>, EditableField[]> = {
+  sites: [
+    { key: 'code', label: 'Site code' },
+    { key: 'name', label: 'Site name' },
+    { key: 'driverTextName', label: 'Driver text name' },
+    { key: 'fullAddress', label: 'Full address', type: 'textarea' },
+    { key: 'postcode', label: 'Postcode' },
+    { key: 'mapLink', label: 'Map link' },
+    { key: 'collectionInstructions', label: 'Collection instructions', type: 'textarea' },
+    { key: 'driverInstructions', label: 'Driver instructions', type: 'textarea' },
+    { key: 'latitude', label: 'Latitude', type: 'number' },
+    { key: 'longitude', label: 'Longitude', type: 'number' },
+  ],
+  customers: [
+    { key: 'code', label: 'Customer code' },
+    { key: 'name', label: 'Customer name' },
+  ],
+  drivers: [
+    { key: 'displayName', label: 'Driver name' },
+    { key: 'employeeNumber', label: 'Employee number' },
+    { key: 'mobileNumber', label: 'Mobile number', type: 'tel' },
+    { key: 'email', label: 'Email', type: 'email' },
+    { key: 'tachoName', label: 'TachoMaster name' },
+    { key: 'tachoMasterMemberCode', label: 'TachoMaster member number' },
+    { key: 'tachoCardNumber', label: 'Tacho card number' },
+    { key: 'tachoMasterDriverId', label: 'TachoMaster driver ID' },
+    { key: 'driverType', label: 'Driver type' },
+    { key: 'driverGroup', label: 'Driver group' },
+    { key: 'skills', label: 'Skills', type: 'textarea' },
+    { key: 'coding', label: 'Coding' },
+    { key: 'agencyName', label: 'Agency name' },
+    { key: 'northEligible', label: 'North eligible', type: 'checkbox' },
+    { key: 'preloadEligible', label: 'Preload eligible', type: 'checkbox' },
+    { key: 'drivingLicenceNumber', label: 'Driving licence number' },
+    { key: 'licenceExpiry', label: 'Licence expiry', type: 'date' },
+    { key: 'licenceStatus', label: 'Licence status' },
+    { key: 'notes', label: 'Notes', type: 'textarea' },
+  ],
+  vehicles: [
+    { key: 'registration', label: 'Registration' },
+    { key: 'fleetNumber', label: 'Fleet number' },
+    { key: 'abbreviation', label: 'Short code' },
+    { key: 'vehicleType', label: 'Vehicle type' },
+    { key: 'transmission', label: 'Transmission' },
+    { key: 'dvs', label: 'DVS' },
+    { key: 'cabMobile', label: 'Cab mobile', type: 'tel' },
+    { key: 'fuelPin', label: 'Fuel PIN' },
+    { key: 'shellCard', label: 'Shell card' },
+    { key: 'bpRedCard', label: 'BP red card' },
+    { key: 'bpPlainCard', label: 'BP plain card' },
+    { key: 'notes', label: 'Notes', type: 'textarea' },
+  ],
+  trailers: [
+    { key: 'trailerNumber', label: 'Trailer number' },
+    { key: 'trailerType', label: 'Trailer type' },
+    { key: 'palletCapacity', label: 'Pallet capacity', type: 'number' },
+  ],
+  markets: [
+    { key: 'code', label: 'Market code' },
+    { key: 'name', label: 'Market name' },
+    { key: 'defaultInstructions', label: 'Default instructions', type: 'textarea' },
+  ],
+  siteCutoffs: [
+    { key: 'code', label: 'Cut-off code' },
+    { key: 'plan', label: 'Plan' },
+    { key: 'standardCutoff', label: 'Standard cut-off', type: 'time' },
+    { key: 'extendedCutoff', label: 'Extended cut-off', type: 'time' },
+    { key: 'contact', label: 'Contact' },
+    { key: 'notes', label: 'Notes', type: 'textarea' },
+    { key: 'temperature', label: 'Temperature' },
+    { key: 'palletType', label: 'Pallet type' },
+    { key: 'lastDespatchTime', label: 'Last despatch time', type: 'time' },
+    { key: 'plannedCollectFrom', label: 'Planned collect from', type: 'time' },
+    { key: 'plannedCollectTo', label: 'Planned collect to', type: 'time' },
+    { key: 'depotDeliveryDeadline', label: 'Depot delivery deadline', type: 'time' },
+  ],
+  routeTimes: [
+    { key: 'route', label: 'Route' },
+    { key: 'palletType', label: 'Pallet type' },
+    { key: 'lastDespatchTime', label: 'Last despatch time', type: 'time' },
+    { key: 'plannedCollectFrom', label: 'Planned collect from', type: 'time' },
+    { key: 'plannedCollectTo', label: 'Planned collect to', type: 'time' },
+    { key: 'depotDeliveryDeadline', label: 'Depot delivery deadline', type: 'time' },
+  ],
+  customerContacts: [
+    { key: 'code', label: 'Contact code' },
+    { key: 'contactName', label: 'Contact name' },
+    { key: 'role', label: 'Role' },
+    { key: 'email', label: 'Email', type: 'email' },
+    { key: 'phone', label: 'Phone', type: 'tel' },
+    { key: 'notes', label: 'Notes', type: 'textarea' },
+  ],
+  marketContacts: [
+    { key: 'marketName', label: 'Market' },
+    { key: 'name', label: 'Name' },
+    { key: 'standOrLocation', label: 'Stand / location' },
+    { key: 'salesman', label: 'Salesman' },
+    { key: 'sender', label: 'Sender' },
+  ],
+  fuelPrices: [
+    { key: 'code', label: 'Fuel price code' },
+    { key: 'weekCommencing', label: 'Week commencing', type: 'date' },
+    { key: 'provider', label: 'Provider' },
+    { key: 'pricePencePerLitre', label: 'Pence per litre', type: 'number' },
+    { key: 'isPricingMaximum', label: 'Pricing maximum', type: 'checkbox' },
+    { key: 'source', label: 'Source' },
+    { key: 'notes', label: 'Notes', type: 'textarea' },
+  ],
+};
+
+function entitySlug(tab: MasterTab) {
+  switch (tab) {
+    case 'siteCutoffs': return 'site-cutoffs';
+    case 'routeTimes': return 'route-times';
+    case 'customerContacts': return 'customer-contacts';
+    case 'marketContacts': return 'market-contacts';
+    case 'fuelPrices': return 'fuel-prices';
+    default: return tab;
+  }
+}
 
 function formatValue(value: unknown) {
   if (value == null || value === '') return '—';
@@ -198,6 +325,9 @@ export function MasterDataPage() {
   const [selected, setSelected] = useState<MasterRecord | null>(null);
   const [siteCrm, setSiteCrm] = useState<SiteCrmProfile | null>(null);
   const [crmLoading, setCrmLoading] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState<Record<string, unknown>>({});
+  const [recordBusy, setRecordBusy] = useState(false);
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<MasterWorkbookImportResult | null>(null);
@@ -288,6 +418,8 @@ export function MasterDataPage() {
 
   async function openRow(row: MasterRecord) {
     setSelected(row);
+    setDraft({ ...row });
+    setEditing(false);
     setSiteCrm(null);
 
     if (activeTab !== 'sites') return;
@@ -300,6 +432,64 @@ export function MasterDataPage() {
       setError(err instanceof Error ? err.message : 'Unable to open the Site CRM.');
     } finally {
       setCrmLoading(false);
+    }
+  }
+
+  async function saveRecord() {
+    if (!selected || activeTab === 'review' || activeTab === 'import') return;
+
+    setRecordBusy(true);
+    setError(null);
+    try {
+      const updated = await api.updateMasterRecord(entitySlug(activeTab), selected.id, draft);
+      setSelected(updated);
+      setDraft({ ...updated });
+      setEditing(false);
+
+      if (activeTab === 'sites') {
+        setSiteCrm(await api.siteCrm(selected.id));
+      }
+
+      await loadRows(activeTab);
+      await refreshCounts();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'The Master Data record could not be saved.');
+    } finally {
+      setRecordBusy(false);
+    }
+  }
+
+  async function deleteRecord() {
+    if (!selected || activeTab === 'review' || activeTab === 'import') return;
+
+    const label = formatValue(
+      selected.name ??
+      selected.displayName ??
+      selected.registration ??
+      selected.trailerNumber ??
+      selected.code ??
+      selected.route ??
+      selected.contactName ??
+      selected.key
+    );
+
+    if (!window.confirm(`Permanently delete ${label}?\n\nRecords linked to Sites, cut-offs or transport orders will be protected and the delete will be blocked.`)) {
+      return;
+    }
+
+    setRecordBusy(true);
+    setError(null);
+    try {
+      await api.deleteMasterRecord(entitySlug(activeTab), selected.id);
+      setSelected(null);
+      setSiteCrm(null);
+      setEditing(false);
+      await loadRows(activeTab);
+      await refreshCounts();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'The Master Data record could not be deleted.');
+    } finally {
+      setRecordBusy(false);
     }
   }
 
@@ -556,19 +746,123 @@ export function MasterDataPage() {
                     : 'Canonical V2 record.'}
                 </p>
               </div>
-              <button
-                className="button secondary"
-                type="button"
-                onClick={() => {
-                  setSelected(null);
-                  setSiteCrm(null);
-                }}
-              >
-                Close
-              </button>
+              <div className="crm-modal-top-actions">
+                {activeTab !== 'review' && activeTab !== 'import' && !editing && (
+                  <button
+                    className="button"
+                    type="button"
+                    disabled={recordBusy}
+                    onClick={() => {
+                      const source = activeTab === 'sites' && siteCrm ? siteCrm.site : selected;
+                      setDraft({ ...source });
+                      setEditing(true);
+                    }}
+                  >
+                    Edit
+                  </button>
+                )}
+                {activeTab !== 'review' && activeTab !== 'import' && (
+                  <button
+                    className="button danger"
+                    type="button"
+                    disabled={recordBusy}
+                    onClick={() => void deleteRecord()}
+                  >
+                    Delete
+                  </button>
+                )}
+                <button
+                  className="button secondary"
+                  type="button"
+                  disabled={recordBusy}
+                  onClick={() => {
+                    setSelected(null);
+                    setSiteCrm(null);
+                    setEditing(false);
+                  }}
+                >
+                  Close
+                </button>
+              </div>
             </div>
 
             <div className="crm-modal-body">
+              {editing && activeTab !== 'review' && activeTab !== 'import' && (
+                <section className="crm-section crm-edit-section">
+                  <div className="crm-section-heading">
+                    <div>
+                      <p className="eyebrow">Edit Master Data</p>
+                      <h3>{activeLabel} record</h3>
+                    </div>
+                  </div>
+                  <div className="crm-edit-grid">
+                    {editableFields[activeTab].map(field => {
+                      const value = draft[field.key];
+                      if (field.type === 'checkbox') {
+                        return (
+                          <label className="crm-checkbox" key={field.key}>
+                            <input
+                              type="checkbox"
+                              checked={Boolean(value)}
+                              onChange={event => setDraft(current => ({ ...current, [field.key]: event.target.checked }))}
+                            />
+                            <span>{field.label}</span>
+                          </label>
+                        );
+                      }
+
+                      if (field.type === 'textarea') {
+                        return (
+                          <label className="crm-edit-field wide" key={field.key}>
+                            <span>{field.label}</span>
+                            <textarea
+                              rows={3}
+                              value={String(value ?? '')}
+                              onChange={event => setDraft(current => ({ ...current, [field.key]: event.target.value || null }))}
+                            />
+                          </label>
+                        );
+                      }
+
+                      return (
+                        <label className="crm-edit-field" key={field.key}>
+                          <span>{field.label}</span>
+                          <input
+                            type={field.type || 'text'}
+                            step={field.type === 'number' ? 'any' : undefined}
+                            value={String(value ?? '')}
+                            onChange={event => {
+                              const raw = event.target.value;
+                              const nextValue = field.type === 'number'
+                                ? (raw === '' ? null : Number(raw))
+                                : (raw === '' ? null : raw);
+                              setDraft(current => ({ ...current, [field.key]: nextValue }));
+                            }}
+                          />
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <div className="crm-edit-actions">
+                    <button className="button" type="button" disabled={recordBusy} onClick={() => void saveRecord()}>
+                      {recordBusy ? 'Saving…' : 'Save changes'}
+                    </button>
+                    <button
+                      className="button secondary"
+                      type="button"
+                      disabled={recordBusy}
+                      onClick={() => {
+                        const source = activeTab === 'sites' && siteCrm ? siteCrm.site : selected;
+                        setDraft({ ...source });
+                        setEditing(false);
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </section>
+              )}
+
               {activeTab === 'sites' ? (
                 crmLoading || !siteCrm ? (
                   <div className="master-empty">Loading Site CRM…</div>
@@ -686,10 +980,12 @@ export function MasterDataPage() {
                   </>
                 )
               ) : (
-                <section className="crm-section">
-                  <p className="eyebrow">Record details</p>
-                  <SimpleDetail row={selected} />
-                </section>
+                !editing && (
+                  <section className="crm-section">
+                    <p className="eyebrow">Record details</p>
+                    <SimpleDetail row={selected} />
+                  </section>
+                )
               )}
             </div>
           </div>
