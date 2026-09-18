@@ -68,7 +68,11 @@ export function SageHrLeavePanel({ date = todayIsoDate(), days = 5, maxItems = 1
     {leave.error && <p className="notice inline-notice">Sage HR leave could not refresh: {leave.error}</p>}
     {leave.data && !leave.data.configured && <p className="notice inline-notice">{leave.data.message}</p>}
     {leave.data && !compact && <p className="hint">{leave.data.message}</p>}
-    <div className="dashboard-health-grid compact dashboard-leave-counts">
+    {compact ? <div className="dashboard-leave-summary-row">
+      <span><strong>{todayItems.length}</strong> off today</span>
+      <span><strong>{items.length - todayItems.length}</strong> upcoming</span>
+      <small>Next {days} days</small>
+    </div> : <div className="dashboard-health-grid compact dashboard-leave-counts">
       <article className={todayItems.length ? "attention" : "good"}>
         <span>Off today</span>
         <strong>{todayItems.length}</strong>
@@ -79,8 +83,8 @@ export function SageHrLeavePanel({ date = todayIsoDate(), days = 5, maxItems = 1
         <strong>{items.length - todayItems.length}</strong>
         <small>Next {days} days</small>
       </article>
-    </div>
-    {previewItems.length ? <div className="dashboard-attention-list">
+    </div>}
+    {previewItems.length ? <div className="dashboard-attention-list dashboard-leave-list">
       {previewItems.map(item => <Link key={`${item.date}-${item.employeeNumber}-${item.policyName || "leave"}`} to={item.driverId ? `/driver-master?driverId=${encodeURIComponent(item.driverId)}` : "/driver-master"} className={`dashboard-attention-row severity-${item.date === date ? "high" : "medium"}`}>
         <span>{dateLabel(item.date)}</span>
         <div>
