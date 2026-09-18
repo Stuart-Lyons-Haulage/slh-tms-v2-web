@@ -1,4 +1,4 @@
-import type { Driver, RoadrunnerSiteProfile, Site, TransportOrder, Vehicle } from '../lib/api';
+import type { Customer, Driver, RoadrunnerSiteProfile, Site, TransportOrder, Vehicle } from '../lib/api';
 import type { Run } from '../api/runs';
 
 export type RoadrunnerExportRow = Record<string, string | number | boolean | undefined>;
@@ -19,32 +19,93 @@ export type RoadrunnerOrderExportIssue = {
 
 export type RoadrunnerOrderExportRow = {
   Ref: string;
+  'Cust Code': string;
+  'Cust Ref': string;
+  'Cons Ref': string;
+  'Order Category': string;
+  'PO / POS': string;
+  'Collect Site Code': string;
+  'Collect Lookup Code': string;
+  'Collect Date': string;
+  'Collect Time': string;
+  'Collect Time To': string;
+  'Collect Company': string;
+  'Collect Add1': string;
+  'Collect Add2': string;
+  'Collect Add3': string;
+  'Collect Town': string;
+  'Collect County': string;
+  'Collect Postcode': string;
+  'Deliver Site Code': string;
+  'Deliver Lookup Code': string;
   'Del Date': string;
   'Del Time': string;
+  'Del Time To': string;
   Company: string;
+  Add1: string;
+  Add2: string;
+  Add3: string;
   Town: string;
   County: string;
   Postcode: string;
   Pallets: number | '';
   Weight: number | '';
   Cases: number | '';
+  Trays: number | '';
+  Trolleys: number | '';
+  Temperature: string;
+  'Trailer Notes': string;
+  'Driver Instructions': string;
   Comment: string;
+  'TMS Order ID': string;
+  'Source Subject': string;
+  'Source Attachment': string;
 };
 
 export const ROADRUNNER_ORDER_HEADERS: Array<keyof RoadrunnerOrderExportRow> = [
   'Ref',
+  'Cust Code',
+  'Cust Ref',
+  'Cons Ref',
+  'Order Category',
+  'PO / POS',
+  'Collect Site Code',
+  'Collect Lookup Code',
+  'Collect Date',
+  'Collect Time',
+  'Collect Time To',
+  'Collect Company',
+  'Collect Add1',
+  'Collect Add2',
+  'Collect Add3',
+  'Collect Town',
+  'Collect County',
+  'Collect Postcode',
+  'Deliver Site Code',
+  'Deliver Lookup Code',
   'Del Date',
   'Del Time',
+  'Del Time To',
   'Company',
+  'Add1',
+  'Add2',
+  'Add3',
   'Town',
   'County',
   'Postcode',
   'Pallets',
   'Weight',
   'Cases',
+  'Trays',
+  'Trolleys',
+  'Temperature',
+  'Trailer Notes',
+  'Driver Instructions',
   'Comment',
+  'TMS Order ID',
+  'Source Subject',
+  'Source Attachment',
 ];
-
 
 export const ROADRUNNER_SITE_MASTER_HEADERS = [
   'Code',
@@ -270,23 +331,78 @@ function splitUkAddress(address?: string) {
 
   const town = parts.length >= 2 ? parts.at(-2)! : parts.at(-1) || '';
   const county = parts.length >= 3 ? parts.at(-1)! : '';
+  const addressParts = parts.slice(0, Math.max(0, parts.length - (parts.length >= 3 ? 2 : 1)));
 
-  return { town, county, postcode };
+  return {
+    add1: addressParts[0] || '',
+    add2: addressParts[1] || '',
+    add3: addressParts.slice(2).join(', '),
+    town,
+    county,
+    postcode,
+  };
 }
 
-function siteForOrder(order: TransportOrder, sites: Site[]) {
-  if (order.deliverySiteId) {
-    const exact = sites.find(site => site.id === order.deliverySiteId);
+function normaliseLookup(value?: string) {
+  return clean(value).toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function siteAliases(site: Site) {
+  return [
+    site.name,
+    site.driverTextName,
+    site.externalCode,
+    site.roadrunnerCode,
+    ...(site.aliases || '').split(/[;,]/),
+  ].map(normaliseLookup).filter(Boolean);
+}
+
+function siteForOrder(order: TransportOrder, sites: Site[], kind: 'collection' | 'delivery') {
+  const siteId = kind === 'collection' ? order.collectionSiteId : order.deliverySiteId;
+  if (siteId) {
+    const exact = sites.find(site => site.id === siteId);
     if (exact) return exact;
   }
 
-  const delivery = clean(order.deliveryLocation).toLowerCase();
-  if (!delivery) return undefined;
-  return sites.find(site =>
-    clean(site.name).toLowerCase() === delivery ||
-    clean(site.driverTextName).toLowerCase() === delivery ||
-    clean(site.externalCode).toLowerCase() === delivery,
+  const location = normaliseLookup(kind === 'collection' ? order.collectionLocation : order.deliveryLocation);
+  if (!location) return undefined;
+  return sites.find(site => siteAliases(site).includes(location));
+}
+
+function customerForOrder(order: TransportOrder, customers: Customer[]) {
+  const code = normaliseLookup(order.customerCode);
+  const name = normaliseLookup(order.customerName);
+  return customers.find(customer =>
+    (code && normaliseLookup(customer.code) === code) ||
+    (name && normaliseLookup(customer.name) === name),
   );
+}
+
+function roadRunnerProfile(site?: Site): RoadrunnerSiteProfile | undefined {
+  const raw = clean(site?.roadrunnerProfileJson);
+  if (!raw) return undefined;
+  try {
+    const parsed = JSON.parse(raw) as RoadrunnerSiteProfile;
+    return parsed && typeof parsed === 'object' ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function siteExportDetails(site: Site | undefined, fallbackAddress?: string, fallbackCompany?: string) {
+  const profile = roadRunnerProfile(site);
+  const parsed = splitUkAddress(fallbackAddress || site?.collectionAddress);
+  return {
+    code: clean(profile?.code) || clean(site?.roadrunnerCode) || clean(site?.externalCode),
+    lookupCode: clean(profile?.lookupCode),
+    company: clean(profile?.company) || clean(site?.driverTextName) || clean(site?.name) || clean(fallbackCompany),
+    add1: clean(profile?.add1) || parsed.add1,
+    add2: clean(profile?.add2) || parsed.add2,
+    add3: clean(profile?.add3) || parsed.add3,
+    town: clean(profile?.addTown) || parsed.town,
+    county: clean(profile?.addCounty) || parsed.county,
+    postcode: clean(profile?.addPostcode) ? formatPostcode(clean(profile?.addPostcode)) : parsed.postcode,
+  };
 }
 
 function orderComment(order: TransportOrder) {
@@ -294,64 +410,109 @@ function orderComment(order: TransportOrder) {
   if (clean(order.reference)) parts.push(`TMS ${clean(order.reference)}`);
 
   const po = clean(order.purchaseOrderNumber || order.poNumber);
-  if (po && po !== clean(order.reference)) parts.push(`PO ${po}`);
+  if (po) parts.push(`PO/POS ${po}`);
 
-  const collectionDate = formatRoadrunnerDate(order.collectionDate);
-  const collectionTime = formatRoadrunnerTime(order.collectionWindowStartUtc);
-  const collectionLocation = clean(order.collectionLocation);
-  if (collectionDate || collectionTime || collectionLocation) {
-    parts.push(`Collect ${[collectionDate, collectionTime, collectionLocation].filter(Boolean).join(' ')}`);
+  if (clean(order.sourceOrderReference) && clean(order.sourceOrderReference) !== po) {
+    parts.push(`Customer ref ${clean(order.sourceOrderReference)}`);
   }
 
-  if (clean(order.temperatureRequirement)) parts.push(`Temp ${clean(order.temperatureRequirement)}`);
-  if (clean(order.driverInstructions)) parts.push(clean(order.driverInstructions));
-  if (clean(order.trailerNotes)) parts.push(clean(order.trailerNotes));
   if (clean(order.notes)) parts.push(clean(order.notes));
-
   return parts.join(' | ');
 }
 
-export function buildRoadrunnerOrdersExport(orders: TransportOrder[], sites: Site[] = []) {
+export function buildRoadrunnerOrdersExport(
+  orders: TransportOrder[],
+  sites: Site[] = [],
+  customers: Customer[] = [],
+) {
   const rows: RoadrunnerOrderExportRow[] = [];
   const issues: RoadrunnerOrderExportIssue[] = [];
 
   for (const order of orders) {
-    const site = siteForOrder(order, sites);
-    const address = clean(order.deliveryAddress) || clean(site?.collectionAddress);
-    const { town, county, postcode } = splitUkAddress(address);
-    const company = clean(order.deliveryLocation) || clean(site?.driverTextName) || clean(site?.name) || clean(order.customerName) || clean(order.customerCode);
-    const ref = clean(order.sourceOrderReference) || clean(order.purchaseOrderNumber) || clean(order.poNumber) || clean(order.reference);
+    const collectionSite = siteForOrder(order, sites, 'collection');
+    const deliverySite = siteForOrder(order, sites, 'delivery');
+    const customer = customerForOrder(order, customers);
+
+    const collection = siteExportDetails(collectionSite, order.collectionAddress, order.collectionLocation);
+    const delivery = siteExportDetails(deliverySite, order.deliveryAddress, order.deliveryLocation);
+
+    const poPos = clean(order.purchaseOrderNumber || order.poNumber);
+    const customerReference = poPos || clean(order.sourceOrderReference) || clean(order.reference);
+    const consignmentReference = clean(order.reference);
+    const customerCode = clean(customer?.code) || clean(order.customerCode);
     const deliveryDate = formatRoadrunnerDate(order.deliveryDate);
     const deliveryTime = formatRoadrunnerTime(order.deliveryWindowStartUtc);
+    const collectionDate = formatRoadrunnerDate(order.collectionDate);
+    const collectionTime = formatRoadrunnerTime(order.collectionWindowStartUtc);
 
-    if (!ref) {
-      issues.push({ orderId: order.id, orderReference: order.reference, severity: 'error', message: 'No Roadrunner Ref could be derived from the order reference/PO.' });
+    if (!customerReference) {
+      issues.push({ orderId: order.id, orderReference: order.reference, severity: 'error', message: 'No PO/POS, customer reference or TMS reference is available for Roadrunner matching.' });
+    }
+    if (!poPos) {
+      issues.push({ orderId: order.id, orderReference: order.reference, severity: 'warning', message: 'PO/POS is blank. Destination and customer reference will need to carry the Roadrunner match.' });
+    }
+    if (!collectionSite) {
+      issues.push({ orderId: order.id, orderReference: order.reference, severity: 'warning', message: 'Collection site is not linked to Site Master; export is using the order address/name as fallback.' });
+    }
+    if (!deliverySite) {
+      issues.push({ orderId: order.id, orderReference: order.reference, severity: 'warning', message: 'Delivery site is not linked to Site Master; export is using the order address/name as fallback.' });
     }
     if (!deliveryDate) {
       issues.push({ orderId: order.id, orderReference: order.reference, severity: 'error', message: 'Delivery date is missing.' });
     }
-    if (!company) {
+    if (!delivery.company) {
       issues.push({ orderId: order.id, orderReference: order.reference, severity: 'error', message: 'Delivery company/site is missing.' });
     }
-    if (!postcode) {
-      issues.push({ orderId: order.id, orderReference: order.reference, severity: 'warning', message: 'Delivery postcode could not be derived from the order or Site Master address.' });
+    if (!delivery.postcode) {
+      issues.push({ orderId: order.id, orderReference: order.reference, severity: 'warning', message: 'Delivery postcode could not be derived from Site Master or the order.' });
     }
     if (!deliveryTime) {
       issues.push({ orderId: order.id, orderReference: order.reference, severity: 'warning', message: 'Delivery booked time is blank.' });
     }
 
     rows.push({
-      Ref: ref,
+      Ref: customerReference,
+      'Cust Code': customerCode,
+      'Cust Ref': customerReference,
+      'Cons Ref': consignmentReference,
+      'Order Category': clean(order.jobType) || 'Delivery',
+      'PO / POS': poPos,
+      'Collect Site Code': collection.code,
+      'Collect Lookup Code': collection.lookupCode,
+      'Collect Date': collectionDate,
+      'Collect Time': collectionTime,
+      'Collect Time To': formatRoadrunnerTime(order.collectionWindowEndUtc),
+      'Collect Company': collection.company,
+      'Collect Add1': collection.add1,
+      'Collect Add2': collection.add2,
+      'Collect Add3': collection.add3,
+      'Collect Town': collection.town,
+      'Collect County': collection.county,
+      'Collect Postcode': collection.postcode,
+      'Deliver Site Code': delivery.code,
+      'Deliver Lookup Code': delivery.lookupCode,
       'Del Date': deliveryDate,
       'Del Time': deliveryTime,
-      Company: company,
-      Town: town,
-      County: county,
-      Postcode: postcode,
+      'Del Time To': formatRoadrunnerTime(order.deliveryWindowEndUtc),
+      Company: delivery.company,
+      Add1: delivery.add1,
+      Add2: delivery.add2,
+      Add3: delivery.add3,
+      Town: delivery.town,
+      County: delivery.county,
+      Postcode: delivery.postcode,
       Pallets: order.pallets ?? '',
       Weight: '',
       Cases: order.cases ?? '',
+      Trays: order.trays ?? '',
+      Trolleys: order.trolleys ?? '',
+      Temperature: clean(order.temperatureRequirement),
+      'Trailer Notes': clean(order.trailerNotes),
+      'Driver Instructions': clean(order.driverInstructions),
       Comment: orderComment(order),
+      'TMS Order ID': order.id,
+      'Source Subject': clean(order.sourceSubject),
+      'Source Attachment': clean(order.sourceAttachmentName),
     });
   }
 
@@ -470,7 +631,6 @@ export function buildRoadrunnerRunExport(
   return { rows, issues };
 }
 
-// Backwards-compatible name retained for any existing imports.
 export const buildRoadrunnerExport = buildRoadrunnerRunExport;
 
 export function roadRunnerRowsToCsv(rows: RoadrunnerExportRow[]) {

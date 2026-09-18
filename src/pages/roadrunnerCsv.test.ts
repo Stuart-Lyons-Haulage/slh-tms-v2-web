@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Driver, Site, TransportOrder, Vehicle } from '../lib/api';
+import type { Customer, Driver, Site, TransportOrder, Vehicle } from '../lib/api';
 import type { Run } from '../api/runs';
 import {
   buildRoadrunnerOrdersExport,
@@ -27,26 +27,64 @@ const run: Run = {
 const order: TransportOrder = {
   id: 'order-1',
   reference: 'ORD-123',
-  customerCode: 'ALDI',
-  customerName: 'Aldi',
+  customerCode: 'WAITROS2',
+  customerName: 'Waitrose Ltd',
   purchaseOrderNumber: 'PO-456',
   collectionDate: '2026-09-18',
   collectionWindowStartUtc: '2026-09-18T05:30:00Z',
-  collectionLocation: 'Selsey',
+  collectionSiteId: 'site-collect',
+  collectionLocation: 'Barfoots Of Botley',
   deliveryDate: '2026-09-20',
   deliveryWindowStartUtc: '2026-09-20T13:30:00Z',
-  deliverySiteId: 'site-1',
+  deliverySiteId: 'site-deliver',
   deliveryLocation: 'Waitrose Leyland',
   pallets: 8,
   cases: 120,
   status: 'Planned',
+  temperatureRequirement: '+10c',
 };
 
-const site: Site = {
-  id: 'site-1',
+const collectionSite: Site = {
+  id: 'site-collect',
+  externalCode: 'BARFOOTS',
+  roadrunnerCode: 'BARFOOT',
+  name: 'Barfoots Of Botley',
+  collectionAddress: 'Unit 1 Chichester Food Park, Bognor Road, Chichester, PO22 0AQ',
+  roadrunnerProfileJson: JSON.stringify({
+    code: 'BARFOOT',
+    lookupCode: 'BARFOOTS',
+    company: 'Barfoots Of Botley',
+    add1: 'Unit 1 Chichester Food Park',
+    add2: 'Bognor Road',
+    addTown: 'Chichester',
+    addCounty: 'West Sussex',
+    addPostcode: 'PO22 0AQ',
+  }),
+  active: true,
+};
+
+const deliverySite: Site = {
+  id: 'site-deliver',
   externalCode: 'WAITROSE-LEYLAND',
+  roadrunnerCode: 'WAITLEY',
   name: 'Waitrose Leyland',
   collectionAddress: 'Eaton Avenue, Leyland, Lancashire, PR7 7NA',
+  roadrunnerProfileJson: JSON.stringify({
+    code: 'WAITLEY',
+    lookupCode: 'WAITROSE-LEYLAND',
+    company: 'Waitrose Leyland',
+    add1: 'Eaton Avenue',
+    addTown: 'Leyland',
+    addCounty: 'Lancashire',
+    addPostcode: 'PR7 7NA',
+  }),
+  active: true,
+};
+
+const customer: Customer = {
+  id: 'customer-1',
+  code: 'WAITROS2',
+  name: 'Waitrose Ltd',
   active: true,
 };
 
@@ -76,7 +114,7 @@ describe('Roadrunner CSV export', () => {
     expect(result.rows[0]).toMatchObject({
       RunReference: 'AM 12',
       OrderReference: 'ORD-123',
-      CustomerCode: 'ALDI',
+      CustomerCode: 'WAITROS2',
       DriverName: 'Test Driver',
       TachoMasterDriverId: 'TM-99',
       TachoCardNumber: 'CARD-99',
@@ -98,64 +136,110 @@ describe('Roadrunner CSV export', () => {
     expect(result.issues.map(issue => issue.message)).toContain('Vehicle has no tracking identifier or fleet number.');
   });
 
-  it('builds the exact observed Roadrunner order import columns', () => {
-    const result = buildRoadrunnerOrdersExport([order], [site]);
+  it('builds a master-enriched consignment row and preserves PO/POS for matching', () => {
+    const result = buildRoadrunnerOrdersExport([order], [collectionSite, deliverySite], [customer]);
 
     expect(result.issues).toEqual([]);
     expect(result.rows).toEqual([{
       Ref: 'PO-456',
+      'Cust Code': 'WAITROS2',
+      'Cust Ref': 'PO-456',
+      'Cons Ref': 'ORD-123',
+      'Order Category': 'Delivery',
+      'PO / POS': 'PO-456',
+      'Collect Site Code': 'BARFOOT',
+      'Collect Lookup Code': 'BARFOOTS',
+      'Collect Date': '18/09/2026',
+      'Collect Time': '06:30',
+      'Collect Time To': '',
+      'Collect Company': 'Barfoots Of Botley',
+      'Collect Add1': 'Unit 1 Chichester Food Park',
+      'Collect Add2': 'Bognor Road',
+      'Collect Add3': '',
+      'Collect Town': 'Chichester',
+      'Collect County': 'West Sussex',
+      'Collect Postcode': 'PO22 0AQ',
+      'Deliver Site Code': 'WAITLEY',
+      'Deliver Lookup Code': 'WAITROSE-LEYLAND',
       'Del Date': '20/09/2026',
       'Del Time': '14:30',
+      'Del Time To': '',
       Company: 'Waitrose Leyland',
+      Add1: 'Eaton Avenue',
+      Add2: '',
+      Add3: '',
       Town: 'Leyland',
       County: 'Lancashire',
       Postcode: 'PR7 7NA',
       Pallets: 8,
       Weight: '',
       Cases: 120,
-      Comment: 'TMS ORD-123 | PO PO-456 | Collect 18/09/2026 06:30 Selsey',
+      Trays: '',
+      Trolleys: '',
+      Temperature: '+10c',
+      'Trailer Notes': '',
+      'Driver Instructions': '',
+      Comment: 'TMS ORD-123 | PO/POS PO-456',
+      'TMS Order ID': 'order-1',
+      'Source Subject': '',
+      'Source Attachment': '',
     }]);
 
-    expect(ROADRUNNER_ORDER_HEADERS).toEqual([
-      'Ref',
-      'Del Date',
-      'Del Time',
-      'Company',
-      'Town',
-      'County',
-      'Postcode',
-      'Pallets',
-      'Weight',
-      'Cases',
-      'Comment',
-    ]);
+    expect(ROADRUNNER_ORDER_HEADERS).toContain('PO / POS');
+    expect(ROADRUNNER_ORDER_HEADERS).toContain('Collect Site Code');
+    expect(ROADRUNNER_ORDER_HEADERS).toContain('Deliver Site Code');
+    expect(ROADRUNNER_ORDER_HEADERS).toContain('Cons Ref');
   });
 
-  it('uses Site Master as the destination-address fallback', () => {
+  it('keeps orders separate even when PO and destination match', () => {
     const result = buildRoadrunnerOrdersExport([
-      { ...order, deliveryAddress: undefined },
-    ], [site]);
+      order,
+      { ...order, id: 'order-2', reference: 'ORD-124', pallets: 13 },
+    ], [collectionSite, deliverySite], [customer]);
 
-    expect(result.rows[0]).toMatchObject({
-      Company: 'Waitrose Leyland',
-      Town: 'Leyland',
-      County: 'Lancashire',
-      Postcode: 'PR7 7NA',
-    });
-    expect(result.issues).toEqual([]);
+    expect(result.rows).toHaveLength(2);
+    expect(result.rows.map(row => row['PO / POS'])).toEqual(['PO-456', 'PO-456']);
+    expect(result.rows.map(row => row.Company)).toEqual(['Waitrose Leyland', 'Waitrose Leyland']);
+    expect(result.rows.map(row => row['Cons Ref'])).toEqual(['ORD-123', 'ORD-124']);
+    expect(result.rows.map(row => row.Pallets)).toEqual([8, 13]);
   });
 
-  it('warns when a Roadrunner order is missing postcode or delivery time', () => {
+  it('uses order data as a fallback when a Site Master link is missing', () => {
     const result = buildRoadrunnerOrdersExport([
       {
         ...order,
+        collectionSiteId: undefined,
+        collectionLocation: 'Selsey',
+        collectionAddress: 'Selsey Road, Chichester, West Sussex, PO20 0AA',
+        deliverySiteId: undefined,
+        deliveryAddress: 'Eaton Avenue, Leyland, Lancashire, PR7 7NA',
+      },
+    ], [], [customer]);
+
+    expect(result.rows[0]).toMatchObject({
+      'Collect Company': 'Selsey',
+      'Collect Postcode': 'PO20 0AA',
+      Company: 'Waitrose Leyland',
+      Postcode: 'PR7 7NA',
+    });
+    expect(result.issues.map(issue => issue.message)).toContain('Collection site is not linked to Site Master; export is using the order address/name as fallback.');
+    expect(result.issues.map(issue => issue.message)).toContain('Delivery site is not linked to Site Master; export is using the order address/name as fallback.');
+  });
+
+  it('warns when PO/POS, destination postcode or delivery time are absent', () => {
+    const result = buildRoadrunnerOrdersExport([
+      {
+        ...order,
+        purchaseOrderNumber: undefined,
+        poNumber: undefined,
         deliverySiteId: undefined,
         deliveryAddress: 'Eaton Avenue, Leyland',
         deliveryWindowStartUtc: undefined,
       },
-    ]);
+    ], [collectionSite], [customer]);
 
-    expect(result.issues.map(issue => issue.message)).toContain('Delivery postcode could not be derived from the order or Site Master address.');
+    expect(result.issues.map(issue => issue.message)).toContain('PO/POS is blank. Destination and customer reference will need to carry the Roadrunner match.');
+    expect(result.issues.map(issue => issue.message)).toContain('Delivery postcode could not be derived from Site Master or the order.');
     expect(result.issues.map(issue => issue.message)).toContain('Delivery booked time is blank.');
   });
 
@@ -195,22 +279,53 @@ describe('Roadrunner CSV export', () => {
     expect(decodeRoadrunnerSiteMasterBytes(bytes.buffer)).toBe(source);
   });
 
-  it('writes exact order headers and escapes commas and quotes', () => {
+  it('writes enriched order headers and escapes commas and quotes', () => {
     const csv = roadRunnerOrderRowsToCsv([{
       Ref: '123456',
+      'Cust Code': 'WAITROS2',
+      'Cust Ref': '123456',
+      'Cons Ref': 'ORD-1',
+      'Order Category': 'Delivery',
+      'PO / POS': '123456',
+      'Collect Site Code': 'BARFOOT',
+      'Collect Lookup Code': 'BARFOOTS',
+      'Collect Date': '19/09/2026',
+      'Collect Time': '18:00',
+      'Collect Time To': '',
+      'Collect Company': 'Barfoots Of Botley',
+      'Collect Add1': 'Unit 1',
+      'Collect Add2': '',
+      'Collect Add3': '',
+      'Collect Town': 'Chichester',
+      'Collect County': 'West Sussex',
+      'Collect Postcode': 'PO22 0AQ',
+      'Deliver Site Code': 'WAITLEY',
+      'Deliver Lookup Code': 'WAITROSE-LEYLAND',
       'Del Date': '20/09/2026',
       'Del Time': '14:30',
+      'Del Time To': '',
       Company: 'Road Tech',
+      Add1: 'Test Road',
+      Add2: '',
+      Add3: '',
       Town: 'Shenley',
       County: 'Hertfordshire',
       Postcode: 'WD7 9AN',
       Pallets: 26,
       Weight: 12541.654,
       Cases: 2345,
+      Trays: '',
+      Trolleys: '',
+      Temperature: '+10c',
+      'Trailer Notes': '',
+      'Driver Instructions': '',
       Comment: 'Pre Book, then "call"',
+      'TMS Order ID': 'order-1',
+      'Source Subject': '',
+      'Source Attachment': '',
     }]);
 
-    expect(csv.split('\r\n')[0]).toBe('Ref,Del Date,Del Time,Company,Town,County,Postcode,Pallets,Weight,Cases,Comment');
+    expect(csv.split('\r\n')[0]).toContain('Ref,Cust Code,Cust Ref,Cons Ref,Order Category,PO / POS');
     expect(csv).toContain('"Pre Book, then ""call"""');
   });
 
