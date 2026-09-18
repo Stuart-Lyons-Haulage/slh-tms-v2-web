@@ -4,6 +4,7 @@ import {
   MasterCounts,
   MasterRecord,
   MasterWorkbookImportResult,
+  ReviewAllocation,
   SiteCrmProfile,
 } from '../lib/api';
 
@@ -12,11 +13,9 @@ type MasterTab =
   | 'customers'
   | 'drivers'
   | 'vehicles'
+  | 'fuelCards'
   | 'trailers'
   | 'markets'
-  | 'siteCutoffs'
-  | 'routeTimes'
-  | 'customerContacts'
   | 'marketContacts'
   | 'fuelPrices'
   | 'review'
@@ -34,18 +33,16 @@ const tabs: Array<{ key: MasterTab; label: string; count?: keyof MasterCounts }>
   { key: 'customers', label: 'Customers', count: 'customers' },
   { key: 'drivers', label: 'Drivers', count: 'drivers' },
   { key: 'vehicles', label: 'Vehicles', count: 'vehicles' },
+  { key: 'fuelCards', label: 'Fuel Cards', count: 'fuelCards' },
   { key: 'trailers', label: 'Trailers', count: 'trailers' },
   { key: 'markets', label: 'Markets', count: 'markets' },
-  { key: 'siteCutoffs', label: 'Deadlines', count: 'siteCutoffs' },
-  { key: 'routeTimes', label: 'Planner Knowledge', count: 'routeTimes' },
-  { key: 'customerContacts', label: 'Customer Contacts', count: 'customerContacts' },
   { key: 'marketContacts', label: 'Market Contacts', count: 'marketContacts' },
   { key: 'fuelPrices', label: 'Fuel Prices', count: 'fuelPrices' },
   { key: 'review', label: 'Review' },
   { key: 'import', label: 'Import' },
 ];
 
-const columns: Record<Exclude<MasterTab, 'import'>, Column[]> = {
+const columns: Record<Exclude<MasterTab, 'review' | 'import'>, Column[]> = {
   sites: [
     ['code', 'Code'],
     ['name', 'Site'],
@@ -69,11 +66,19 @@ const columns: Record<Exclude<MasterTab, 'import'>, Column[]> = {
   vehicles: [
     ['registration', 'Registration'],
     ['fleetNumber', 'Fleet no.'],
-    ['cabMobile', 'Cab mobile'],
-    ['fuelPin', 'Fuel PIN'],
-    ['shellCard', 'Shell card'],
-    ['bpRedCard', 'BP red'],
-    ['bpPlainCard', 'BP plain'],
+    ['abbreviation', 'Short code'],
+    ['vehicleType', 'Type'],
+    ['transmission', 'Transmission'],
+    ['dvs', 'DVS'],
+    ['cabMobile', 'Cab phone'],
+  ],
+  fuelCards: [
+    ['vehicleRegistration', 'Vehicle'],
+    ['provider', 'Provider'],
+    ['cardType', 'Card type'],
+    ['cardNumber', 'Card number'],
+    ['pin', 'PIN'],
+    ['notes', 'Notes'],
   ],
   trailers: [
     ['trailerNumber', 'Trailer'],
@@ -88,29 +93,6 @@ const columns: Record<Exclude<MasterTab, 'import'>, Column[]> = {
     ['name', 'Market'],
     ['defaultInstructions', 'Instructions'],
   ],
-  siteCutoffs: [
-    ['siteName', 'Site'],
-    ['plan', 'Plan / service'],
-    ['plannedCollectFrom', 'Earliest collection'],
-    ['plannedCollectTo', 'Last collection'],
-    ['depotDeliveryDeadline', 'Latest delivery'],
-    ['standardCutoff', 'Standard cut-off'],
-    ['extendedCutoff', 'Extended cut-off'],
-  ],
-  routeTimes: [
-    ['route', 'Route'],
-    ['palletType', 'Pallet type'],
-    ['lastDespatchTime', 'Last sensible despatch'],
-    ['plannedCollectFrom', 'Typical collect from'],
-    ['plannedCollectTo', 'Typical collect to'],
-    ['depotDeliveryDeadline', 'Planned arrival by'],
-  ],
-  customerContacts: [
-    ['contactName', 'Contact'],
-    ['role', 'Role'],
-    ['email', 'Email'],
-    ['phone', 'Phone'],
-  ],
   marketContacts: [
     ['marketName', 'Market'],
     ['name', 'Name'],
@@ -123,12 +105,6 @@ const columns: Record<Exclude<MasterTab, 'import'>, Column[]> = {
     ['provider', 'Provider'],
     ['pricePencePerLitre', 'Pence / litre'],
     ['isPricingMaximum', 'Pricing maximum'],
-    ['source', 'Source'],
-  ],
-  review: [
-    ['reviewKind', 'Type'],
-    ['summary', 'Issue'],
-    ['sourceReference', 'Reference'],
     ['source', 'Source'],
   ],
 };
@@ -186,11 +162,14 @@ const editableFields: Record<Exclude<MasterTab, 'review' | 'import'>, EditableFi
     { key: 'vehicleType', label: 'Vehicle type' },
     { key: 'transmission', label: 'Transmission' },
     { key: 'dvs', label: 'DVS' },
-    { key: 'cabMobile', label: 'Cab mobile', type: 'tel' },
-    { key: 'fuelPin', label: 'Fuel PIN' },
-    { key: 'shellCard', label: 'Shell card' },
-    { key: 'bpRedCard', label: 'BP red card' },
-    { key: 'bpPlainCard', label: 'BP plain card' },
+    { key: 'cabMobile', label: 'Cab phone', type: 'tel' },
+    { key: 'notes', label: 'Notes', type: 'textarea' },
+  ],
+  fuelCards: [
+    { key: 'provider', label: 'Provider' },
+    { key: 'cardType', label: 'Card type' },
+    { key: 'cardNumber', label: 'Card number' },
+    { key: 'pin', label: 'PIN' },
     { key: 'notes', label: 'Notes', type: 'textarea' },
   ],
   trailers: [
@@ -207,34 +186,6 @@ const editableFields: Record<Exclude<MasterTab, 'review' | 'import'>, EditableFi
     { key: 'code', label: 'Market code' },
     { key: 'name', label: 'Market name' },
     { key: 'defaultInstructions', label: 'Default instructions', type: 'textarea' },
-  ],
-  siteCutoffs: [
-    { key: 'code', label: 'Deadline code' },
-    { key: 'plan', label: 'Plan / service' },
-    { key: 'plannedCollectFrom', label: 'Earliest collection', type: 'time' },
-    { key: 'plannedCollectTo', label: 'Last collection', type: 'time' },
-    { key: 'depotDeliveryDeadline', label: 'Latest delivery', type: 'time' },
-    { key: 'lastDespatchTime', label: 'Last despatch', type: 'time' },
-    { key: 'standardCutoff', label: 'Standard cut-off', type: 'time' },
-    { key: 'extendedCutoff', label: 'Extended cut-off', type: 'time' },
-    { key: 'contact', label: 'Deadline contact' },
-    { key: 'notes', label: 'Deadline notes', type: 'textarea' },
-  ],
-  routeTimes: [
-    { key: 'route', label: 'Route / movement' },
-    { key: 'palletType', label: 'Pallet type' },
-    { key: 'lastDespatchTime', label: 'Last sensible despatch', type: 'time' },
-    { key: 'plannedCollectFrom', label: 'Typical collect from', type: 'time' },
-    { key: 'plannedCollectTo', label: 'Typical collect to', type: 'time' },
-    { key: 'depotDeliveryDeadline', label: 'Planned arrival by', type: 'time' },
-  ],
-  customerContacts: [
-    { key: 'code', label: 'Contact code' },
-    { key: 'contactName', label: 'Contact name' },
-    { key: 'role', label: 'Role' },
-    { key: 'email', label: 'Email', type: 'email' },
-    { key: 'phone', label: 'Phone', type: 'tel' },
-    { key: 'notes', label: 'Notes', type: 'textarea' },
   ],
   marketContacts: [
     { key: 'marketName', label: 'Market' },
@@ -256,9 +207,7 @@ const editableFields: Record<Exclude<MasterTab, 'review' | 'import'>, EditableFi
 
 function entitySlug(tab: MasterTab) {
   switch (tab) {
-    case 'siteCutoffs': return 'site-cutoffs';
-    case 'routeTimes': return 'route-times';
-    case 'customerContacts': return 'customer-contacts';
+    case 'fuelCards': return 'fuel-cards';
     case 'marketContacts': return 'market-contacts';
     case 'fuelPrices': return 'fuel-prices';
     default: return tab;
@@ -274,18 +223,16 @@ function formatValue(value: unknown) {
 function formatTableValue(key: string, value: unknown) {
   if (value == null || value === '') return '—';
 
-  if (key === 'fuelPin') return '••••';
-
-  if (key === 'shellCard' || key === 'bpRedCard' || key === 'bpPlainCard') {
+  if (key === 'pin') return '••••';
+  if (key === 'cardNumber') {
     const text = String(value).replace(/\s/g, '');
-    if (text.length <= 4) return text;
-    return `•••• ${text.slice(-4)}`;
+    return text.length <= 4 ? text : `•••• ${text.slice(-4)}`;
   }
 
   return formatValue(value);
 }
 
-function matchesSearch(row: MasterRecord, query: string) {
+function matchesSearch(row: Record<string, unknown>, query: string) {
   const needle = query.trim().toLowerCase();
   if (!needle) return true;
   return Object.values(row).some(value =>
@@ -300,8 +247,9 @@ function readableKey(key: string) {
 }
 
 function SimpleDetail({ row }: { row: MasterRecord }) {
+  const hidden = new Set(['id', 'vehicleId']);
   const entries = Object.entries(row)
-    .filter(([key]) => key !== 'id')
+    .filter(([key]) => !hidden.has(key))
     .filter(([, value]) => value != null && value !== '');
 
   return (
@@ -351,6 +299,9 @@ export function MasterDataPage() {
   const [activeTab, setActiveTab] = useState<MasterTab>('sites');
   const [counts, setCounts] = useState<MasterCounts | null>(null);
   const [rows, setRows] = useState<MasterRecord[]>([]);
+  const [reviewRows, setReviewRows] = useState<ReviewAllocation[]>([]);
+  const [siteOptions, setSiteOptions] = useState<MasterRecord[]>([]);
+  const [allocationSite, setAllocationSite] = useState<Record<string, string>>({});
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<MasterRecord | null>(null);
@@ -359,6 +310,7 @@ export function MasterDataPage() {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<Record<string, unknown>>({});
   const [recordBusy, setRecordBusy] = useState(false);
+  const [allocatingId, setAllocatingId] = useState<string | null>(null);
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<MasterWorkbookImportResult | null>(null);
@@ -372,49 +324,42 @@ export function MasterDataPage() {
   const loadRows = useCallback(async (tab: MasterTab) => {
     if (tab === 'import') {
       setRows([]);
+      setReviewRows([]);
       return;
     }
 
     setLoading(true);
     setError(null);
     try {
-      let loaded: MasterRecord[];
+      if (tab === 'review') {
+        const [review, sites] = await Promise.all([
+          api.reviewAllocations(),
+          api.sites(),
+        ]);
+        setReviewRows(review);
+        setSiteOptions(sites);
+        setRows([]);
+        return;
+      }
+
+      let loaded: MasterRecord[] = [];
       switch (tab) {
         case 'sites': loaded = await api.sites(); break;
         case 'customers': loaded = await api.customers(); break;
         case 'drivers': loaded = await api.drivers(); break;
         case 'vehicles': loaded = await api.vehicles(); break;
+        case 'fuelCards': loaded = await api.fuelCards(); break;
         case 'trailers': loaded = await api.trailers(); break;
         case 'markets': loaded = await api.markets(); break;
-        case 'siteCutoffs': loaded = await api.siteCutoffs(); break;
-        case 'routeTimes': loaded = await api.routeTimes(); break;
-        case 'customerContacts': loaded = await api.customerContacts(); break;
         case 'marketContacts': loaded = await api.marketContacts(); break;
         case 'fuelPrices': loaded = await api.fuelPrices(); break;
-        case 'review': {
-          const [reviewItems, aliasCandidates] = await Promise.all([
-            api.masterReview(),
-            api.aliasCandidates(),
-          ]);
-          loaded = [
-            ...reviewItems.map(item => ({
-              ...item,
-              reviewKind: 'Master data',
-            })),
-            ...aliasCandidates.map(item => ({
-              ...item,
-              reviewKind: 'Site alias',
-              summary: `${formatValue(item.aliasType)} alias: ${formatValue(item.alias)}`,
-              sourceReference: item.alias,
-            })),
-          ];
-          break;
-        }
       }
       setRows(loaded);
+      setReviewRows([]);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to load Master Data.');
       setRows([]);
+      setReviewRows([]);
     } finally {
       setLoading(false);
     }
@@ -430,6 +375,7 @@ export function MasterDataPage() {
     setQuery('');
     setSelected(null);
     setSiteCrm(null);
+    setEditing(false);
     void loadRows(activeTab);
   }, [activeTab, loadRows]);
 
@@ -438,11 +384,16 @@ export function MasterDataPage() {
     [rows, query],
   );
 
-  const reviewCount = (counts?.aliasCandidates ?? 0) + (counts?.reviewItems ?? 0);
+  const filteredReviewRows = useMemo(
+    () => reviewRows.filter(row => matchesSearch(row as unknown as Record<string, unknown>, query)),
+    [reviewRows, query],
+  );
+
+  const reviewCount = reviewRows.length || ((counts?.aliasCandidates ?? 0) + (counts?.reviewItems ?? 0));
 
   const preparedRows = useMemo(
     () => preview
-      ? Object.entries(preview.rows).reduce((total, [, count]) => total + count, 0)
+      ? Object.values(preview.rows).reduce((total, count) => total + count, 0)
       : 0,
     [preview],
   );
@@ -497,14 +448,14 @@ export function MasterDataPage() {
       selected.name ??
       selected.displayName ??
       selected.registration ??
+      selected.vehicleRegistration ??
       selected.trailerNumber ??
       selected.code ??
-      selected.route ??
       selected.contactName ??
-      selected.key
+      selected.provider,
     );
 
-    if (!window.confirm(`Permanently delete ${label}?\n\nRecords linked to Sites, cut-offs or transport orders will be protected and the delete will be blocked.`)) {
+    if (!window.confirm(`Permanently delete ${label}?\n\nLinked records are protected and the delete will be blocked where necessary.`)) {
       return;
     }
 
@@ -521,6 +472,22 @@ export function MasterDataPage() {
       setError(err instanceof Error ? err.message : 'The Master Data record could not be deleted.');
     } finally {
       setRecordBusy(false);
+    }
+  }
+
+  async function allocateReview(row: ReviewAllocation) {
+    const siteId = allocationSite[row.id];
+    if (!siteId) return;
+
+    setAllocatingId(row.id);
+    setError(null);
+    try {
+      await api.allocateReviewToSite(row.kind, row.id, siteId);
+      await Promise.all([loadRows('review'), refreshCounts()]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'The review item could not be allocated.');
+    } finally {
+      setAllocatingId(null);
     }
   }
 
@@ -555,7 +522,7 @@ export function MasterDataPage() {
         <div>
           <p className="eyebrow">Single operational register</p>
           <h1>Master Data</h1>
-          <p>One place for every canonical record. Open a Site to see its identity, hard deadlines, planner knowledge, aliases and linked records together.</p>
+          <p>Sites own their deadlines, contacts and planner knowledge. Fleet fuel cards are managed separately from vehicle records.</p>
         </div>
         <div className="status good">Canonical V2</div>
       </header>
@@ -681,6 +648,68 @@ export function MasterDataPage() {
               </div>
             )}
           </div>
+        ) : activeTab === 'review' ? (
+          <div className="master-tab-body">
+            <div className="master-toolbar">
+              <div>
+                <p className="eyebrow">Relationship review</p>
+                <h2>Allocate to Site</h2>
+                <span className="muted">{filteredReviewRows.length} item{filteredReviewRows.length === 1 ? '' : 's'} need a Site relationship</span>
+              </div>
+              <div className="master-toolbar-actions">
+                <label>
+                  Search
+                  <input
+                    value={query}
+                    onChange={event => setQuery(event.target.value)}
+                    placeholder="Alias, contact, route or reference"
+                  />
+                </label>
+                <button className="button secondary" type="button" disabled={loading} onClick={() => void loadRows('review')}>
+                  {loading ? 'Loading…' : 'Refresh'}
+                </button>
+              </div>
+            </div>
+
+            {loading ? (
+              <div className="master-empty">Loading review items…</div>
+            ) : filteredReviewRows.length ? (
+              <div className="allocation-list">
+                {filteredReviewRows.map(row => (
+                  <article className="allocation-row" key={`${row.kind}-${row.id}`}>
+                    <div className="allocation-main">
+                      <span className="status-chip review">{row.category}</span>
+                      <strong>{row.summary}</strong>
+                      <small>{[row.reference, row.source].filter(Boolean).join(' · ')}</small>
+                    </div>
+                    <div className="allocation-actions">
+                      <select
+                        value={allocationSite[row.id] ?? ''}
+                        onChange={event => setAllocationSite(current => ({ ...current, [row.id]: event.target.value }))}
+                      >
+                        <option value="">Select Site…</option>
+                        {siteOptions.map(site => (
+                          <option value={site.id} key={site.id}>
+                            {formatValue(site.name)} ({formatValue(site.code)})
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        className="button"
+                        type="button"
+                        disabled={!allocationSite[row.id] || allocatingId === row.id}
+                        onClick={() => void allocateReview(row)}
+                      >
+                        {allocatingId === row.id ? 'Allocating…' : 'Allocate'}
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className="master-empty">Nothing currently needs Site allocation.</div>
+            )}
+          </div>
         ) : (
           <div className="master-tab-body">
             <div className="master-toolbar">
@@ -695,15 +724,10 @@ export function MasterDataPage() {
                   <input
                     value={query}
                     onChange={event => setQuery(event.target.value)}
-                    placeholder={activeTab === 'sites' ? 'Site, code, address, postcode or alias' : `Search ${activeLabel.toLowerCase()}`}
+                    placeholder={activeTab === 'sites' ? 'Site, code, address or postcode' : `Search ${activeLabel.toLowerCase()}`}
                   />
                 </label>
-                <button
-                  className="button secondary"
-                  type="button"
-                  disabled={loading}
-                  onClick={() => void loadRows(activeTab)}
-                >
+                <button className="button secondary" type="button" disabled={loading} onClick={() => void loadRows(activeTab)}>
                   {loading ? 'Loading…' : 'Refresh'}
                 </button>
               </div>
@@ -731,11 +755,9 @@ export function MasterDataPage() {
                           <td key={key}>{formatTableValue(key, row[key])}</td>
                         ))}
                         <td>
-                          {activeTab === 'review'
-                            ? <span className="status-chip review">Review</span>
-                            : <span className={row.active === false ? 'status-chip archived' : 'status-chip live'}>
-                                {row.active === false ? 'Archived' : 'Active'}
-                              </span>}
+                          <span className={row.active === false ? 'status-chip archived' : 'status-chip live'}>
+                            {row.active === false ? 'Archived' : 'Active'}
+                          </span>
                         </td>
                       </tr>
                     ))}
@@ -748,7 +770,7 @@ export function MasterDataPage() {
         )}
       </div>
 
-      {selected && (
+      {selected && activeTab !== 'review' && activeTab !== 'import' && (
         <div
           className="crm-modal-backdrop"
           role="dialog"
@@ -758,6 +780,7 @@ export function MasterDataPage() {
             if (event.target === event.currentTarget) {
               setSelected(null);
               setSiteCrm(null);
+              setEditing(false);
             }
           }}
         >
@@ -769,20 +792,19 @@ export function MasterDataPage() {
                   selected.name ??
                   selected.displayName ??
                   selected.registration ??
+                  selected.vehicleRegistration ??
                   selected.trailerNumber ??
                   selected.code ??
-                  selected.route ??
-                  selected.contactName ??
-                  selected.key
+                  selected.provider,
                 )}</h2>
                 <p className="muted">
                   {activeTab === 'sites'
-                    ? 'Everything connected to this physical location is kept together here.'
+                    ? 'Deadlines, contacts and planner knowledge live against this Site.'
                     : 'Canonical V2 record.'}
                 </p>
               </div>
               <div className="crm-modal-top-actions">
-                {activeTab !== 'review' && activeTab !== 'import' && !editing && (
+                {!editing && (
                   <button
                     className="button"
                     type="button"
@@ -796,16 +818,9 @@ export function MasterDataPage() {
                     Edit
                   </button>
                 )}
-                {activeTab !== 'review' && activeTab !== 'import' && (
-                  <button
-                    className="button danger"
-                    type="button"
-                    disabled={recordBusy}
-                    onClick={() => void deleteRecord()}
-                  >
-                    Delete
-                  </button>
-                )}
+                <button className="button danger" type="button" disabled={recordBusy} onClick={() => void deleteRecord()}>
+                  Delete
+                </button>
                 <button
                   className="button secondary"
                   type="button"
@@ -822,7 +837,7 @@ export function MasterDataPage() {
             </div>
 
             <div className="crm-modal-body">
-              {editing && activeTab !== 'review' && activeTab !== 'import' && (
+              {editing && (
                 <section className="crm-section crm-edit-section">
                   <div className="crm-section-heading">
                     <div>
@@ -830,9 +845,11 @@ export function MasterDataPage() {
                       <h3>{activeLabel} record</h3>
                     </div>
                   </div>
+
                   <div className="crm-edit-grid">
                     {activeEditableFields.map(field => {
                       const value = draft[field.key];
+
                       if (field.type === 'checkbox') {
                         return (
                           <label className="crm-checkbox" key={field.key}>
@@ -878,6 +895,7 @@ export function MasterDataPage() {
                       );
                     })}
                   </div>
+
                   <div className="crm-edit-actions">
                     <button className="button" type="button" disabled={recordBusy} onClick={() => void saveRecord()}>
                       {recordBusy ? 'Saving…' : 'Save changes'}
@@ -918,17 +936,14 @@ export function MasterDataPage() {
                         <div className="crm-field wide"><span>Collection instructions</span><strong>{formatValue(siteCrm.site.collectionInstructions)}</strong></div>
                         <div className="crm-field"><span>Customer</span><strong>{formatValue(siteCrm.customer?.name)}</strong></div>
                         <div className="crm-field"><span>Customer code</span><strong>{formatValue(siteCrm.customer?.code)}</strong></div>
-                        <div className="crm-field"><span>Latitude</span><strong>{formatValue(siteCrm.site.latitude)}</strong></div>
-                        <div className="crm-field"><span>Longitude</span><strong>{formatValue(siteCrm.site.longitude)}</strong></div>
                       </div>
                     </section>
 
                     <section className="crm-section">
                       <div className="crm-section-heading">
                         <div>
-                          <p className="eyebrow">Site deadlines</p>
+                          <p className="eyebrow">Deadlines</p>
                           <h3>Collection & delivery limits</h3>
-                          <p className="muted">These are the site's hard operating deadlines. They belong to the Site, not to Planner Knowledge.</p>
                         </div>
                       </div>
                       <div className="crm-detail-grid">
@@ -941,6 +956,63 @@ export function MasterDataPage() {
                         <div className="crm-field"><span>Deadline contact</span><strong>{formatValue(siteCrm.site.deadlineContact)}</strong></div>
                         <div className="crm-field wide"><span>Deadline notes</span><strong>{formatValue(siteCrm.site.deadlineNotes)}</strong></div>
                       </div>
+
+                      <SmallTable
+                        rows={siteCrm.cutoffs}
+                        columns={[
+                          ['plan', 'Plan / service'],
+                          ['plannedCollectFrom', 'Earliest collection'],
+                          ['plannedCollectTo', 'Last collection'],
+                          ['depotDeliveryDeadline', 'Latest delivery'],
+                          ['standardCutoff', 'Standard cut-off'],
+                          ['extendedCutoff', 'Extended cut-off'],
+                        ]}
+                        empty="No service-specific deadline rules are attached to this Site."
+                      />
+                    </section>
+
+                    <section className="crm-section">
+                      <div className="crm-section-heading">
+                        <div>
+                          <p className="eyebrow">Contacts</p>
+                          <h3>Customer contacts for this Site</h3>
+                        </div>
+                        <span className="crm-count">{siteCrm.customerContacts.length}</span>
+                      </div>
+                      <SmallTable
+                        rows={siteCrm.customerContacts}
+                        columns={[
+                          ['contactName', 'Contact'],
+                          ['role', 'Role'],
+                          ['email', 'Email'],
+                          ['phone', 'Phone'],
+                          ['notes', 'Notes'],
+                        ]}
+                        empty="No customer contacts are allocated to this Site."
+                      />
+                    </section>
+
+                    <section className="crm-section">
+                      <div className="crm-section-heading">
+                        <div>
+                          <p className="eyebrow">Planner knowledge</p>
+                          <h3>Typical route guidance</h3>
+                          <p className="muted">Operational guidance only; deadlines above remain the hard constraint.</p>
+                        </div>
+                        <span className="crm-count">{siteCrm.routeTimes.length}</span>
+                      </div>
+                      <SmallTable
+                        rows={siteCrm.routeTimes}
+                        columns={[
+                          ['route', 'Route / movement'],
+                          ['palletType', 'Pallet'],
+                          ['lastDespatchTime', 'Last sensible despatch'],
+                          ['plannedCollectFrom', 'Typical collect from'],
+                          ['plannedCollectTo', 'Typical collect to'],
+                          ['depotDeliveryDeadline', 'Planned arrival by'],
+                        ]}
+                        empty="No planner knowledge is allocated to this Site."
+                      />
                     </section>
 
                     <section className="crm-section">
@@ -955,49 +1027,10 @@ export function MasterDataPage() {
                             {formatValue(identity.provider)} · {formatValue(identity.externalKey)}
                           </span>
                         ))}
-                        {!siteCrm.aliases.length && !siteCrm.externalIdentities.length && <span className="muted">No linked aliases or external identities.</span>}
+                        {!siteCrm.aliases.length && !siteCrm.externalIdentities.length && (
+                          <span className="muted">No linked aliases or external identities.</span>
+                        )}
                       </div>
-                    </section>
-
-                    <section className="crm-section">
-                      <div className="crm-section-heading">
-                        <div><p className="eyebrow">Deadline rules</p><h3>AM / PM and service-specific limits</h3><p className="muted">Any specific deadline rows imported for this Site are kept here underneath the Site's default deadline profile.</p></div>
-                        <span className="crm-count">{siteCrm.cutoffs.length}</span>
-                      </div>
-                      <SmallTable
-                        rows={siteCrm.cutoffs}
-                        columns={[
-                          ['plan', 'Plan / service'],
-                          ['plannedCollectFrom', 'Earliest collection'],
-                          ['plannedCollectTo', 'Last collection'],
-                          ['depotDeliveryDeadline', 'Latest delivery'],
-                          ['lastDespatchTime', 'Last despatch'],
-                          ['standardCutoff', 'Standard cut-off'],
-                          ['extendedCutoff', 'Extended cut-off'],
-                          ['contact', 'Contact'],
-                          ['notes', 'Notes'],
-                        ]}
-                        empty="No AM / PM deadline rules are attached to this Site yet. The Site deadline profile above can still be maintained directly."
-                      />
-                    </section>
-
-                    <section className="crm-section">
-                      <div className="crm-section-heading">
-                        <div><p className="eyebrow">Planner knowledge</p><h3>Typical route guidance</h3><p className="muted">Operational knowledge to help build the plan; this does not override the hard deadlines above.</p></div>
-                        <span className="crm-count">{siteCrm.routeTimes.length}</span>
-                      </div>
-                      <SmallTable
-                        rows={siteCrm.routeTimes}
-                        columns={[
-                          ['route', 'Route / movement'],
-                          ['palletType', 'Pallet'],
-                          ['lastDespatchTime', 'Last sensible despatch'],
-                          ['plannedCollectFrom', 'Typical collect from'],
-                          ['plannedCollectTo', 'Typical collect to'],
-                          ['depotDeliveryDeadline', 'Planned arrival by'],
-                        ]}
-                        empty="No planner knowledge currently references this Site."
-                      />
                     </section>
 
                     <section className="crm-section">
