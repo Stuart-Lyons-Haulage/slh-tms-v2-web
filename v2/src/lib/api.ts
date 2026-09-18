@@ -36,7 +36,17 @@ export type SiteCrmProfile = {
   markets: MasterRecord[];
   externalIdentities: MasterRecord[];
   routeTimes: MasterRecord[];
+  customerContacts: MasterRecord[];
   reviewItems: MasterReviewItem[];
+};
+
+export type ReviewAllocation = {
+  id: string;
+  kind: 'review' | 'alias' | 'routeTiming' | 'customerContact';
+  category: string;
+  summary: string;
+  reference?: string | null;
+  source?: string | null;
 };
 
 export type MasterCounts = {
@@ -45,6 +55,7 @@ export type MasterCounts = {
   markets: number;
   drivers: number;
   vehicles: number;
+  fuelCards: number;
   trailers: number;
   customerContacts: number;
   marketContacts: number;
@@ -108,6 +119,7 @@ export const api = {
   markets: () => request<MasterRecord[]>('/api/v2/master/markets'),
   drivers: () => request<MasterRecord[]>('/api/v2/master/drivers'),
   vehicles: () => request<MasterRecord[]>('/api/v2/master/vehicles'),
+  fuelCards: () => request<MasterRecord[]>('/api/v2/master/fuel-cards'),
   trailers: () => request<MasterRecord[]>('/api/v2/master/trailers'),
   customerContacts: () => request<MasterRecord[]>('/api/v2/master/customer-contacts'),
   marketContacts: () => request<MasterRecord[]>('/api/v2/master/market-contacts'),
@@ -116,6 +128,12 @@ export const api = {
   fuelPrices: () => request<MasterRecord[]>('/api/v2/master/fuel-prices'),
   aliasCandidates: () => request<MasterRecord[]>('/api/v2/master/alias-candidates'),
   masterReview: () => request<MasterReviewItem[]>('/api/v2/master/review'),
+  reviewAllocations: () => request<ReviewAllocation[]>('/api/v2/master/review/allocations'),
+  allocateReviewToSite: (kind: string, id: string, siteId: string) =>
+    request('/api/v2/master/review/allocate-site', {
+      method: 'POST',
+      body: JSON.stringify({ kind, id, siteId }),
+    }),
   siteCrm: (id: string) => request<SiteCrmProfile>(`/api/v2/master/sites/${id}/crm`),
   masterCounts: () => request<MasterCounts>('/api/v2/master/summary'),
 
