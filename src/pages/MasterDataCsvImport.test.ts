@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { applyMasterDataInChunks, parseMasterDataCsv, parseCsvRows } from "./MasterDataCsvImport";
+import { applyMasterDataInChunks, detectMasterEntity, parseMasterDataCsv, parseCsvRows } from "./MasterDataCsvImport";
 import type { MasterApplyResponse, StageBatchRequest } from "../lib/api";
 
 describe("MasterDataCsvImport", () => {
@@ -11,6 +11,45 @@ describe("MasterDataCsvImport", () => {
     const parsed = parseMasterDataCsv("Driver Number,Driver Name,Licence Number,Licence Expiry\nD01,Alex Smith,SMITH123,31/12/2027\n", "driver", "drivers.csv");
     expect(parsed.requests).toHaveLength(1);
     expect(parsed.requests[0].payload).toMatchObject({ employeeNumber: "D01", displayName: "Alex Smith", drivingLicenceNumber: "SMITH123", licenceExpiry: "2027-12-31" });
+  });
+
+  it("detects common canonical master CSV structures", () => {
+    expect(detectMasterEntity(["External Code", "Site Name", "Collection Address", "Roadrunner Code"])).toBe("site");
+    expect(detectMasterEntity(["Registration", "Fleet Number", "MOT Expiry"])).toBe("vehicle");
+    expect(detectMasterEntity(["Trailer Number", "Type", "Standard Capacity"])).toBe("trailer");
+    expect(detectMasterEntity(["Driver Number", "Driver Name", "Tacho Name"])).toBe("driver");
+  });
+
+  it("maps site enrichment fields without losing canonical identity", () => {
+    const parsed = parseMasterDataCsv(
+      "External Code,Site Name,Collection Address,Roadrunner Code,Latitude,Longitude\nSITE012,Aldi Goldthorpe,Commercial Road Goldthorpe S63 9BL,ALDIGOLD,53.534,-1.302\n",
+      "site",
+      "sites.csv",
+    );
+    expect(parsed.requests).toHaveLength(1);
+    expect(parsed.requests[0].payload).toMatchObject({
+      externalCode: "SITE012",
+      name: "Aldi Goldthorpe",
+      collectionAddress: "Commercial Road Goldthorpe S63 9BL",
+      roadrunnerCode: "ALDIGOLD",
+      latitude: 53.534,
+      longitude: -1.302,
+    });
+  });
+
+  it("maps vehicle fuel and compliance enrichment fields", () => {
+    const parsed = parseMasterDataCsv(
+      "Registration,Fleet Number,Fuel Provider,MOT Expiry,Tacho Calibration Expiry\nAB12 CDE,12,Shell,31/12/2026,01/02/2027\n",
+      "vehicle",
+      "vehicles.csv",
+    );
+    expect(parsed.requests[0].payload).toMatchObject({
+      registration: "AB12 CDE",
+      fleetNumber: "12",
+      fuelProvider: "Shell",
+      motExpiry: "2026-12-31",
+      tachoCalibrationExpiry: "2027-02-01",
+    });
   });
 
   it("applies large imports in bounded chunks and aggregates the result", async () => {

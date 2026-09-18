@@ -244,21 +244,28 @@ export function GeofenceOperational() {
       <div className="panel" style={{ marginBottom: 16 }}><div className="title-row"><div><p className="eyebrow">Actual progression evidence</p><h3>Latest geofence hits</h3></div></div><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))', gap: 12 }}><article><strong>Latest entry / visit</strong>{latest ? <p>{latest.geofenceName}<br/><small>{latest.vehicleIdentifier} · {dt(latest.enteredAtUtc)} · {latest.status}<br/>Run {latest.loadId || 'not linked'} · stop {latest.loadStopId || 'not linked'}</small></p> : <p className="hint">No geofence hit has been recorded yet.</p>}</article><article><strong>Latest confirmed dwell hit</strong>{confirmed ? <p>{confirmed.geofenceName}<br/><small>{confirmed.vehicleIdentifier} · confirmed {dt(confirmed.confirmedAtUtc)} · {confirmed.dwellMinutes} min<br/>Run {confirmed.loadId || 'not linked'} · stop {confirmed.loadStopId || 'not linked'}</small></p> : <p className="hint">No confirmed dwell hit has been recorded yet.</p>}</article></div></div>
     </>}
 
-    {selected && <div className="panel" style={{ marginBottom: 16 }}>
-      <div className="title-row"><div><p className="eyebrow">Edit geofence</p><h3>{selected.name}</h3></div><button onClick={() => setSelected(undefined)}>Close</button></div>
-      <div className="form-grid">
-        <label>Name<input value={String(draft.name || '')} onChange={e => setDraft(v => ({ ...v, name: e.target.value }))}/></label>
-        <label>Linked Site<select disabled={saving || Boolean(draft.locationOnly)} value={String(draft.siteNumber || draft.siteCode || '')} onChange={e => void changeLinkedSite(e.target.value)}><option value="">Choose SITE###…</option>{sites.map(site => <option key={site.siteId} value={site.siteCode}>{site.siteCode} · {site.siteName}</option>)}</select></label>
-        <label>Category<input value={String(draft.category || '')} onChange={e => setDraft(v => ({ ...v, category: e.target.value }))}/></label>
-        <label>Entry confirm (min)<input type="number" value={String(draft.pendingEntryMinutes ?? 0)} onChange={e => setDraft(v => ({ ...v, pendingEntryMinutes: Number(e.target.value) }))}/></label>
-        <label>Exit confirm (min)<input type="number" value={String(draft.pendingExitMinutes ?? 0)} onChange={e => setDraft(v => ({ ...v, pendingExitMinutes: Number(e.target.value) }))}/></label>
-        <label>Max wait (min)<input type="number" value={String(draft.maxWaitMinutes ?? '')} onChange={e => setDraft(v => ({ ...v, maxWaitMinutes: e.target.value === '' ? undefined : Number(e.target.value) }))}/></label>
-        <label style={{ gridColumn: '1 / -1' }}>Polygon JSON<textarea rows={5} value={String(draft.polygonJson || '')} onChange={e => setDraft(v => ({ ...v, polygonJson: e.target.value }))}/></label>
+    {selected && <div className="crm-modal-backdrop" role="dialog" aria-modal="true" aria-label="Edit geofence Master Data" onMouseDown={event => { if (event.target === event.currentTarget && !saving) setSelected(undefined); }}>
+      <div className="crm-modal">
+        <div className="crm-modal-header"><div><p className="eyebrow">Geofence Master Data record</p><h2>{selected.name}</h2><p className="hint">Geofence execution evidence remains linked to the canonical Site Master. Changing the Linked Site saves that relationship immediately.</p></div><button type="button" disabled={saving} onClick={() => setSelected(undefined)}>Close</button></div>
+        <div className="crm-modal-body">
+          <section><h3>Geofence identity & Site link</h3><div className="crm-form-grid">
+            <label>Name<input value={String(draft.name || '')} onChange={e => setDraft(v => ({ ...v, name: e.target.value }))}/></label>
+            <label>Linked Site<select disabled={saving || Boolean(draft.locationOnly)} value={String(draft.siteNumber || draft.siteCode || '')} onChange={e => void changeLinkedSite(e.target.value)}><option value="">Choose SITE###…</option>{sites.map(site => <option key={site.siteId} value={site.siteCode}>{site.siteCode} · {site.siteName}</option>)}</select></label>
+            <label>Category<input value={String(draft.category || '')} onChange={e => setDraft(v => ({ ...v, category: e.target.value }))}/></label>
+            <label>Category max wait (min)<input type="number" value={String(draft.categoryMaxWaitMinutes ?? '')} onChange={e => setDraft(v => ({ ...v, categoryMaxWaitMinutes: e.target.value === '' ? undefined : Number(e.target.value) }))}/></label>
+            <label>Entry confirm (min)<input type="number" value={String(draft.pendingEntryMinutes ?? 0)} onChange={e => setDraft(v => ({ ...v, pendingEntryMinutes: Number(e.target.value) }))}/></label>
+            <label>Exit confirm (min)<input type="number" value={String(draft.pendingExitMinutes ?? 0)} onChange={e => setDraft(v => ({ ...v, pendingExitMinutes: Number(e.target.value) }))}/></label>
+            <label>Max wait (min)<input type="number" value={String(draft.maxWaitMinutes ?? '')} onChange={e => setDraft(v => ({ ...v, maxWaitMinutes: e.target.value === '' ? undefined : Number(e.target.value) }))}/></label>
+            <label style={{ gridColumn: '1 / -1' }}>Polygon JSON<textarea rows={6} value={String(draft.polygonJson || '')} onChange={e => setDraft(v => ({ ...v, polygonJson: e.target.value }))}/></label>
+          </div></section>
+          <section>
+            <div className="notice"><strong>Current registered Site:</strong> {draft.locationOnly ? 'Location only' : draft.siteName ? `${draft.siteCode || draft.siteNumber || 'Code pending'} · ${draft.siteName}` : draft.siteNumber ? `${draft.siteNumber} selected` : 'No Site link'}</div>
+            <p className="hint">The Linked Site dropdown autosaves to Site Master immediately. Saving geofence details preserves the selected Site relationship.</p>
+            <label className="check-label"><input type="checkbox" checked={Boolean(draft.locationOnly)} onChange={e => setDraft(v => ({ ...v, locationOnly: e.target.checked, siteNumber: e.target.checked ? '' : v.siteNumber, siteCode: e.target.checked ? '' : v.siteCode }))}/> Location only / do not link to a Site</label>
+          </section>
+        </div>
+        <div className="crm-modal-actions"><button className="primary" disabled={saving} onClick={() => void save()}>Save Master Data record</button><button disabled={saving || Boolean(draft.locationOnly) || !String(draft.siteCode || draft.siteNumber || '').trim()} onClick={() => void syncSite(false)}>Re-save Site link</button><button disabled={saving} onClick={() => void syncSite(true)}>Mark location only</button><button disabled={saving} onClick={() => setSelected(undefined)}>Cancel</button></div>
       </div>
-      <div className="notice" style={{ marginTop: 12 }}><strong>Current registered Site:</strong> {draft.locationOnly ? 'Location only' : draft.siteName ? `${draft.siteCode || draft.siteNumber || 'Code pending'} · ${draft.siteName}` : draft.siteNumber ? `${draft.siteNumber} selected` : 'No Site link'}</div>
-      <p className="hint">The Linked Site dropdown autosaves to Site Master immediately. Save geofence details only changes the geofence settings and preserves the selected Site relationship.</p>
-      <label className="check-label" style={{ marginTop: 12 }}><input type="checkbox" checked={Boolean(draft.locationOnly)} onChange={e => setDraft(v => ({ ...v, locationOnly: e.target.checked, siteNumber: e.target.checked ? '' : v.siteNumber, siteCode: e.target.checked ? '' : v.siteCode }))}/> Location only / do not link to a Site</label>
-      <div className="actions"><button className="primary" disabled={saving || Boolean(draft.locationOnly) || !String(draft.siteCode || draft.siteNumber || '').trim()} onClick={() => void syncSite(false)}>Re-save Site link</button><button disabled={saving} onClick={() => void syncSite(true)}>Mark location only</button><button disabled={saving} onClick={() => void save()}>Save geofence details</button><button onClick={() => setSelected(undefined)}>Cancel</button></div>
     </div>}
 
     <div className="panel">

@@ -7,12 +7,12 @@ import { MarketsMasterClean } from './MarketsMasterClean';
 import { OrderIntakeMappingAdmin } from './OrderIntakeMappingAdmin';
 import { MasterDataOperational, type MasterDataTab } from './MasterDataOperational';
 import { GeofenceOperational } from './GeofenceOperational';
-import { EmailIntakeMappings } from './EmailIntakeMappings';
+import { MasterDataCsvImport } from './MasterDataCsvImport';
 import { MasterDataDuplicateReviewPanel } from '../components/MasterDataDuplicateReviewPanel';
 import { useAccessToken } from '../lib/auth';
 import { request } from '../lib/api';
 
-type MasterSection = MasterDataTab | 'fuel-cards' | 'markets' | 'fuel-prices' | 'email-intake' | 'intake-rules';
+type MasterSection = MasterDataTab | 'fuel-cards' | 'markets' | 'fuel-prices' | 'intake-rules';
 type DuplicateEntity = 'sites' | 'drivers' | 'vehicles' | 'trailers' | 'markets';
 
 const sections: Array<{ key: MasterSection; label: string; detail: string }> = [
@@ -21,14 +21,14 @@ const sections: Array<{ key: MasterSection; label: string; detail: string }> = [
   { key: 'trailers', label: 'Trailers', detail: 'SQL trailer register for identity, capacity and Fleetio links.' },
   { key: 'fuel-cards', label: 'Fuel cards & PINs', detail: 'Restricted SQL fuel register for vehicle fuel-card details and PINs.' },
   { key: 'sites', label: 'Sites', detail: 'SQL site register for aliases, addresses, planning data and linked execution geofences.' },
+  { key: 'customers', label: 'Customers', detail: 'SQL customer register for identity, trading name, account ownership, service notes and default site.' },
   { key: 'markets', label: 'Markets', detail: 'SQL market and contact register used by order intake and planning.' },
   { key: 'intake-rules', label: 'Email & route rules', detail: 'SQL sender-to-customer mappings and evidence-based route rules used by email intake.' },
   { key: 'fuel-prices', label: 'Fuel prices', detail: 'SQL fuel pricing reference data.' },
-  { key: 'email-intake', label: 'Email intake', detail: 'SQL sender/customer mappings and planner-controlled route rules for staged email orders.' },
 ];
 
 function canonicalSection(value: MasterSection): MasterSection {
-  return value === 'customers' || value === 'geofences' ? 'sites' : value;
+  return value === 'geofences' ? 'sites' : value;
 }
 
 function duplicateEntity(section: MasterSection): DuplicateEntity | undefined {
@@ -84,6 +84,8 @@ export function MasterDataHub({ initialSection = 'drivers' }: { initialSection?:
       <strong>One source of truth.</strong> Changes made here are validated and saved to the SQL master before anything downstream can use them.
     </div>
 
+    <MasterDataCsvImport />
+
     {section === 'drivers' && <div className="actions" style={{ marginBottom: 18 }}>
       <button className="primary" onClick={() => void syncDriverIdentities()} disabled={syncingDrivers}>
         {syncingDrivers ? 'Queuing enrichment…' : 'Reconcile TachoMaster driver identities'}
@@ -106,11 +108,11 @@ export function MasterDataHub({ initialSection = 'drivers' }: { initialSection?:
         </div>
         <GeofenceOperational />
       </>}
+      {section === 'customers' && <MasterDataOperational initialTab="customers" showCategoryButtons={false} showHeading={false} />}
       {section === 'fuel-cards' && <FuelCardsOperational />}
       {section === 'markets' && <MarketsMasterClean />}
       {section === 'intake-rules' && <OrderIntakeMappingAdmin />}
       {section === 'fuel-prices' && <FuelMaster />}
-      {section === 'email-intake' && <EmailIntakeMappings />}
     </div>
   </section>;
 }

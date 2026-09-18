@@ -2,9 +2,8 @@ import { useState } from "react";
 import { ManualContingencyImport } from "./ManualContingencyImport";
 import { OrdersOperationalV2 } from "./OrdersOperationalV2";
 import { PlannerPlanImport } from "./PlannerPlanImport";
-import { MasterDataCsvImport } from "./MasterDataCsvImport";
 
-type ImportTab = "planner" | "orders" | "contingency" | "master-csv";
+type ImportTab = "planner" | "orders" | "contingency";
 
 export function ImportCentre({ initialTab = "planner" }: { initialTab?: ImportTab }) {
   const [tab, setTab] = useState<ImportTab>(initialTab);
@@ -19,14 +18,12 @@ export function ImportCentre({ initialTab = "planner" }: { initialTab?: ImportTa
         <button type="button" className={tab === "planner" ? "primary" : ""} onClick={() => setTab("planner")}>Planner plan</button>
         <button type="button" className={tab === "orders" ? "primary" : ""} onClick={() => setTab("orders")}>Orders</button>
         <button type="button" className={tab === "contingency" ? "primary" : ""} onClick={() => setTab("contingency")}>Manual contingency</button>
-        <button type="button" className={tab === "master-csv" ? "primary" : ""} onClick={() => setTab("master-csv")}>Master data workbook</button>
       </div>
     </section>
     <div className="import-centre-body">
       {tab === "planner" && <PlannerPlanImport />}
       {tab === "orders" && <OrdersOperationalV2 />}
       {tab === "contingency" && <ManualContingencyImport />}
-      {tab === "master-csv" && <MasterDataCsvImport />}
     </div>
   </section>;
 }

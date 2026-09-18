@@ -344,22 +344,49 @@ export function FleetMasterUnified({ kind }: { kind: Kind }) {
         </div>}
     </div>
 
-    {selected && <div className="panel master-record-editor" style={{ marginTop: 16 }}>
-      <div className="title-row"><div><p className="eyebrow">Edit TMS master</p><h2>{text(kind === "vehicles" ? selected.registration : selected.trailerNumber)}</h2><p className="hint">These are the planning-master fields. Fleetio maintenance/compliance fields remain linked automatically.</p></div><button onClick={() => setSelected(undefined)}>Close</button></div>
-      {kind === "vehicles" ? <div className="form-grid">
-        <label>Registration<input value={String(draft.registration ?? "")} onChange={e => setDraft(v => ({ ...v, registration: e.target.value }))} /></label>
-        <label>Fleet number<input value={String(draft.fleetNumber ?? "")} onChange={e => setDraft(v => ({ ...v, fleetNumber: e.target.value }))} /></label>
-        <label>Abbreviation / last 3<input value={String(draft.abbreviation ?? "")} onChange={e => setDraft(v => ({ ...v, abbreviation: e.target.value }))} /></label>
-        <label>Transmission<input value={String(draft.transmission ?? "")} onChange={e => setDraft(v => ({ ...v, transmission: e.target.value }))} /></label>
-        <label>Cab mobile<input value={String(draft.cabMobile ?? "")} onChange={e => setDraft(v => ({ ...v, cabMobile: e.target.value }))} /></label>
-        <label>Notes<textarea rows={3} value={String(draft.notes ?? "")} onChange={e => setDraft(v => ({ ...v, notes: e.target.value }))} /></label>
-      </div> : <div className="form-grid">
-        <label>SLH trailer number<input value={String(draft.trailerNumber ?? "")} onChange={e => setDraft(v => ({ ...v, trailerNumber: e.target.value }))} /></label>
-        <label>Type<input value={String(draft.type ?? "")} onChange={e => setDraft(v => ({ ...v, type: e.target.value }))} /></label>
-        <label>Standard capacity<input type="number" value={String(draft.standardCapacity ?? "")} onChange={e => setDraft(v => ({ ...v, standardCapacity: e.target.value === "" ? null : Number(e.target.value) }))} /></label>
-        <label>Euro capacity<input type="number" value={String(draft.euroCapacity ?? "")} onChange={e => setDraft(v => ({ ...v, euroCapacity: e.target.value === "" ? null : Number(e.target.value) }))} /></label>
-      </div>}
-      <div className="actions"><button className="primary" disabled={saving} onClick={() => void save()}>{saving ? "Saving…" : "Save TMS master"}</button><button disabled={saving} onClick={() => setSelected(undefined)}>Cancel</button></div>
+    {selected && <div className="crm-modal-backdrop" role="dialog" aria-modal="true" aria-label={`Edit ${kind === "vehicles" ? "vehicle" : "trailer"} Master Data`} onMouseDown={event => { if (event.target === event.currentTarget) setSelected(undefined); }}>
+      <div className="crm-modal">
+        <div className="crm-modal-header">
+          <div><p className="eyebrow">{kind === "vehicles" ? "Vehicle" : "Trailer"} Master Data record</p><h2>{text(kind === "vehicles" ? selected.registration : selected.trailerNumber)}</h2><p className="hint">This TMS row is the canonical planning record. Fleetio enriches maintenance/compliance evidence against it.</p></div>
+          <button type="button" onClick={() => setSelected(undefined)}>Close</button>
+        </div>
+        <div className="crm-modal-body">
+          <section><h3>Core information</h3>
+          {kind === "vehicles" ? <div className="crm-form-grid">
+            <label>Registration<input value={String(draft.registration ?? "")} onChange={e => setDraft(v => ({ ...v, registration: e.target.value }))} /></label>
+            <label>VIN<input value={String(draft.vin ?? "")} onChange={e => setDraft(v => ({ ...v, vin: e.target.value }))} /></label>
+            <label>Owner type<input value={String(draft.ownerType ?? "")} onChange={e => setDraft(v => ({ ...v, ownerType: e.target.value }))} /></label>
+            <label>Vehicle site / depot<input value={String(draft.vehicleSite ?? "")} onChange={e => setDraft(v => ({ ...v, vehicleSite: e.target.value }))} /></label>
+            <label>Fleet number<input value={String(draft.fleetNumber ?? "")} onChange={e => setDraft(v => ({ ...v, fleetNumber: e.target.value }))} /></label>
+            <label>Abbreviation / last 3<input value={String(draft.abbreviation ?? "")} onChange={e => setDraft(v => ({ ...v, abbreviation: e.target.value }))} /></label>
+            <label>Transmission<input value={String(draft.transmission ?? "")} onChange={e => setDraft(v => ({ ...v, transmission: e.target.value }))} /></label>
+            <label>DVS compliant<input type="checkbox" checked={Boolean(draft.dvsCompliant)} onChange={e => setDraft(v => ({ ...v, dvsCompliant: e.target.checked }))} /></label>
+            <label>Fuel provider<input value={String(draft.fuelProvider ?? "")} onChange={e => setDraft(v => ({ ...v, fuelProvider: e.target.value }))} /></label>
+            <label>Cab mobile<input value={String(draft.cabMobile ?? "")} onChange={e => setDraft(v => ({ ...v, cabMobile: e.target.value }))} /></label>
+            <label>Fuel PIN<input value={String(draft.fuelPin ?? "")} onChange={e => setDraft(v => ({ ...v, fuelPin: e.target.value }))} /></label>
+            <label>Shell card<input value={String(draft.shellCard ?? "")} onChange={e => setDraft(v => ({ ...v, shellCard: e.target.value }))} /></label>
+            <label>BP red card<input value={String(draft.bpRedCard ?? "")} onChange={e => setDraft(v => ({ ...v, bpRedCard: e.target.value }))} /></label>
+            <label>BP plain card<input value={String(draft.bpPlainCard ?? "")} onChange={e => setDraft(v => ({ ...v, bpPlainCard: e.target.value }))} /></label>
+            <label>Fuel PIN secret name<input value={String(draft.fuelPinSecretName ?? "")} onChange={e => setDraft(v => ({ ...v, fuelPinSecretName: e.target.value }))} /></label>
+            <label>Fuel card last four<input value={String(draft.fuelCardLastFour ?? "")} onChange={e => setDraft(v => ({ ...v, fuelCardLastFour: e.target.value }))} /></label>
+            <label>MOT expiry<input type="date" value={String(draft.motExpiry ?? "")} onChange={e => setDraft(v => ({ ...v, motExpiry: e.target.value || null }))} /></label>
+            <label>Tacho calibration expiry<input type="date" value={String(draft.tachoCalibrationExpiry ?? "")} onChange={e => setDraft(v => ({ ...v, tachoCalibrationExpiry: e.target.value || null }))} /></label>
+            <label>Vehicle test expiry<input type="date" value={String(draft.vehicleTestExpiry ?? "")} onChange={e => setDraft(v => ({ ...v, vehicleTestExpiry: e.target.value || null }))} /></label>
+            <label>Fleetio ID<input value={String(draft.fleetioId ?? "")} onChange={e => setDraft(v => ({ ...v, fleetioId: e.target.value }))} /></label>
+            <label>Fleetio name<input value={String(draft.fleetioName ?? "")} onChange={e => setDraft(v => ({ ...v, fleetioName: e.target.value }))} /></label>
+            <label>Fleetio status<input value={String(draft.fleetioStatus ?? "")} onChange={e => setDraft(v => ({ ...v, fleetioStatus: e.target.value }))} /></label>
+            <label style={{ gridColumn: "1 / -1" }}>Notes<textarea rows={4} value={String(draft.notes ?? "")} onChange={e => setDraft(v => ({ ...v, notes: e.target.value }))} /></label>
+          </div> : <div className="crm-form-grid">
+            <label>SLH trailer number<input value={String(draft.trailerNumber ?? "")} onChange={e => setDraft(v => ({ ...v, trailerNumber: e.target.value }))} /></label>
+            <label>Type<input value={String(draft.type ?? "")} onChange={e => setDraft(v => ({ ...v, type: e.target.value }))} /></label>
+            <label>Standard capacity<input type="number" value={String(draft.standardCapacity ?? "")} onChange={e => setDraft(v => ({ ...v, standardCapacity: e.target.value === "" ? null : Number(e.target.value) }))} /></label>
+            <label>Euro capacity<input type="number" value={String(draft.euroCapacity ?? "")} onChange={e => setDraft(v => ({ ...v, euroCapacity: e.target.value === "" ? null : Number(e.target.value) }))} /></label>
+            <label style={{ gridColumn: "1 / -1" }}>Notes<textarea rows={4} value={String(draft.notes ?? "")} onChange={e => setDraft(v => ({ ...v, notes: e.target.value }))} /></label>
+          </div>}
+          </section>
+        </div>
+        <div className="crm-modal-actions"><button className="primary" disabled={saving} onClick={() => void save()}>{saving ? "Saving…" : "Save Master Data record"}</button><button disabled={saving} onClick={() => setSelected(undefined)}>Cancel</button></div>
+      </div>
     </div>}
 
     {(maintenanceLoading || maintenance || maintenanceError) && <div className="fleetio-modal-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) closeMaintenance(); }}>

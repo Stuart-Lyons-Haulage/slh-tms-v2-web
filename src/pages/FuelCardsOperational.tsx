@@ -55,21 +55,22 @@ export function FuelCardsOperational() {
       </div>
     </div>
 
-    {editing && <div className="panel" style={{ marginBottom: 18 }}>
-      <div className="title-row">
-        <div><p className="eyebrow">Amend register record</p><h2>{editing.registration}</h2></div>
-        <button onClick={() => setEditing(undefined)}>Close</button>
+    {editing && <div className="crm-modal-backdrop" role="dialog" aria-modal="true" aria-label="Edit fuel Master Data" onMouseDown={event => { if (event.target === event.currentTarget && !saving) setEditing(undefined); }}>
+      <div className="crm-modal">
+        <div className="crm-modal-header"><div><p className="eyebrow">Vehicle fuel Master Data record</p><h2>{editing.registration}</h2><p className="hint">Fuel cards and PIN details remain part of the canonical vehicle record.</p></div><button type="button" disabled={saving} onClick={() => setEditing(undefined)}>Close</button></div>
+        <div className="crm-modal-body"><section><h3>Fuel & contact details</h3><div className="crm-form-grid">
+          <label>Cab mobile<input value={editing.cabMobile || ""} onChange={(e) => setEditing({ ...editing, cabMobile: e.target.value })} /></label>
+          <label>Fuel provider<input value={editing.fuelProvider || ""} onChange={(e) => setEditing({ ...editing, fuelProvider: e.target.value })} /></label>
+          <label>Fuel PIN<input value={editing.fuelPin || ""} onChange={(e) => setEditing({ ...editing, fuelPin: e.target.value })} /></label>
+          <label>Shell card<input value={editing.shellCard || ""} onChange={(e) => setEditing({ ...editing, shellCard: e.target.value })} /></label>
+          <label>BP red card<input value={editing.bpRedCard || ""} onChange={(e) => setEditing({ ...editing, bpRedCard: e.target.value })} /></label>
+          <label>BP plain card<input value={editing.bpPlainCard || ""} onChange={(e) => setEditing({ ...editing, bpPlainCard: e.target.value })} /></label>
+          <label>Fuel PIN secret name<input value={editing.fuelPinSecretName || ""} onChange={(e) => setEditing({ ...editing, fuelPinSecretName: e.target.value })} /></label>
+          <label>Fuel card last four<input value={editing.fuelCardLastFour || ""} onChange={(e) => setEditing({ ...editing, fuelCardLastFour: e.target.value })} /></label>
+          <label style={{ gridColumn: "1 / -1" }}>Notes<textarea rows={4} value={editing.notes || ""} onChange={(e) => setEditing({ ...editing, notes: e.target.value })} /></label>
+        </div></section></div>
+        <div className="crm-modal-actions"><button className="primary" disabled={saving} onClick={() => void save()}>{saving ? "Saving…" : "Save Master Data record"}</button><button disabled={saving} onClick={() => setEditing(undefined)}>Cancel</button></div>
       </div>
-      <div className="form-grid">
-        <label>Cab mobile<input value={editing.cabMobile || ""} onChange={(e) => setEditing({ ...editing, cabMobile: e.target.value })} /></label>
-        <label>Fuel provider<input value={editing.fuelProvider || ""} onChange={(e) => setEditing({ ...editing, fuelProvider: e.target.value })} /></label>
-        <label>Fuel PIN<input value={editing.fuelPin || ""} onChange={(e) => setEditing({ ...editing, fuelPin: e.target.value })} /></label>
-        <label>Shell card<input value={editing.shellCard || ""} onChange={(e) => setEditing({ ...editing, shellCard: e.target.value })} /></label>
-        <label>BP red card<input value={editing.bpRedCard || ""} onChange={(e) => setEditing({ ...editing, bpRedCard: e.target.value })} /></label>
-        <label>BP plain card<input value={editing.bpPlainCard || ""} onChange={(e) => setEditing({ ...editing, bpPlainCard: e.target.value })} /></label>
-        <label className="wide">Notes<input value={editing.notes || ""} onChange={(e) => setEditing({ ...editing, notes: e.target.value })} /></label>
-      </div>
-      <button className="primary" disabled={saving} onClick={() => void save()}>{saving ? "Saving…" : "Save to TMS master"}</button>
     </div>}
 
     {message && <p className="notice inline-notice">{message}</p>}
@@ -93,7 +94,7 @@ export function FuelCardsOperational() {
           <td>{maskCard(vehicle.bpRedCard)}</td>
           <td>{maskCard(vehicle.bpPlainCard)}</td>
           <td>{vehicle.notes || "—"}</td>
-          <td><button onClick={() => { setEditing({ ...vehicle }); window.scrollTo({ top: 0, behavior: "smooth" }); }}>Edit</button></td>
+          <td><button onClick={() => { setEditing({ ...vehicle }); }}>Edit</button></td>
         </tr>)}</tbody>
       </table>
     </div>

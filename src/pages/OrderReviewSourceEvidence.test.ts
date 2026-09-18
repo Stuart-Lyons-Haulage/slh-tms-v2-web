@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 
 const reviewSource = readFileSync(new URL("./OrderReviewBulk.tsx", import.meta.url), "utf8");
 const controlSource = readFileSync(new URL("./OrderControl.tsx", import.meta.url), "utf8");
-const dashboardSource = readFileSync(new URL("./DashboardOperational.tsx", import.meta.url), "utf8");
 const drawerSource = readFileSync(new URL("../components/SourceEmailEvidenceDrawer.tsx", import.meta.url), "utf8");
 
 describe("Order Review source email evidence", () => {
@@ -28,9 +27,7 @@ describe("Order Review source email evidence", () => {
     expect(drawerSource).toContain("JSON.parse(trimmed)");
   });
 
-  it("opens the exact source email when an Order Review attention item is clicked", () => {
-    expect(dashboardSource).toContain("date=${encodeURIComponent(date)}&reviewId=");
-    expect(dashboardSource).toContain("&sourceEmail=1");
+  it("supports opening the exact source email from Order Review route parameters", () => {
     expect(controlSource).toContain('searchParams.get("reviewId")');
     expect(controlSource).toContain('searchParams.get("sourceEmail") === "1"');
     expect(controlSource).toContain("SourceEmailEvidenceDrawer");

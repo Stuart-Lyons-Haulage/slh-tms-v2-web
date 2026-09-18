@@ -51,10 +51,12 @@ describe("operations housekeeping contract", () => {
     expect(palletControl).not.toContain("Current orders");
   });
 
-  it("removes destructive master uploads and keeps a workbook master import", () => {
+  it("removes destructive master uploads and keeps one governed Master Data import", () => {
     expect(master).not.toContain("MasterDataResetImportPanel");
     expect(master).not.toContain("MasterDataUploadSmall");
-    expect(imports).toContain("Master data workbook");
+    expect(master).toContain("MasterDataCsvImport");
+    expect(imports).not.toContain("MasterDataCsvImport");
+    expect(imports).not.toContain("Master data workbook");
   });
 
   it("uses SQL as the sole master-data write authority and keeps master controls usable", () => {

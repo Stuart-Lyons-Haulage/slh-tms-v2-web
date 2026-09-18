@@ -79,18 +79,20 @@ export function MarketsMasterClean() {
       </div>
       <p className="intro">Market orders use this list for sellers, stall details, salesman and sender dropdowns. Choose a market below to work with one list at a time.</p>
 
-      {editing && draft && <section className="panel" style={{ marginBottom: 18 }}>
-        <div className="title-row"><div><p className="eyebrow">Edit SQL market master</p><h2>{editing.name}</h2></div><button type="button" disabled={saving} onClick={() => { setEditing(undefined); setDraft(undefined); }}>Close</button></div>
-        <div className="form-grid">
-          <label>Market<input value={draft.market} onChange={event => setDraft({ ...draft, market: event.target.value })} /></label>
-          <label>Seller / sender<input value={draft.name} onChange={event => setDraft({ ...draft, name: event.target.value })} /></label>
-          <label>Stall / stand<input value={draft.standOrLocation || ""} onChange={event => setDraft({ ...draft, standOrLocation: event.target.value })} /></label>
-          <label>Salesman<input value={draft.salesman || ""} onChange={event => setDraft({ ...draft, salesman: event.target.value })} /></label>
-          <label>Sender<input value={draft.sender || ""} onChange={event => setDraft({ ...draft, sender: event.target.value })} /></label>
-          <label className="checkbox-label"><input type="checkbox" checked={draft.active} onChange={event => setDraft({ ...draft, active: event.target.checked })} /> Active</label>
+      {editing && draft && <div className="crm-modal-backdrop" role="dialog" aria-modal="true" aria-label="Edit market Master Data" onMouseDown={event => { if (event.target === event.currentTarget && !saving) { setEditing(undefined); setDraft(undefined); } }}>
+        <div className="crm-modal">
+          <div className="crm-modal-header"><div><p className="eyebrow">Market Master Data record</p><h2>{editing.name}</h2><p className="hint">Maintain the canonical seller/sender, stand, salesman and market identity here.</p></div><button type="button" disabled={saving} onClick={() => { setEditing(undefined); setDraft(undefined); }}>Close</button></div>
+          <div className="crm-modal-body"><section><h3>Market details</h3><div className="crm-form-grid">
+            <label>Market<input value={draft.market} onChange={event => setDraft({ ...draft, market: event.target.value })} /></label>
+            <label>Seller / sender<input value={draft.name} onChange={event => setDraft({ ...draft, name: event.target.value })} /></label>
+            <label>Stall / stand<input value={draft.standOrLocation || ""} onChange={event => setDraft({ ...draft, standOrLocation: event.target.value })} /></label>
+            <label>Salesman<input value={draft.salesman || ""} onChange={event => setDraft({ ...draft, salesman: event.target.value })} /></label>
+            <label>Sender<input value={draft.sender || ""} onChange={event => setDraft({ ...draft, sender: event.target.value })} /></label>
+            <label className="checkbox-label"><input type="checkbox" checked={draft.active} onChange={event => setDraft({ ...draft, active: event.target.checked })} /> Active</label>
+          </div></section></div>
+          <div className="crm-modal-actions"><button type="button" className="primary" disabled={saving || !clean(draft.market) || !clean(draft.name)} onClick={() => void saveMarketContact()}>{saving ? "Saving…" : "Save Master Data record"}</button><button type="button" disabled={saving} onClick={() => { setEditing(undefined); setDraft(undefined); }}>Cancel</button></div>
         </div>
-        <button type="button" className="primary" disabled={saving || !clean(draft.market) || !clean(draft.name)} onClick={() => void saveMarketContact()}>{saving ? "Saving…" : "Save market"}</button>
-      </section>}
+      </div>}
       {message && <p className="notice inline-notice">{message}</p>}
 
       <div className="market-subtabs" role="tablist" aria-label="Markets">
