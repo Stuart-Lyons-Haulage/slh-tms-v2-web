@@ -9,8 +9,6 @@ import { MasterDataOperational, type MasterDataTab } from './MasterDataOperation
 import { GeofenceOperational } from './GeofenceOperational';
 import { MasterDataCsvImport } from './MasterDataCsvImport';
 import { MasterDataDuplicateReviewPanel } from '../components/MasterDataDuplicateReviewPanel';
-import { useAccessToken } from '../lib/auth';
-import { request } from '../lib/api';
 
 type MasterSection = MasterDataTab | 'fuel-cards' | 'markets' | 'fuel-prices' | 'intake-rules';
 type DuplicateEntity = 'sites' | 'drivers' | 'vehicles' | 'trailers' | 'markets';
@@ -38,23 +36,6 @@ function duplicateEntity(section: MasterSection): DuplicateEntity | undefined {
 
 export function MasterDataHub({ initialSection = 'drivers' }: { initialSection?: MasterSection }) {
   const [section, setSection] = useState<MasterSection>(() => canonicalSection(initialSection));
-  const [syncingDrivers, setSyncingDrivers] = useState(false);
-  const [syncMessage, setSyncMessage] = useState<string>();
-  const token = useAccessToken();
-
-  async function syncDriverIdentities() {
-    setSyncingDrivers(true);
-    setSyncMessage(undefined);
-    try {
-      const job = await request<{ message?: string }>('/api/v1/driver-master/tachomaster/sync', await token(), { method: 'POST' }, 15000);
-      setSyncMessage(job.message || 'TachoMaster identity enrichment queued. Driver Master rows remain live while the match refreshes.');
-    } catch (error) {
-      setSyncMessage(error instanceof Error ? error.message : 'TachoMaster driver enrichment could not be queued.');
-    } finally {
-      setSyncingDrivers(false);
-    }
-  }
-
   useEffect(() => { setSection(canonicalSection(initialSection)); }, [initialSection]);
 
   const active = sections.find(item => item.key === section) || sections[0];
@@ -80,18 +61,9 @@ export function MasterDataHub({ initialSection = 'drivers' }: { initialSection?:
       <p className="hint master-section-hint"><strong>{active.label}:</strong> {active.detail}</p>
     </div>
 
-    <div className="notice inline-notice" style={{ marginBottom: 18 }}>
-      <strong>One source of truth.</strong> Changes made here are validated and saved to the SQL master before anything downstream can use them.
-    </div>
 
-    <MasterDataCsvImport />
+    {section !== 'drivers' && <MasterDataCsvImport />}
 
-    {section === 'drivers' && <div className="actions" style={{ marginBottom: 18 }}>
-      <button className="primary" onClick={() => void syncDriverIdentities()} disabled={syncingDrivers}>
-        {syncingDrivers ? 'Queuing enrichment…' : 'Reconcile TachoMaster driver identities'}
-      </button>
-      {syncMessage && <span className="notice inline-notice">{syncMessage}</span>}
-    </div>}
 
     {duplicateReviewEntity && <MasterDataDuplicateReviewPanel entityType={duplicateReviewEntity} />}
 

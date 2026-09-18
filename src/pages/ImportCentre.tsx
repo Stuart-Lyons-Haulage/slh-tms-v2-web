@@ -2,8 +2,9 @@ import { useState } from "react";
 import { ManualContingencyImport } from "./ManualContingencyImport";
 import { OrdersOperationalV2 } from "./OrdersOperationalV2";
 import { PlannerPlanImport } from "./PlannerPlanImport";
+import { DriverMasterImport } from "./DriverMasterImport";
 
-type ImportTab = "planner" | "orders" | "contingency";
+type ImportTab = "planner" | "orders" | "driver-master" | "contingency";
 
 export function ImportCentre({ initialTab = "planner" }: { initialTab?: ImportTab }) {
   const [tab, setTab] = useState<ImportTab>(initialTab);
@@ -17,12 +18,14 @@ export function ImportCentre({ initialTab = "planner" }: { initialTab?: ImportTa
       <div className="import-centre-tabs" role="tablist" aria-label="Import type">
         <button type="button" className={tab === "planner" ? "primary" : ""} onClick={() => setTab("planner")}>Planner plan</button>
         <button type="button" className={tab === "orders" ? "primary" : ""} onClick={() => setTab("orders")}>Orders</button>
+        <button type="button" className={tab === "driver-master" ? "primary" : ""} onClick={() => setTab("driver-master")}>Driver Master</button>
         <button type="button" className={tab === "contingency" ? "primary" : ""} onClick={() => setTab("contingency")}>Manual contingency</button>
       </div>
     </section>
     <div className="import-centre-body">
       {tab === "planner" && <PlannerPlanImport />}
       {tab === "orders" && <OrdersOperationalV2 />}
+      {tab === "driver-master" && <DriverMasterImport />}
       {tab === "contingency" && <ManualContingencyImport />}
     </div>
   </section>;
