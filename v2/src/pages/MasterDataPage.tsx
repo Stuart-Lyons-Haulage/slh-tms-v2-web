@@ -69,14 +69,19 @@ const columns: Record<Exclude<MasterTab, 'import'>, Column[]> = {
   vehicles: [
     ['registration', 'Registration'],
     ['fleetNumber', 'Fleet no.'],
-    ['abbreviation', 'Short code'],
-    ['vehicleType', 'Type'],
-    ['transmission', 'Transmission'],
+    ['cabMobile', 'Cab mobile'],
+    ['fuelPin', 'Fuel PIN'],
+    ['shellCard', 'Shell card'],
+    ['bpRedCard', 'BP red'],
+    ['bpPlainCard', 'BP plain'],
   ],
   trailers: [
     ['trailerNumber', 'Trailer'],
     ['trailerType', 'Type'],
-    ['palletCapacity', 'Capacity'],
+    ['currentLocation', 'Current location'],
+    ['palletCapacity', 'Std pallets'],
+    ['euroPalletCapacity', 'Euro pallets'],
+    ['motExpiry', 'MOT / test expiry'],
   ],
   markets: [
     ['code', 'Code'],
@@ -181,8 +186,13 @@ const editableFields: Record<Exclude<MasterTab, 'review' | 'import'>, EditableFi
   ],
   trailers: [
     { key: 'trailerNumber', label: 'Trailer number' },
+    { key: 'registration', label: 'Registration / identifier' },
     { key: 'trailerType', label: 'Trailer type' },
-    { key: 'palletCapacity', label: 'Pallet capacity', type: 'number' },
+    { key: 'currentLocation', label: 'Current location' },
+    { key: 'palletCapacity', label: 'Standard pallet capacity', type: 'number' },
+    { key: 'euroPalletCapacity', label: 'Euro pallet capacity', type: 'number' },
+    { key: 'motExpiry', label: 'MOT / test expiry', type: 'date' },
+    { key: 'notes', label: 'Notes', type: 'textarea' },
   ],
   markets: [
     { key: 'code', label: 'Market code' },
@@ -247,6 +257,20 @@ function formatValue(value: unknown) {
   if (value == null || value === '') return '—';
   if (typeof value === 'boolean') return value ? 'Yes' : 'No';
   return String(value);
+}
+
+function formatTableValue(key: string, value: unknown) {
+  if (value == null || value === '') return '—';
+
+  if (key === 'fuelPin') return '••••';
+
+  if (key === 'shellCard' || key === 'bpRedCard' || key === 'bpPlainCard') {
+    const text = String(value).replace(/\s/g, '');
+    if (text.length <= 4) return text;
+    return `•••• ${text.slice(-4)}`;
+  }
+
+  return formatValue(value);
 }
 
 function matchesSearch(row: MasterRecord, query: string) {
@@ -692,7 +716,7 @@ export function MasterDataPage() {
                         onClick={() => void openRow(row)}
                       >
                         {columns[activeTab].map(([key]) => (
-                          <td key={key}>{formatValue(row[key])}</td>
+                          <td key={key}>{formatTableValue(key, row[key])}</td>
                         ))}
                         <td>
                           {activeTab === 'review'
