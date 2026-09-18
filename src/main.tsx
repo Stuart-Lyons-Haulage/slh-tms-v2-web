@@ -43,15 +43,45 @@ installOperationalUiEnhancements();
 const clientId = import.meta.env.VITE_ENTRA_CLIENT_ID;
 const tenantId = import.meta.env.VITE_ENTRA_TENANT_ID;
 const e2eAuth = import.meta.env.VITE_E2E_AUTH === 'true';
+const localTestMode = import.meta.env.VITE_LOCAL_TEST_MODE === 'true';
 const isTvRoutePath = isTvRoute(window.location.pathname);
 const publicTvLink = isPublicTvLink(window.location.pathname, window.location.search);
 const msal = new PublicClientApplication({ auth: { clientId: clientId || '00000000-0000-0000-0000-000000000000', authority: `https://login.microsoftonline.com/${tenantId || 'common'}`, redirectUri: window.location.origin }, cache: { cacheLocation: cacheLocationForRoute(window.location.pathname) } });
+
+function installLocalTestBanner() {
+  if (!localTestMode || document.getElementById('slh-local-test-banner')) return;
+  document.documentElement.style.setProperty('--slh-local-test-banner-height', '38px');
+  document.body.style.paddingTop = '38px';
+  const banner = document.createElement('div');
+  banner.id = 'slh-local-test-banner';
+  banner.textContent = 'SLH TMS LOCAL TEST SYSTEM — NO PRODUCTION WRITES';
+  Object.assign(banner.style, {
+    position: 'fixed',
+    top: '0',
+    left: '0',
+    right: '0',
+    height: '38px',
+    zIndex: '2147483647',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontFamily: 'Arial, sans-serif',
+    fontSize: '14px',
+    fontWeight: '800',
+    letterSpacing: '0.04em',
+    background: '#fff3cd',
+    color: '#5f4500',
+    borderBottom: '1px solid #d9b650'
+  });
+  document.body.appendChild(banner);
+}
 
 function renderApp() {
   const root = document.getElementById('root');
   if (!root) throw new Error('TMS root element is missing.');
   const content = e2eAuth ? <E2eHarness /> : <><App /><DispatchCalculatedStartsPortal /></>;
   createRoot(root).render(<StrictMode><MsalProvider instance={msal}><DataIntegrityBoundary>{content}</DataIntegrityBoundary></MsalProvider></StrictMode>);
+  installLocalTestBanner();
 }
 
 function showStartupFailure(error: unknown) {
@@ -64,6 +94,7 @@ function showStartupFailure(error: unknown) {
 
 async function start() {
   try {
+    if (localTestMode) { renderApp(); return; }
     if (e2eAuth) { renderApp(); return; }
     if (isTvRoutePath && (window as Window & { __SLH_TV_COMPATIBILITY__?: boolean }).__SLH_TV_COMPATIBILITY__) return;
     if (isTvRoutePath) (window as Window & { __SLH_TV_REACT_STARTED__?: boolean }).__SLH_TV_REACT_STARTED__ = true;
