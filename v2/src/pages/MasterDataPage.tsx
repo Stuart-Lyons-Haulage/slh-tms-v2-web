@@ -516,6 +516,11 @@ export function MasterDataPage() {
       ? []
       : editableFields[activeTab];
 
+  const activeColumns: Column[] =
+    activeTab === 'review' || activeTab === 'import'
+      ? []
+      : columns[activeTab];
+
   return (
     <section>
       <header className="page-header master-header">
@@ -740,7 +745,7 @@ export function MasterDataPage() {
                 <table className="master-table">
                   <thead>
                     <tr>
-                      {columns[activeTab].map(([, label]) => <th key={label}>{label}</th>)}
+                      {activeColumns.map(([, label]) => <th key={label}>{label}</th>)}
                       <th>Status</th>
                     </tr>
                   </thead>
@@ -751,7 +756,7 @@ export function MasterDataPage() {
                         className="master-click-row"
                         onClick={() => void openRow(row)}
                       >
-                        {columns[activeTab].map(([key]) => (
+                        {activeColumns.map(([key]) => (
                           <td key={key}>{formatTableValue(key, row[key])}</td>
                         ))}
                         <td>
