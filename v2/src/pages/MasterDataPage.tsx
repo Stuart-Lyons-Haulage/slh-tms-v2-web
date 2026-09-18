@@ -89,12 +89,13 @@ const columns: Record<Exclude<MasterTab, 'import'>, Column[]> = {
     ['defaultInstructions', 'Instructions'],
   ],
   siteCutoffs: [
-    ['code', 'Code'],
-    ['plan', 'Plan'],
-    ['standardCutoff', 'Standard cutoff'],
-    ['extendedCutoff', 'Extended cutoff'],
-    ['depotDeliveryDeadline', 'Delivery deadline'],
-    ['contact', 'Contact'],
+    ['siteName', 'Site'],
+    ['plan', 'Plan / service'],
+    ['plannedCollectFrom', 'Earliest collection'],
+    ['plannedCollectTo', 'Last collection'],
+    ['depotDeliveryDeadline', 'Latest delivery'],
+    ['standardCutoff', 'Standard cut-off'],
+    ['extendedCutoff', 'Extended cut-off'],
   ],
   routeTimes: [
     ['route', 'Route'],
@@ -142,6 +143,14 @@ const editableFields: Record<Exclude<MasterTab, 'review' | 'import'>, EditableFi
     { key: 'mapLink', label: 'Map link' },
     { key: 'collectionInstructions', label: 'Collection instructions', type: 'textarea' },
     { key: 'driverInstructions', label: 'Driver instructions', type: 'textarea' },
+    { key: 'earliestCollectionTime', label: 'Earliest collection time', type: 'time' },
+    { key: 'latestCollectionTime', label: 'Last collection time', type: 'time' },
+    { key: 'earliestDeliveryTime', label: 'Earliest delivery time', type: 'time' },
+    { key: 'latestDeliveryTime', label: 'Latest delivery time', type: 'time' },
+    { key: 'standardCutoff', label: 'Standard cut-off', type: 'time' },
+    { key: 'extendedCutoff', label: 'Extended cut-off', type: 'time' },
+    { key: 'deadlineContact', label: 'Deadline contact' },
+    { key: 'deadlineNotes', label: 'Deadline notes', type: 'textarea' },
     { key: 'latitude', label: 'Latitude', type: 'number' },
     { key: 'longitude', label: 'Longitude', type: 'number' },
   ],
@@ -202,9 +211,12 @@ const editableFields: Record<Exclude<MasterTab, 'review' | 'import'>, EditableFi
   siteCutoffs: [
     { key: 'code', label: 'Deadline code' },
     { key: 'plan', label: 'Plan / service' },
+    { key: 'plannedCollectFrom', label: 'Earliest collection', type: 'time' },
+    { key: 'plannedCollectTo', label: 'Last collection', type: 'time' },
+    { key: 'depotDeliveryDeadline', label: 'Latest delivery', type: 'time' },
+    { key: 'lastDespatchTime', label: 'Last despatch', type: 'time' },
     { key: 'standardCutoff', label: 'Standard cut-off', type: 'time' },
     { key: 'extendedCutoff', label: 'Extended cut-off', type: 'time' },
-    { key: 'depotDeliveryDeadline', label: 'Delivery deadline', type: 'time' },
     { key: 'contact', label: 'Deadline contact' },
     { key: 'notes', label: 'Deadline notes', type: 'textarea' },
   ],
@@ -913,6 +925,26 @@ export function MasterDataPage() {
 
                     <section className="crm-section">
                       <div className="crm-section-heading">
+                        <div>
+                          <p className="eyebrow">Site deadlines</p>
+                          <h3>Collection & delivery limits</h3>
+                          <p className="muted">These are the site's hard operating deadlines. They belong to the Site, not to Planner Knowledge.</p>
+                        </div>
+                      </div>
+                      <div className="crm-detail-grid">
+                        <div className="crm-field"><span>Earliest collection</span><strong>{formatValue(siteCrm.site.earliestCollectionTime)}</strong></div>
+                        <div className="crm-field"><span>Last collection</span><strong>{formatValue(siteCrm.site.latestCollectionTime)}</strong></div>
+                        <div className="crm-field"><span>Earliest delivery</span><strong>{formatValue(siteCrm.site.earliestDeliveryTime)}</strong></div>
+                        <div className="crm-field"><span>Latest delivery</span><strong>{formatValue(siteCrm.site.latestDeliveryTime)}</strong></div>
+                        <div className="crm-field"><span>Standard cut-off</span><strong>{formatValue(siteCrm.site.standardCutoff)}</strong></div>
+                        <div className="crm-field"><span>Extended cut-off</span><strong>{formatValue(siteCrm.site.extendedCutoff)}</strong></div>
+                        <div className="crm-field"><span>Deadline contact</span><strong>{formatValue(siteCrm.site.deadlineContact)}</strong></div>
+                        <div className="crm-field wide"><span>Deadline notes</span><strong>{formatValue(siteCrm.site.deadlineNotes)}</strong></div>
+                      </div>
+                    </section>
+
+                    <section className="crm-section">
+                      <div className="crm-section-heading">
                         <div><p className="eyebrow">Identity matching</p><h3>Aliases & integrations</h3></div>
                         <span className="crm-count">{siteCrm.aliases.length + siteCrm.externalIdentities.length}</span>
                       </div>
@@ -929,20 +961,23 @@ export function MasterDataPage() {
 
                     <section className="crm-section">
                       <div className="crm-section-heading">
-                        <div><p className="eyebrow">Hard constraints</p><h3>Deadlines & cut-offs</h3><p className="muted">Customer or site deadlines the plan must comply with.</p></div>
+                        <div><p className="eyebrow">Deadline rules</p><h3>AM / PM and service-specific limits</h3><p className="muted">Any specific deadline rows imported for this Site are kept here underneath the Site's default deadline profile.</p></div>
                         <span className="crm-count">{siteCrm.cutoffs.length}</span>
                       </div>
                       <SmallTable
                         rows={siteCrm.cutoffs}
                         columns={[
                           ['plan', 'Plan / service'],
+                          ['plannedCollectFrom', 'Earliest collection'],
+                          ['plannedCollectTo', 'Last collection'],
+                          ['depotDeliveryDeadline', 'Latest delivery'],
+                          ['lastDespatchTime', 'Last despatch'],
                           ['standardCutoff', 'Standard cut-off'],
                           ['extendedCutoff', 'Extended cut-off'],
-                          ['depotDeliveryDeadline', 'Delivery deadline'],
                           ['contact', 'Contact'],
                           ['notes', 'Notes'],
                         ]}
-                        empty="No hard deadlines or cut-offs are attached to this Site."
+                        empty="No AM / PM deadline rules are attached to this Site yet. The Site deadline profile above can still be maintained directly."
                       />
                     </section>
 
