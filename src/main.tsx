@@ -17,6 +17,7 @@ import './management.css';
 import './operational-status.css';
 import './navigation-scroll.css';
 import './intelligence.css';
+import './dashboard-command.css';
 import './mobile.css';
 import './ops-cleanup.css';
 import './mobile-v2.css';
