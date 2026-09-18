@@ -36,8 +36,8 @@ const tabs: Array<{ key: MasterTab; label: string; count?: keyof MasterCounts }>
   { key: 'vehicles', label: 'Vehicles', count: 'vehicles' },
   { key: 'trailers', label: 'Trailers', count: 'trailers' },
   { key: 'markets', label: 'Markets', count: 'markets' },
-  { key: 'siteCutoffs', label: 'Site Cut-offs', count: 'siteCutoffs' },
-  { key: 'routeTimes', label: 'Route Times', count: 'routeTimes' },
+  { key: 'siteCutoffs', label: 'Deadlines', count: 'siteCutoffs' },
+  { key: 'routeTimes', label: 'Planner Knowledge', count: 'routeTimes' },
   { key: 'customerContacts', label: 'Customer Contacts', count: 'customerContacts' },
   { key: 'marketContacts', label: 'Market Contacts', count: 'marketContacts' },
   { key: 'fuelPrices', label: 'Fuel Prices', count: 'fuelPrices' },
@@ -88,16 +88,16 @@ const columns: Record<Exclude<MasterTab, 'import'>, Column[]> = {
     ['plan', 'Plan'],
     ['standardCutoff', 'Standard cutoff'],
     ['extendedCutoff', 'Extended cutoff'],
-    ['temperature', 'Temperature'],
-    ['palletType', 'Pallet type'],
+    ['depotDeliveryDeadline', 'Delivery deadline'],
+    ['contact', 'Contact'],
   ],
   routeTimes: [
     ['route', 'Route'],
     ['palletType', 'Pallet type'],
-    ['lastDespatchTime', 'Last despatch'],
-    ['plannedCollectFrom', 'Collect from'],
-    ['plannedCollectTo', 'Collect to'],
-    ['depotDeliveryDeadline', 'Delivery deadline'],
+    ['lastDespatchTime', 'Last sensible despatch'],
+    ['plannedCollectFrom', 'Typical collect from'],
+    ['plannedCollectTo', 'Typical collect to'],
+    ['depotDeliveryDeadline', 'Planned arrival by'],
   ],
   customerContacts: [
     ['contactName', 'Contact'],
@@ -190,26 +190,21 @@ const editableFields: Record<Exclude<MasterTab, 'review' | 'import'>, EditableFi
     { key: 'defaultInstructions', label: 'Default instructions', type: 'textarea' },
   ],
   siteCutoffs: [
-    { key: 'code', label: 'Cut-off code' },
-    { key: 'plan', label: 'Plan' },
+    { key: 'code', label: 'Deadline code' },
+    { key: 'plan', label: 'Plan / service' },
     { key: 'standardCutoff', label: 'Standard cut-off', type: 'time' },
     { key: 'extendedCutoff', label: 'Extended cut-off', type: 'time' },
-    { key: 'contact', label: 'Contact' },
-    { key: 'notes', label: 'Notes', type: 'textarea' },
-    { key: 'temperature', label: 'Temperature' },
-    { key: 'palletType', label: 'Pallet type' },
-    { key: 'lastDespatchTime', label: 'Last despatch time', type: 'time' },
-    { key: 'plannedCollectFrom', label: 'Planned collect from', type: 'time' },
-    { key: 'plannedCollectTo', label: 'Planned collect to', type: 'time' },
-    { key: 'depotDeliveryDeadline', label: 'Depot delivery deadline', type: 'time' },
+    { key: 'depotDeliveryDeadline', label: 'Delivery deadline', type: 'time' },
+    { key: 'contact', label: 'Deadline contact' },
+    { key: 'notes', label: 'Deadline notes', type: 'textarea' },
   ],
   routeTimes: [
-    { key: 'route', label: 'Route' },
+    { key: 'route', label: 'Route / movement' },
     { key: 'palletType', label: 'Pallet type' },
-    { key: 'lastDespatchTime', label: 'Last despatch time', type: 'time' },
-    { key: 'plannedCollectFrom', label: 'Planned collect from', type: 'time' },
-    { key: 'plannedCollectTo', label: 'Planned collect to', type: 'time' },
-    { key: 'depotDeliveryDeadline', label: 'Depot delivery deadline', type: 'time' },
+    { key: 'lastDespatchTime', label: 'Last sensible despatch', type: 'time' },
+    { key: 'plannedCollectFrom', label: 'Typical collect from', type: 'time' },
+    { key: 'plannedCollectTo', label: 'Typical collect to', type: 'time' },
+    { key: 'depotDeliveryDeadline', label: 'Planned arrival by', type: 'time' },
   ],
   customerContacts: [
     { key: 'code', label: 'Contact code' },
@@ -524,7 +519,7 @@ export function MasterDataPage() {
         <div>
           <p className="eyebrow">Single operational register</p>
           <h1>Master Data</h1>
-          <p>One place for every canonical record. Open a Site to see its full CRM profile, aliases, cut-offs, route timings and linked records together.</p>
+          <p>One place for every canonical record. Open a Site to see its identity, hard deadlines, planner knowledge, aliases and linked records together.</p>
         </div>
         <div className="status good">Canonical V2</div>
       </header>
@@ -910,39 +905,39 @@ export function MasterDataPage() {
 
                     <section className="crm-section">
                       <div className="crm-section-heading">
-                        <div><p className="eyebrow">Planning rules</p><h3>Site cut-offs</h3></div>
+                        <div><p className="eyebrow">Hard constraints</p><h3>Deadlines & cut-offs</h3><p className="muted">Customer or site deadlines the plan must comply with.</p></div>
                         <span className="crm-count">{siteCrm.cutoffs.length}</span>
                       </div>
                       <SmallTable
                         rows={siteCrm.cutoffs}
                         columns={[
-                          ['plan', 'Plan'],
-                          ['standardCutoff', 'Standard'],
-                          ['extendedCutoff', 'Extended'],
-                          ['temperature', 'Temp'],
-                          ['palletType', 'Pallet'],
-                          ['depotDeliveryDeadline', 'Deadline'],
+                          ['plan', 'Plan / service'],
+                          ['standardCutoff', 'Standard cut-off'],
+                          ['extendedCutoff', 'Extended cut-off'],
+                          ['depotDeliveryDeadline', 'Delivery deadline'],
+                          ['contact', 'Contact'],
+                          ['notes', 'Notes'],
                         ]}
-                        empty="No cut-offs are attached to this Site."
+                        empty="No hard deadlines or cut-offs are attached to this Site."
                       />
                     </section>
 
                     <section className="crm-section">
                       <div className="crm-section-heading">
-                        <div><p className="eyebrow">Route planning</p><h3>Related route timings</h3></div>
+                        <div><p className="eyebrow">Planner knowledge</p><h3>Typical route guidance</h3><p className="muted">Operational knowledge to help build the plan; this does not override the hard deadlines above.</p></div>
                         <span className="crm-count">{siteCrm.routeTimes.length}</span>
                       </div>
                       <SmallTable
                         rows={siteCrm.routeTimes}
                         columns={[
-                          ['route', 'Route'],
+                          ['route', 'Route / movement'],
                           ['palletType', 'Pallet'],
-                          ['lastDespatchTime', 'Last despatch'],
-                          ['plannedCollectFrom', 'Collect from'],
-                          ['plannedCollectTo', 'Collect to'],
-                          ['depotDeliveryDeadline', 'Deadline'],
+                          ['lastDespatchTime', 'Last sensible despatch'],
+                          ['plannedCollectFrom', 'Typical collect from'],
+                          ['plannedCollectTo', 'Typical collect to'],
+                          ['depotDeliveryDeadline', 'Planned arrival by'],
                         ]}
-                        empty="No route timings currently reference this Site."
+                        empty="No planner knowledge currently references this Site."
                       />
                     </section>
 
