@@ -53,8 +53,8 @@ export function SageHrLeavePanel({ date = todayIsoDate(), days = 5, maxItems = 1
   const upcoming = items.filter(item => item.date !== date);
   const previewItems = [...todayItems, ...upcoming].slice(0, maxItems);
 
-  return <section className={`panel dashboard-leave-panel${compact ? " compact-panel" : ""}`}>
-    <div className="title-row">
+  return <section className={`panel dashboard-leave-panel${compact ? " compact-panel dashboard-command-panel" : ""}`}>
+    <div className="dashboard-panel-head">
       <div>
         <p className="eyebrow">Sage HR leave</p>
         <h2>Who's off</h2>
@@ -84,15 +84,13 @@ export function SageHrLeavePanel({ date = todayIsoDate(), days = 5, maxItems = 1
         <small>Next {days} days</small>
       </article>
     </div>}
-    {previewItems.length ? <div className="dashboard-attention-list dashboard-leave-list">
-      {previewItems.map(item => <Link key={`${item.date}-${item.employeeNumber}-${item.policyName || "leave"}`} to={item.driverId ? `/driver-master?driverId=${encodeURIComponent(item.driverId)}` : "/driver-master"} className={`dashboard-attention-row severity-${item.date === date ? "high" : "medium"}`}>
+    {previewItems.length ? <div className="dashboard-leave-list">
+      {previewItems.map(item => <Link key={`${item.date}-${item.employeeNumber}-${item.policyName || "leave"}`} to={item.driverId ? `/driver-master?driverId=${encodeURIComponent(item.driverId)}` : "/driver-master"} className={`dashboard-leave-row ${item.date === date ? "today" : "upcoming"}`}>
         <span>{dateLabel(item.date)}</span>
-        <div>
-          <strong>{item.displayName}{item.isPartDay ? " · part day" : ""}</strong>
-          <small>{item.policyName || "Leave"}{!compact && item.details ? ` · ${item.details}` : ""}{!compact && !item.linkedToDriverMaster ? " · not linked to Driver Master" : ""}</small>
-        </div>
+        <strong>{item.displayName}{item.isPartDay ? " · part day" : ""}</strong>
+        <small>{item.policyName || "Leave"}{!compact && item.details ? ` · ${item.details}` : ""}{!compact && !item.linkedToDriverMaster ? " · not linked to Driver Master" : ""}</small>
         <b>→</b>
       </Link>)}
-    </div> : !leave.loading && <p className="hint">No employed drivers are marked off in Sage HR for this window.</p>}
+    </div> : !leave.loading && <p className="dashboard-empty">No employed drivers are marked off in Sage HR for this window.</p>}
   </section>;
 }
