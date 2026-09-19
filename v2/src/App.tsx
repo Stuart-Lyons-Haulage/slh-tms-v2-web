@@ -1,4 +1,4 @@
-import { NavLink, Route, Routes } from 'react-router-dom';
+import { NavLink, Route, Routes, useLocation } from 'react-router-dom';
 import { OverviewPage } from './pages/OverviewPage';
 import { MasterDataPage } from './pages/MasterDataPage';
 import { IntakeReviewPage } from './pages/IntakeReviewPage';
@@ -7,6 +7,12 @@ import { PalletControlPage } from './pages/PalletControlPage';
 import './styles.css';
 
 export function App() {
+  const location = useLocation();
+
+  if (location.pathname === '/planning/pallet-control') {
+    return <PalletControlPage />;
+  }
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -27,7 +33,7 @@ export function App() {
           <Route path="/master-data" element={<MasterDataPage />} />
           <Route path="/intake" element={<IntakeReviewPage />} />
           <Route path="/planning" element={<PlanningPage />} />
-          <Route path="/planning/pallet-control" element={<PalletControlPage />} />
+
         </Routes>
       </main>
     </div>
