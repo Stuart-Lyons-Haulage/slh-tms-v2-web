@@ -86,6 +86,7 @@ const columns: Record<Exclude<MasterTab, 'review' | 'import'>, Column[]> = {
     ['currentLocation', 'Current location'],
     ['palletCapacity', 'Std pallets'],
     ['euroPalletCapacity', 'Euro pallets'],
+    ['trolleyCapacity', 'Trolleys'],
     ['motExpiry', 'MOT / test expiry'],
   ],
   markets: [
@@ -179,6 +180,9 @@ const editableFields: Record<Exclude<MasterTab, 'review' | 'import'>, EditableFi
     { key: 'currentLocation', label: 'Current location' },
     { key: 'palletCapacity', label: 'Standard pallet capacity', type: 'number' },
     { key: 'euroPalletCapacity', label: 'Euro pallet capacity', type: 'number' },
+    { key: 'trolleyCapacity', label: 'Trolley capacity', type: 'number' },
+    { key: 'euroToStandardEquivalent', label: 'Euro to standard-space factor', type: 'number' },
+    { key: 'trolleyToStandardEquivalent', label: 'Trolley to standard-space factor', type: 'number' },
     { key: 'motExpiry', label: 'MOT / test expiry', type: 'date' },
     { key: 'notes', label: 'Notes', type: 'textarea' },
   ],
