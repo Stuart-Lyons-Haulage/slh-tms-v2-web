@@ -34,6 +34,7 @@ export function PlanningPage() {
   const [query, setQuery] = useState('');
   const [selectedRunId, setSelectedRunId] = useState<string>('');
   const [drafts, setDrafts] = useState<Record<string, { standard: string; euro: string; trolley: string }>>({});
+  const [runDrafts, setRunDrafts] = useState<Record<string, { standard: string; euro: string; trolley: string }>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -74,12 +75,59 @@ export function PlanningPage() {
     PM: filteredMovements.filter(x => periodLabel(x.period) === 'PM'),
   }), [filteredMovements]);
 
+  function signalPlanningChange() {
+    if ('BroadcastChannel' in window) {
+      const channel = new BroadcastChannel('slh-v2-planning');
+      channel.postMessage({ type: 'planning-changed', date });
+      channel.close();
+    }
+  }
+
   function movementDraft(movement: PlanningMovement) {
     return drafts[movement.movementKey] ?? {
       standard: String(movement.remainingStandardPallets),
       euro: String(movement.remainingEuroPallets),
       trolley: String(movement.remainingTrolleys),
     };
+  }
+
+  function builtMovementDraft(run: PlanningRun, movement: PlanningRun['movements'][number]) {
+    const key = `${run.id}|${movement.movementKey}`;
+    return runDrafts[key] ?? {
+      standard: String(movement.standardPallets),
+      euro: String(movement.euroPallets),
+      trolley: String(movement.trolleys),
+    };
+  }
+
+  async function saveBuiltMovement(run: PlanningRun, movement: PlanningRun['movements'][number]) {
+    const key = `${run.id}|${movement.movementKey}`;
+    const draft = builtMovementDraft(run, movement);
+    const standard = Number(draft.standard || 0);
+    const euro = Number(draft.euro || 0);
+    const trolley = Number(draft.trolley || 0);
+
+    if (![standard, euro, trolley].every(value => Number.isInteger(value) && value >= 0)) {
+      setError('Run quantities must be whole numbers of zero or more.');
+      return;
+    }
+
+    setBusy(key);
+    setError(null);
+    try {
+      await api.setPlanningMovement(run.id, movement.movementKey, standard, euro, trolley);
+      setRunDrafts(current => {
+        const next = { ...current };
+        delete next[key];
+        return next;
+      });
+      signalPlanningChange();
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not update run quantity.');
+    } finally {
+      setBusy(null);
+    }
   }
 
   async function createRun(period: 'AM' | 'PM') {
@@ -121,6 +169,7 @@ export function PlanningPage() {
     setError(null);
     try {
       await api.setPlanningMovement(selectedRunId, movement.movementKey, standard, euro, trolley);
+      signalPlanningChange();
       setDrafts(current => {
         const next = { ...current };
         delete next[movement.movementKey];
@@ -283,12 +332,26 @@ export function PlanningPage() {
                 </div>
 
                 <div className="run-movements">
-                  {run.movements.map(movement => (
-                    <div className="run-movement" key={movement.movementKey}>
-                      <strong>{movement.collectionSite} → {movement.deliverySite}</strong>
-                      <span>{movement.standardPallets} Std · {movement.euroPallets} Euro · {movement.trolleys} Trolley</span>
-                    </div>
-                  ))}
+                  {run.movements.map(movement => {
+                    const key = `${run.id}|${movement.movementKey}`;
+                    const draft = builtMovementDraft(run, movement);
+                    return (
+                      <div className="run-movement" key={movement.movementKey}>
+                        <div className="run-movement-route">
+                          <strong>{movement.collectionSite} → {movement.deliverySite}</strong>
+                          <span>{movement.standardPallets} Std · {movement.euroPallets} Euro · {movement.trolleys} Trolley</span>
+                        </div>
+                        <div className="run-movement-editor" onClick={event => event.stopPropagation()}>
+                          <label>Std<input type="number" min="0" value={draft.standard} onChange={e => setRunDrafts(x => ({ ...x, [key]: { ...draft, standard: e.target.value } }))} /></label>
+                          <label>Euro<input type="number" min="0" value={draft.euro} onChange={e => setRunDrafts(x => ({ ...x, [key]: { ...draft, euro: e.target.value } }))} /></label>
+                          <label>Trolley<input type="number" min="0" value={draft.trolley} onChange={e => setRunDrafts(x => ({ ...x, [key]: { ...draft, trolley: e.target.value } }))} /></label>
+                          <button className="button secondary" disabled={busy === key} onClick={() => void saveBuiltMovement(run, movement)}>
+                            {busy === key ? 'Saving…' : 'Update'}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
                   {!run.movements.length && <span className="muted">Select this run, then add movements from the left.</span>}
                 </div>
 
