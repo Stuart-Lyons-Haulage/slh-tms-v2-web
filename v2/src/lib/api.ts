@@ -66,6 +66,100 @@ export type MasterCounts = {
   reviewItems: number;
 };
 
+export type PlanningPeriod = 'AM' | 'PM' | 0 | 1;
+
+export type PlanningMovement = {
+  movementKey: string;
+  period: PlanningPeriod;
+  collectionSiteId: string;
+  collectionSite: string;
+  deliverySiteId: string;
+  deliverySite: string;
+  orderCount: number;
+  totalStandardPallets: number;
+  plannedStandardPallets: number;
+  remainingStandardPallets: number;
+  totalEuroPallets: number;
+  plannedEuroPallets: number;
+  remainingEuroPallets: number;
+  totalTrolleys: number;
+  plannedTrolleys: number;
+  remainingTrolleys: number;
+  temperatureRequirement?: string | null;
+  trailerRequirement?: string | null;
+  latestCollectionTime?: string | null;
+  latestDeliveryTime?: string | null;
+};
+
+export type RunMovement = {
+  movementKey: string;
+  collectionSiteId: string;
+  collectionSite: string;
+  deliverySiteId: string;
+  deliverySite: string;
+  standardPallets: number;
+  euroPallets: number;
+  trolleys: number;
+};
+
+export type CapacityView = {
+  status: string;
+  utilisationPercent?: number | null;
+  standardPallets: number;
+  euroPallets: number;
+  trolleys: number;
+  standardCapacity?: number | null;
+  euroCapacity?: number | null;
+  trolleyCapacity?: number | null;
+  equivalentUsed?: number | null;
+  equivalentCapacity?: number | null;
+  message: string;
+};
+
+export type PlanningRun = {
+  id: string;
+  runNumber: string;
+  planDate: string;
+  period: PlanningPeriod;
+  driverId?: string | null;
+  driver?: string | null;
+  vehicleId?: string | null;
+  vehicle?: string | null;
+  trailerId?: string | null;
+  trailer?: string | null;
+  startTime?: string | null;
+  nightOut: boolean;
+  trailerSwapNotes?: string | null;
+  notes?: string | null;
+  capacityOverrideReason?: string | null;
+  state: string | number;
+  capacity: CapacityView;
+  movements: RunMovement[];
+};
+
+export type PalletMatrixCell = {
+  collectionSiteId: string;
+  collectionSite: string;
+  deliverySiteId: string;
+  deliverySite: string;
+  totalStandardPallets: number;
+  plannedStandardPallets: number;
+  outstandingStandardPallets: number;
+  totalEuroPallets: number;
+  plannedEuroPallets: number;
+  outstandingEuroPallets: number;
+  totalTrolleys: number;
+  plannedTrolleys: number;
+  outstandingTrolleys: number;
+};
+
+export type PlanningSnapshot = {
+  planDate: string;
+  movements: PlanningMovement[];
+  runs: PlanningRun[];
+  palletMatrix: PalletMatrixCell[];
+};
+
 export type MasterWorkbookImportResult = {
   committed: boolean;
   rows: Record<string, number>;
@@ -102,6 +196,33 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  planningSnapshot: (date: string) =>
+    request<PlanningSnapshot>(`/api/v2/planning?date=${encodeURIComponent(date)}`),
+
+  createPlanningRun: (planDate: string, period: 'AM' | 'PM', runNumber?: string) =>
+    request('/api/v2/planning/runs', {
+      method: 'POST',
+      body: JSON.stringify({ planDate, period, runNumber: runNumber || null }),
+    }),
+
+  updatePlanningRun: (id: string, payload: Record<string, unknown>) =>
+    request(`/api/v2/planning/runs/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }),
+
+  setPlanningMovement: (
+    runId: string,
+    movementKey: string,
+    standardPallets: number,
+    euroPallets: number,
+    trolleys: number,
+  ) =>
+    request(`/api/v2/planning/runs/${runId}/movement`, {
+      method: 'PUT',
+      body: JSON.stringify({ movementKey, standardPallets, euroPallets, trolleys }),
+    }),
+
   intakeReview: () =>
     request<IntakeReviewRecord[]>('/api/v2/intake/review'),
 
