@@ -61,11 +61,28 @@ export function PalletControlPage() {
 
   useEffect(() => {
     void refresh();
+
     const timer = window.setInterval(() => {
       if (!document.hidden) void refresh();
     }, 3000);
-    return () => window.clearInterval(timer);
-  }, [refresh]);
+
+    const channel = 'BroadcastChannel' in window
+      ? new BroadcastChannel('slh-v2-planning')
+      : null;
+
+    if (channel) {
+      channel.onmessage = event => {
+        if (event.data?.type === 'planning-changed' && (!event.data?.date || event.data.date === date)) {
+          void refresh();
+        }
+      };
+    }
+
+    return () => {
+      window.clearInterval(timer);
+      channel?.close();
+    };
+  }, [date, refresh]);
 
   const collections = useMemo(() => Array.from(new Set((data?.palletMatrix ?? []).map(x => x.collectionSite))).sort(), [data]);
   const deliveries = useMemo(() => Array.from(new Set((data?.palletMatrix ?? []).map(x => x.deliverySite))).sort(), [data]);
@@ -164,7 +181,7 @@ export function PalletControlPage() {
         <span><i style={toneStyle('euro')} />Euro</span>
         <span><i style={toneStyle('trolley')} />Trolleys</span>
         <span><i style={toneStyle('mixed')} />Mixed</span>
-        <small>Auto-refresh every 3 seconds while this window is visible.</small>
+        <small>Instant Run Builder updates · 3-second reconciliation while visible.</small>
       </div>
 
       <div className="pallet-control-stack">
