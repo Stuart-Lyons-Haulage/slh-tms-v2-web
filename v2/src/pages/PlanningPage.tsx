@@ -31,7 +31,20 @@ export function PlanningPage() {
   const [drivers, setDrivers] = useState<MasterRecord[]>([]);
   const [vehicles, setVehicles] = useState<MasterRecord[]>([]);
   const [trailers, setTrailers] = useState<MasterRecord[]>([]);
+  const [sites, setSites] = useState<MasterRecord[]>([]);
+  const [customers, setCustomers] = useState<MasterRecord[]>([]);
   const [query, setQuery] = useState('');
+  const [quickOrder, setQuickOrder] = useState({
+    period: 'AM' as 'AM' | 'PM',
+    collectionSiteId: '',
+    deliverySiteId: '',
+    customerId: '',
+    standard: '',
+    euro: '',
+    trolley: '',
+    purchaseOrder: '',
+    orderReference: '',
+  });
   const [selectedRunId, setSelectedRunId] = useState<string>('');
   const [drafts, setDrafts] = useState<Record<string, { standard: string; euro: string; trolley: string }>>({});
   const [runDrafts, setRunDrafts] = useState<Record<string, { standard: string; euro: string; trolley: string }>>({});
@@ -52,6 +65,8 @@ export function PlanningPage() {
       api.drivers().then(setDrivers),
       api.vehicles().then(setVehicles),
       api.trailers().then(setTrailers),
+      api.sites().then(setSites),
+      api.customers().then(setCustomers),
     ]).catch(err => setError(err instanceof Error ? err.message : 'Unable to load Master Data.'));
   }, []);
 
@@ -125,6 +140,62 @@ export function PlanningPage() {
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not update run quantity.');
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function bookQuickOrder() {
+    const standard = Number(quickOrder.standard || 0);
+    const euro = Number(quickOrder.euro || 0);
+    const trolley = Number(quickOrder.trolley || 0);
+
+    if (!quickOrder.collectionSiteId || !quickOrder.deliverySiteId) {
+      setError('Select both a collection and delivery Site.');
+      return;
+    }
+
+    if (![standard, euro, trolley].every(value => Number.isInteger(value) && value >= 0)) {
+      setError('Manual order quantities must be whole numbers of zero or more.');
+      return;
+    }
+
+    if (standard + euro + trolley === 0) {
+      setError('Enter at least one standard pallet, Euro pallet or trolley.');
+      return;
+    }
+
+    setBusy('quick-order');
+    setError(null);
+    try {
+      await api.createQuickOrder({
+        planDate: date,
+        period: quickOrder.period,
+        collectionSiteId: quickOrder.collectionSiteId,
+        deliverySiteId: quickOrder.deliverySiteId,
+        customerId: quickOrder.customerId || null,
+        standardPallets: standard,
+        euroPallets: euro,
+        trolleys: trolley,
+        purchaseOrder: quickOrder.purchaseOrder || null,
+        orderReference: quickOrder.orderReference || null,
+        notes: 'Booked manually from Run Builder',
+      });
+      setQuickOrder({
+        period: quickOrder.period,
+        collectionSiteId: '',
+        deliverySiteId: '',
+        customerId: '',
+        standard: '',
+        euro: '',
+        trolley: '',
+        purchaseOrder: '',
+        orderReference: '',
+      });
+      signalPlanningChange();
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not book the manual order.');
     } finally {
       setBusy(null);
     }
@@ -226,6 +297,70 @@ export function PlanningPage() {
       </header>
 
       {error && <div className="notice error">{error}</div>}
+
+      <section className="panel quick-order-line">
+        <div className="quick-order-heading">
+          <div>
+            <p className="eyebrow">Manual booking</p>
+            <h2>Quick order</h2>
+          </div>
+          <span className="muted">For phone calls and one-off jobs. It joins the same Orders to Plan queue immediately.</span>
+        </div>
+
+        <div className="quick-order-fields">
+          <label>
+            AM / PM
+            <select value={quickOrder.period} onChange={e => setQuickOrder(x => ({ ...x, period: e.target.value as 'AM' | 'PM' }))}>
+              <option value="AM">AM</option>
+              <option value="PM">PM</option>
+            </select>
+          </label>
+          <label>
+            Collect
+            <select value={quickOrder.collectionSiteId} onChange={e => setQuickOrder(x => ({ ...x, collectionSiteId: e.target.value }))}>
+              <option value="">Collection Site…</option>
+              {sites.map(site => <option key={site.id} value={site.id}>{String(site.name ?? site.code ?? '')}</option>)}
+            </select>
+          </label>
+          <label>
+            Std
+            <input type="number" min="0" value={quickOrder.standard} onChange={e => setQuickOrder(x => ({ ...x, standard: e.target.value }))} />
+          </label>
+          <label>
+            Euro
+            <input type="number" min="0" value={quickOrder.euro} onChange={e => setQuickOrder(x => ({ ...x, euro: e.target.value }))} />
+          </label>
+          <label>
+            Trolley
+            <input type="number" min="0" value={quickOrder.trolley} onChange={e => setQuickOrder(x => ({ ...x, trolley: e.target.value }))} />
+          </label>
+          <label>
+            Deliver
+            <select value={quickOrder.deliverySiteId} onChange={e => setQuickOrder(x => ({ ...x, deliverySiteId: e.target.value }))}>
+              <option value="">Delivery Site…</option>
+              {sites.map(site => <option key={site.id} value={site.id}>{String(site.name ?? site.code ?? '')}</option>)}
+            </select>
+          </label>
+          <label>
+            Customer
+            <select value={quickOrder.customerId} onChange={e => setQuickOrder(x => ({ ...x, customerId: e.target.value }))}>
+              <option value="">Auto from Site</option>
+              {customers.map(customer => <option key={customer.id} value={customer.id}>{String(customer.name ?? customer.code ?? '')}</option>)}
+            </select>
+          </label>
+          <label>
+            PO / Ref
+            <input value={quickOrder.purchaseOrder} onChange={e => setQuickOrder(x => ({ ...x, purchaseOrder: e.target.value }))} placeholder="Optional" />
+          </label>
+          <label>
+            Order ref
+            <input value={quickOrder.orderReference} onChange={e => setQuickOrder(x => ({ ...x, orderReference: e.target.value }))} placeholder="Optional" />
+          </label>
+          <button className="button" disabled={busy === 'quick-order'} onClick={() => void bookQuickOrder()}>
+            {busy === 'quick-order' ? 'Booking…' : 'Book order'}
+          </button>
+        </div>
+      </section>
 
       <div className="planning-layout">
         <aside className="orders-column panel">
