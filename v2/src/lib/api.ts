@@ -202,7 +202,7 @@ export const api = {
   createPlanningRun: (planDate: string, period: 'AM' | 'PM', runNumber?: string) =>
     request('/api/v2/planning/runs', {
       method: 'POST',
-      body: JSON.stringify({ planDate, period, runNumber: runNumber || null }),
+      body: JSON.stringify({ planDate, period: period === 'PM' ? 1 : 0, runNumber: runNumber || null }),
     }),
 
   updatePlanningRun: (id: string, payload: Record<string, unknown>) =>
