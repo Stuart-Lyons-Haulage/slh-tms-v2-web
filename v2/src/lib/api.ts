@@ -199,6 +199,27 @@ export const api = {
   planningSnapshot: (date: string) =>
     request<PlanningSnapshot>(`/api/v2/planning?date=${encodeURIComponent(date)}`),
 
+  createQuickOrder: (payload: {
+    planDate: string;
+    period: 'AM' | 'PM';
+    collectionSiteId: string;
+    deliverySiteId: string;
+    customerId?: string | null;
+    standardPallets: number;
+    euroPallets: number;
+    trolleys: number;
+    purchaseOrder?: string | null;
+    orderReference?: string | null;
+    notes?: string | null;
+  }) =>
+    request('/api/v2/planning/quick-order', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...payload,
+        period: payload.period === 'PM' ? 1 : 0,
+      }),
+    }),
+
   createPlanningRun: (planDate: string, period: 'AM' | 'PM', runNumber?: string) =>
     request('/api/v2/planning/runs', {
       method: 'POST',
