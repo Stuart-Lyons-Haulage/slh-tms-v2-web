@@ -250,3 +250,24 @@ h2{margin:0}
   .run-movement-editor{grid-template-columns:repeat(3,minmax(0,1fr))}
   .run-movement-editor .button{grid-column:1/-1}
 }
+
+.quick-order-line{margin-bottom:16px}
+.quick-order-heading{display:flex;justify-content:space-between;gap:18px;align-items:end;margin-bottom:12px}
+.quick-order-heading .muted{max-width:520px;text-align:right}
+.quick-order-fields{display:grid;grid-template-columns:90px minmax(180px,1.4fr) 72px 72px 82px minmax(180px,1.4fr) minmax(150px,1fr) minmax(120px,1fr) minmax(120px,1fr) auto;gap:8px;align-items:end}
+.quick-order-fields label{display:grid;gap:4px;font-size:10px;font-weight:800;color:#607067}
+.quick-order-fields input,.quick-order-fields select{width:100%;padding:9px;border:1px solid #ccd9d2;border-radius:9px;background:#fff;color:#173126;font:inherit}
+.quick-order-fields .button{height:40px;white-space:nowrap}
+@media(max-width:1500px){
+  .quick-order-fields{grid-template-columns:90px repeat(3,minmax(0,1fr))}
+}
+@media(max-width:900px){
+  .quick-order-heading{align-items:flex-start;flex-direction:column}
+  .quick-order-heading .muted{text-align:left}
+  .quick-order-fields{grid-template-columns:1fr 1fr}
+  .quick-order-fields .button{grid-column:1/-1}
+}
+@media(max-width:620px){
+  .quick-order-fields{grid-template-columns:1fr}
+  .quick-order-fields .button{grid-column:auto}
+}
