@@ -1,10 +1,10 @@
-name: V2 CI
+name: V2 Baseline CI
 
 on:
   push:
-    branches: [ "v2/foundation" ]
+    branches: [ "v2/foundation", "v2/baseline-audit" ]
   pull_request:
-    branches: [ "v2/foundation" ]
+    branches: [ "v2/foundation", "v2/baseline-audit" ]
 
 jobs:
   build-v2-web:
@@ -17,6 +17,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - name: Architecture guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          ! grep -R "/planning" src --include='*.ts' --include='*.tsx'
+          ! grep -R "PlanningPage" src --include='*.ts' --include='*.tsx'
+          ! grep -R "PalletControlPage" src --include='*.ts' --include='*.tsx'
       - name: Install
         run: npm install --no-audit --no-fund
       - name: Build
