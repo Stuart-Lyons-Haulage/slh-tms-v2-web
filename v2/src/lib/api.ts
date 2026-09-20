@@ -120,6 +120,28 @@ export const api = {
   drivers: () => request<MasterRecord[]>('/api/v2/master/drivers'),
   vehicles: () => request<MasterRecord[]>('/api/v2/master/vehicles'),
   fuelCards: () => request<MasterRecord[]>('/api/v2/master/fuel-cards'),
+
+  updateVehicleFuelCards: (vehicleId: string, payload: Record<string, unknown>) =>
+    request<MasterRecord>(`/api/v2/master/fuel-cards/vehicle/${vehicleId}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }),
+
+  clearVehicleFuelCards: async (vehicleId: string) => {
+    const response = await fetch(`${API_BASE}/api/v2/master/fuel-cards/vehicle/${vehicleId}`, {
+      method: 'DELETE',
+    });
+    if (response.ok) return;
+
+    let message = `${response.status} ${response.statusText}`;
+    try {
+      const body = await response.json();
+      if (body?.error) message = body.error;
+    } catch {
+      // Keep HTTP status if there is no JSON body.
+    }
+    throw new Error(message);
+  },
   trailers: () => request<MasterRecord[]>('/api/v2/master/trailers'),
   customerContacts: () => request<MasterRecord[]>('/api/v2/master/customer-contacts'),
   marketContacts: () => request<MasterRecord[]>('/api/v2/master/market-contacts'),
