@@ -175,6 +175,10 @@ const editableFields: Record<Exclude<MasterTab, 'review' | 'import'>, EditableFi
     { key: 'name', label: 'Site name' },
     { key: 'driverTextName', label: 'Driver text name' },
     { key: 'fullAddress', label: 'Full address', type: 'textarea' },
+    { key: 'addressLine1', label: 'Address line 1' },
+    { key: 'addressLine2', label: 'Address line 2' },
+    { key: 'town', label: 'Town' },
+    { key: 'county', label: 'County' },
     { key: 'postcode', label: 'Postcode' },
     { key: 'mapLink', label: 'Map link' },
     { key: 'collectionInstructions', label: 'Collection instructions', type: 'textarea' },
@@ -594,7 +598,11 @@ export function MasterDataPage() {
       selected.provider,
     );
 
-    if (!window.confirm(`Permanently delete ${label}?\n\nLinked records are protected and the delete will be blocked where necessary.`)) {
+    const confirmMessage = activeTab === 'fuelCards'
+      ? `Clear all fuel-card numbers, PINs and notes for ${label}?`
+      : `Permanently delete ${label}?\n\nLinked records are protected and the delete will be blocked where necessary.`;
+
+    if (!window.confirm(confirmMessage)) {
       return;
     }
 
