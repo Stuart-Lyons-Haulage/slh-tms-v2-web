@@ -114,6 +114,61 @@ const columns: Record<Exclude<MasterTab, 'review' | 'import'>, Column[]> = {
   ],
 };
 
+
+type ChildEditor = {
+  entity: string;
+  title: string;
+  row: MasterRecord;
+  fields: EditableField[];
+} | null;
+
+const siteChildEditors = {
+  cutoff: [
+    { key: 'plan', label: 'Plan / service' },
+    { key: 'standardCutoff', label: 'Standard cut-off', type: 'time' },
+    { key: 'extendedCutoff', label: 'Extended cut-off', type: 'time' },
+    { key: 'contact', label: 'Contact' },
+    { key: 'notes', label: 'Notes', type: 'textarea' },
+    { key: 'temperature', label: 'Temperature' },
+    { key: 'palletType', label: 'Pallet type' },
+    { key: 'lastDespatchTime', label: 'Last despatch time', type: 'time' },
+    { key: 'plannedCollectFrom', label: 'Planned collect from', type: 'time' },
+    { key: 'plannedCollectTo', label: 'Planned collect to', type: 'time' },
+    { key: 'depotDeliveryDeadline', label: 'Depot delivery deadline', type: 'time' },
+  ] satisfies EditableField[],
+  contact: [
+    { key: 'contactName', label: 'Contact name' },
+    { key: 'role', label: 'Role' },
+    { key: 'email', label: 'Email', type: 'email' },
+    { key: 'phone', label: 'Phone', type: 'tel' },
+    { key: 'notes', label: 'Notes', type: 'textarea' },
+  ] satisfies EditableField[],
+  route: [
+    { key: 'route', label: 'Route / movement' },
+    { key: 'palletType', label: 'Pallet type' },
+    { key: 'lastDespatchTime', label: 'Last sensible despatch', type: 'time' },
+    { key: 'plannedCollectFrom', label: 'Typical collect from', type: 'time' },
+    { key: 'plannedCollectTo', label: 'Typical collect to', type: 'time' },
+    { key: 'depotDeliveryDeadline', label: 'Planned arrival by', type: 'time' },
+  ] satisfies EditableField[],
+  market: [
+    { key: 'code', label: 'Market code' },
+    { key: 'name', label: 'Market name' },
+    { key: 'defaultInstructions', label: 'Default instructions', type: 'textarea' },
+  ] satisfies EditableField[],
+  alias: [
+    { key: 'alias', label: 'Alias' },
+    { key: 'source', label: 'Source' },
+    { key: 'approved', label: 'Approved', type: 'checkbox' },
+  ] satisfies EditableField[],
+  identity: [
+    { key: 'provider', label: 'Provider' },
+    { key: 'externalKey', label: 'External key' },
+    { key: 'externalDisplayName', label: 'Display name' },
+    { key: 'active', label: 'Active', type: 'checkbox' },
+  ] satisfies EditableField[],
+};
+
 const editableFields: Record<Exclude<MasterTab, 'review' | 'import'>, EditableField[]> = {
   sites: [
     { key: 'code', label: 'Site code' },
@@ -280,10 +335,12 @@ function SmallTable({
   rows,
   columns: tableColumns,
   empty,
+  onRowClick,
 }: {
   rows: MasterRecord[];
   columns: Column[];
   empty: string;
+  onRowClick?: (row: MasterRecord) => void;
 }) {
   if (!rows.length) return <p className="muted">{empty}</p>;
 
@@ -297,7 +354,11 @@ function SmallTable({
         </thead>
         <tbody>
           {rows.map(row => (
-            <tr key={row.id}>
+            <tr
+              key={row.id}
+              className={onRowClick ? 'master-click-row' : undefined}
+              onClick={() => onRowClick?.(row)}
+            >
               {tableColumns.map(([key]) => <td key={key}>{formatValue(row[key])}</td>)}
             </tr>
           ))}
@@ -322,6 +383,9 @@ export function MasterDataPage() {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<Record<string, unknown>>({});
   const [recordBusy, setRecordBusy] = useState(false);
+  const [childEditor, setChildEditor] = useState<ChildEditor>(null);
+  const [childDraft, setChildDraft] = useState<Record<string, unknown>>({});
+  const [childBusy, setChildBusy] = useState(false);
   const [allocatingId, setAllocatingId] = useState<string | null>(null);
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -426,6 +490,51 @@ export function MasterDataPage() {
       setError(err instanceof Error ? err.message : 'Unable to open the Site CRM.');
     } finally {
       setCrmLoading(false);
+    }
+  }
+
+  function openChildEditor(entity: string, title: string, row: MasterRecord, fields: EditableField[]) {
+    setChildEditor({ entity, title, row, fields });
+    setChildDraft({ ...row });
+  }
+
+  async function refreshOpenSiteCrm() {
+    if (!selected || activeTab !== 'sites') return;
+    setSiteCrm(await api.siteCrm(selected.id));
+  }
+
+  async function saveChildRecord() {
+    if (!childEditor) return;
+
+    setChildBusy(true);
+    setError(null);
+    try {
+      await api.updateMasterRecord(childEditor.entity, childEditor.row.id, childDraft);
+      await refreshOpenSiteCrm();
+      setChildEditor(null);
+      setChildDraft({});
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'The linked Site record could not be saved.');
+    } finally {
+      setChildBusy(false);
+    }
+  }
+
+  async function deleteChildRecord() {
+    if (!childEditor) return;
+    if (!window.confirm(`Delete this ${childEditor.title.toLowerCase()} record?`)) return;
+
+    setChildBusy(true);
+    setError(null);
+    try {
+      await api.deleteMasterRecord(childEditor.entity, childEditor.row.id);
+      await refreshOpenSiteCrm();
+      setChildEditor(null);
+      setChildDraft({});
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'The linked Site record could not be deleted.');
+    } finally {
+      setChildBusy(false);
     }
   }
 
