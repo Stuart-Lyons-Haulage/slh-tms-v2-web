@@ -74,11 +74,15 @@ const columns: Record<Exclude<MasterTab, 'review' | 'import'>, Column[]> = {
   ],
   fuelCards: [
     ['vehicleRegistration', 'Vehicle'],
-    ['provider', 'Provider'],
-    ['cardType', 'Card type'],
-    ['cardNumber', 'Card number'],
-    ['pin', 'PIN'],
-    ['notes', 'Notes'],
+    ['shellCardNumber', 'Shell card'],
+    ['shellPin', 'Shell PIN'],
+    ['shellNotes', 'Shell notes'],
+    ['bpRedCardNumber', 'BP Red card'],
+    ['bpRedPin', 'BP Red PIN'],
+    ['bpRedNotes', 'BP Red notes'],
+    ['bpPlainCardNumber', 'BP Plain card'],
+    ['bpPlainPin', 'BP Plain PIN'],
+    ['bpPlainNotes', 'BP Plain notes'],
   ],
   trailers: [
     ['trailerNumber', 'Trailer'],
@@ -167,11 +171,15 @@ const editableFields: Record<Exclude<MasterTab, 'review' | 'import'>, EditableFi
     { key: 'notes', label: 'Notes', type: 'textarea' },
   ],
   fuelCards: [
-    { key: 'provider', label: 'Provider' },
-    { key: 'cardType', label: 'Card type' },
-    { key: 'cardNumber', label: 'Card number' },
-    { key: 'pin', label: 'PIN' },
-    { key: 'notes', label: 'Notes', type: 'textarea' },
+    { key: 'shellCardNumber', label: 'Shell card number' },
+    { key: 'shellPin', label: 'Shell PIN' },
+    { key: 'shellNotes', label: 'Shell notes', type: 'textarea' },
+    { key: 'bpRedCardNumber', label: 'BP Red card number' },
+    { key: 'bpRedPin', label: 'BP Red PIN' },
+    { key: 'bpRedNotes', label: 'BP Red notes', type: 'textarea' },
+    { key: 'bpPlainCardNumber', label: 'BP Plain card number' },
+    { key: 'bpPlainPin', label: 'BP Plain PIN' },
+    { key: 'bpPlainNotes', label: 'BP Plain notes', type: 'textarea' },
   ],
   trailers: [
     { key: 'trailerNumber', label: 'Trailer number' },
@@ -227,8 +235,8 @@ function formatValue(value: unknown) {
 function formatTableValue(key: string, value: unknown) {
   if (value == null || value === '') return '—';
 
-  if (key === 'pin') return '••••';
-  if (key === 'cardNumber') {
+  if (key.toLowerCase().includes('pin')) return '••••';
+  if (key.toLowerCase().includes('cardnumber')) {
     const text = String(value).replace(/\s/g, '');
     return text.length <= 4 ? text : `•••• ${text.slice(-4)}`;
   }
@@ -427,7 +435,25 @@ export function MasterDataPage() {
     setRecordBusy(true);
     setError(null);
     try {
-      const updated = await api.updateMasterRecord(entitySlug(activeTab), selected.id, draft);
+      const updated = activeTab === 'fuelCards'
+        ? await api.updateVehicleFuelCards(String(selected.vehicleId ?? selected.id), {
+            shell: {
+              cardNumber: draft.shellCardNumber ?? null,
+              pin: draft.shellPin ?? null,
+              notes: draft.shellNotes ?? null,
+            },
+            bpRed: {
+              cardNumber: draft.bpRedCardNumber ?? null,
+              pin: draft.bpRedPin ?? null,
+              notes: draft.bpRedNotes ?? null,
+            },
+            bpPlain: {
+              cardNumber: draft.bpPlainCardNumber ?? null,
+              pin: draft.bpPlainPin ?? null,
+              notes: draft.bpPlainNotes ?? null,
+            },
+          })
+        : await api.updateMasterRecord(entitySlug(activeTab), selected.id, draft);
       setSelected(updated);
       setDraft({ ...updated });
       setEditing(false);
@@ -466,7 +492,11 @@ export function MasterDataPage() {
     setRecordBusy(true);
     setError(null);
     try {
-      await api.deleteMasterRecord(entitySlug(activeTab), selected.id);
+      if (activeTab === 'fuelCards') {
+        await api.clearVehicleFuelCards(String(selected.vehicleId ?? selected.id));
+      } else {
+        await api.deleteMasterRecord(entitySlug(activeTab), selected.id);
+      }
       setSelected(null);
       setSiteCrm(null);
       setEditing(false);
@@ -804,7 +834,8 @@ export function MasterDataPage() {
                   selected.vehicleRegistration ??
                   selected.trailerNumber ??
                   selected.code ??
-                  selected.provider,
+                  selected.provider ??
+                  selected.vehicleRegistration,
                 )}</h2>
                 <p className="muted">
                   {activeTab === 'sites'
@@ -828,7 +859,7 @@ export function MasterDataPage() {
                   </button>
                 )}
                 <button className="button danger" type="button" disabled={recordBusy} onClick={() => void deleteRecord()}>
-                  Delete
+                  {activeTab === 'fuelCards' ? 'Clear cards' : 'Delete'}
                 </button>
                 <button
                   className="button secondary"
