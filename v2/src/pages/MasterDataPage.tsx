@@ -1215,7 +1215,7 @@ export function MasterDataPage() {
                         ))}
                         {!siteCrm.knowledge.length && <p className="muted">No structured planner knowledge yet.</p>}
                       </div>
-                      {(siteCrm.site.plannerKnowledge || siteCrm.site.routingNotes) && (
+                      {Boolean(siteCrm.site.plannerKnowledge || siteCrm.site.routingNotes) && (
                         <div className="crm-detail-grid legacy-knowledge">
                           <div className="crm-field wide"><span>Planner notes</span><strong>{formatValue(siteCrm.site.plannerKnowledge)}</strong></div>
                           <div className="crm-field wide"><span>Routing intelligence</span><strong>{formatValue(siteCrm.site.routingNotes)}</strong></div>
