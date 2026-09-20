@@ -209,10 +209,21 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
-  decideReview: (id: string, decision: string, existingEntityId?: string | null, resolutionNotes?: string | null) =>
+  decideReview: (
+    id: string,
+    decision: string,
+    existingEntityId?: string | null,
+    resolutionNotes?: string | null,
+    newDriverType?: string | null,
+  ) =>
     request(`/api/v2/master/review/${id}/decision`, {
       method: 'POST',
-      body: JSON.stringify({ decision, existingEntityId: existingEntityId || null, resolutionNotes: resolutionNotes || null }),
+      body: JSON.stringify({
+        decision,
+        existingEntityId: existingEntityId || null,
+        resolutionNotes: resolutionNotes || null,
+        newDriverType: newDriverType || null,
+      }),
     }),
   siteCrm: (id: string) => request<SiteCrmProfile>(`/api/v2/master/sites/${id}/crm`),
   masterCounts: () => request<MasterCounts>('/api/v2/master/summary'),
