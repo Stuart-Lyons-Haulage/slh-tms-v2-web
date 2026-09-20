@@ -10,7 +10,7 @@ export function App() {
       <aside className="sidebar">
         <div className="brand">
           <span className="brand-mark">SLH</span>
-          <div><strong>Transport Management</strong><small>V2 audited foundation</small></div>
+          <div><strong>SLH TMS</strong><small>Master Data Foundation</small></div>
         </div>
         <nav>
           <NavLink to="/">Overview</NavLink>
