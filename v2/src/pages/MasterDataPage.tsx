@@ -562,6 +562,7 @@ export function MasterDataPage() {
   const [childBusy, setChildBusy] = useState(false);
   const [allocationSite, setAllocationSite] = useState<Record<string, string>>({});
   const [reviewLink, setReviewLink] = useState<Record<string, string>>({});
+  const [reviewCreateType, setReviewCreateType] = useState<Record<string, string>>({});
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<MasterWorkbookImportResult | null>(null);
@@ -643,6 +644,12 @@ export function MasterDataPage() {
     void loadRows(activeTab);
   }, [activeTab, loadRows]);
 
+  useEffect(() => {
+    if (activeTab === 'sites' && allCustomers.length === 0) {
+      void api.customers().then(setAllCustomers).catch(() => undefined);
+    }
+  }, [activeTab, allCustomers.length]);
+
   const filteredRows = useMemo(() => {
     let current = rows.filter(row => searchable(row, query));
     if (activeTab === 'drivers' && peopleFilter !== 'All') {
@@ -655,9 +662,24 @@ export function MasterDataPage() {
     ? []
     : columns[activeTab];
 
-  const activeFields = activeTab === 'review' || activeTab === 'governance' || activeTab === 'import'
-    ? []
-    : editableFields[activeTab];
+  const activeFields = useMemo<EditableField[]>(() => {
+    if (activeTab === 'review' || activeTab === 'governance' || activeTab === 'import') return [];
+    const base = editableFields[activeTab];
+    if (activeTab !== 'sites') return base;
+
+    return [
+      {
+        key: 'customerId',
+        label: 'Customer',
+        type: 'select',
+        options: allCustomers.map(customer => ({
+          value: customer.id,
+          label: optionLabel(customer),
+        })),
+      },
+      ...base,
+    ];
+  }, [activeTab, allCustomers]);
 
   function reviewOptions(item: MasterReviewItem) {
     const type = String(item.entityType || '').toLowerCase();
@@ -834,7 +856,13 @@ export function MasterDataPage() {
     setError(null);
     try {
       const selectedId = reviewLink[item.id] || item.suggestedEntityId || null;
-      await api.decideReview(item.id, decision, selectedId);
+      await api.decideReview(
+        item.id,
+        decision,
+        selectedId,
+        null,
+        item.entityType.toLowerCase() === 'driver' ? reviewCreateType[item.id] || null : null,
+      );
       await Promise.all([loadRows('review'), refreshCounts()]);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Review decision could not be saved.');
@@ -948,9 +976,31 @@ export function MasterDataPage() {
                       </label>
                     )}
 
+                    {item.entityType.toLowerCase() === 'driver' && (
+                      <label className="review-link-select">
+                        If creating, driver type
+                        <select
+                          value={reviewCreateType[item.id] ?? ''}
+                          onChange={event => setReviewCreateType(current => ({ ...current, [item.id]: event.target.value }))}
+                        >
+                          <option value="">Choose type…</option>
+                          <option value="Permanent">Permanent</option>
+                          <option value="Casual">Casual</option>
+                          <option value="Agency">Agency</option>
+                          <option value="Subcontractor">Subcontractor</option>
+                        </select>
+                      </label>
+                    )}
+
                     <div className="review-actions">
                       <button className="button" disabled={!((reviewLink[item.id] || item.suggestedEntityId))} onClick={() => void decideReview(item, 'link')}>Link existing</button>
-                      <button className="button secondary" onClick={() => void decideReview(item, 'create')}>Create new</button>
+                      <button
+                        className="button secondary"
+                        disabled={item.entityType.toLowerCase() === 'driver' && !reviewCreateType[item.id]}
+                        onClick={() => void decideReview(item, 'create')}
+                      >
+                        Create new
+                      </button>
                       <button className="button ghost" onClick={() => void decideReview(item, 'ignore')}>Ignore</button>
                     </div>
                   </article>
