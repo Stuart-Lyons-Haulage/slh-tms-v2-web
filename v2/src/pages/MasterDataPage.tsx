@@ -320,6 +320,11 @@ const childFields = {
     { key: 'location', label: 'Location / link' },
     { key: 'notes', label: 'Notes', type: 'textarea' },
   ] satisfies EditableField[],
+  market: [
+    { key: 'code', label: 'Market code' },
+    { key: 'name', label: 'Market name' },
+    { key: 'defaultInstructions', label: 'Default instructions', type: 'textarea' },
+  ] satisfies EditableField[],
 };
 
 function entitySlug(tab: MasterTab) {
@@ -596,8 +601,8 @@ export function MasterDataPage() {
           api.masterReview(),
           api.reviewAllocations(),
         ]);
-        setReviewItems(pending);
-        setRelationshipReview(allocations.filter(row => row.kind !== 'review'));
+        setReviewItems(pending.filter(item => String(item.key).startsWith('integration:')));
+        setRelationshipReview(allocations);
         setRows([]);
         await loadReferenceData();
         return;
@@ -704,9 +709,8 @@ export function MasterDataPage() {
     setSiteCrm(null);
 
     const entity = entitySlug(activeTab);
-    if (activeTab !== 'fuelCards') {
-      void api.masterHistory(entity, row.id).then(setHistory).catch(() => setHistory([]));
-    }
+    const historyId = activeTab === 'fuelCards' ? String(row.vehicleId) : row.id;
+    void api.masterHistory(entity, historyId).then(setHistory).catch(() => setHistory([]));
 
     if (activeTab === 'sites') {
       setCrmLoading(true);
@@ -768,9 +772,8 @@ export function MasterDataPage() {
       if (activeTab === 'sites') {
         setSiteCrm(await api.siteCrm(updated.id));
       }
-      if (activeTab !== 'fuelCards') {
-        setHistory(await api.masterHistory(entitySlug(activeTab), updated.id));
-      }
+      const historyId = activeTab === 'fuelCards' ? String(updated.vehicleId) : updated.id;
+      setHistory(await api.masterHistory(entitySlug(activeTab), historyId));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'The record could not be saved.');
     } finally {
@@ -1350,6 +1353,16 @@ export function MasterDataPage() {
                     </section>
 
                     <section className="crm-section">
+                      <SectionHeader eyebrow="Market linkage" title="Markets at this Site" count={siteCrm.markets.length} />
+                      <ChildTable
+                        rows={siteCrm.markets}
+                        tableColumns={[[ 'code', 'Code' ], [ 'name', 'Market' ], [ 'defaultInstructions', 'Instructions' ]]}
+                        empty="No Markets are linked to this Site."
+                        onOpen={row => openChild('markets', 'Market', childFields.market, row)}
+                      />
+                    </section>
+
+                    <section className="crm-section">
                       <SectionHeader
                         eyebrow="Documents"
                         title="Maps, plans, photos & instructions"
@@ -1398,17 +1411,15 @@ export function MasterDataPage() {
                       ))}
                     </div>
                   </section>
-                  {activeTab !== 'fuelCards' && (
-                    <section className="crm-section">
-                      <SectionHeader eyebrow="History" title="Audit trail" count={history.length} />
-                      <div className="audit-timeline">
-                        {history.map(entry => (
-                          <article key={entry.id}><span>{entry.action}</span><div><strong>{entry.updatedBy || 'System'}</strong><small>{new Date(entry.createdAtUtc).toLocaleString()}</small></div><em>{entry.sourceSystem || 'Manual'}</em></article>
-                        ))}
-                        {!history.length && <p className="muted">No audited changes yet.</p>}
-                      </div>
-                    </section>
-                  )}
+                  <section className="crm-section">
+                    <SectionHeader eyebrow="History" title="Audit trail" count={history.length} />
+                    <div className="audit-timeline">
+                      {history.map(entry => (
+                        <article key={entry.id}><span>{entry.action}</span><div><strong>{entry.updatedBy || 'System'}</strong><small>{new Date(entry.createdAtUtc).toLocaleString()}</small></div><em>{entry.sourceSystem || 'Manual'}</em></article>
+                      ))}
+                      {!history.length && <p className="muted">No audited changes yet.</p>}
+                    </div>
+                  </section>
                 </>
               )}
             </div>
