@@ -2,7 +2,7 @@ name: V2 Baseline CI
 
 on:
   push:
-    branches: [ "v2/foundation", "v2/baseline-audit" ]
+    branches: [ "v2/foundation", "v2/baseline-audit", "v2/master-data-package" ]
   pull_request:
     branches: [ "v2/foundation", "v2/baseline-audit" ]
 
