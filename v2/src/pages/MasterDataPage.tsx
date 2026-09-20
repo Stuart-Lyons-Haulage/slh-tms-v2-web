@@ -1117,6 +1117,7 @@ export function MasterDataPage() {
                           ['extendedCutoff', 'Extended cut-off'],
                         ]}
                         empty="No service-specific deadline rules are attached to this Site."
+                        onRowClick={row => openChildEditor('site-cutoffs', 'Deadline', row, siteChildEditors.cutoff)}
                       />
                     </section>
 
@@ -1138,6 +1139,7 @@ export function MasterDataPage() {
                           ['notes', 'Notes'],
                         ]}
                         empty="No customer contacts are allocated to this Site."
+                        onRowClick={row => openChildEditor('customer-contacts', 'Customer contact', row, siteChildEditors.contact)}
                       />
                     </section>
 
@@ -1161,6 +1163,7 @@ export function MasterDataPage() {
                           ['depotDeliveryDeadline', 'Planned arrival by'],
                         ]}
                         empty="No planner knowledge is allocated to this Site."
+                        onRowClick={row => openChildEditor('route-times', 'Planner knowledge', row, siteChildEditors.route)}
                       />
                     </section>
 
@@ -1170,11 +1173,25 @@ export function MasterDataPage() {
                         <span className="crm-count">{siteCrm.aliases.length + siteCrm.externalIdentities.length}</span>
                       </div>
                       <div className="crm-chip-list">
-                        {siteCrm.aliases.map(alias => <span key={alias.id}>{formatValue(alias.alias)}</span>)}
+                        {siteCrm.aliases.map(alias => (
+                          <button
+                            type="button"
+                            className="crm-chip-button"
+                            key={alias.id}
+                            onClick={() => openChildEditor('site-aliases', 'Site alias', alias, siteChildEditors.alias)}
+                          >
+                            {formatValue(alias.alias)}
+                          </button>
+                        ))}
                         {siteCrm.externalIdentities.map(identity => (
-                          <span key={identity.id}>
+                          <button
+                            type="button"
+                            className="crm-chip-button"
+                            key={identity.id}
+                            onClick={() => openChildEditor('external-identities', 'External identity', identity, siteChildEditors.identity)}
+                          >
                             {formatValue(identity.provider)} · {formatValue(identity.externalKey)}
-                          </span>
+                          </button>
                         ))}
                         {!siteCrm.aliases.length && !siteCrm.externalIdentities.length && (
                           <span className="muted">No linked aliases or external identities.</span>
@@ -1195,6 +1212,7 @@ export function MasterDataPage() {
                           ['defaultInstructions', 'Instructions'],
                         ]}
                         empty="No market records are linked to this Site."
+                        onRowClick={row => openChildEditor('markets', 'Market', row, siteChildEditors.market)}
                       />
                     </section>
 
@@ -1227,6 +1245,105 @@ export function MasterDataPage() {
                   </section>
                 )
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {childEditor && (
+        <div
+          className="crm-modal-backdrop child-modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Edit ${childEditor.title}`}
+          onMouseDown={event => {
+            if (event.target === event.currentTarget && !childBusy) {
+              setChildEditor(null);
+              setChildDraft({});
+            }
+          }}
+        >
+          <div className="crm-modal child-modal">
+            <div className="crm-modal-header">
+              <div>
+                <p className="eyebrow">Edit linked Site data</p>
+                <h2>{childEditor.title}</h2>
+                <p className="muted">Changes save back to the same canonical Master Data record.</p>
+              </div>
+              <button
+                className="button secondary"
+                type="button"
+                disabled={childBusy}
+                onClick={() => {
+                  setChildEditor(null);
+                  setChildDraft({});
+                }}
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="crm-modal-body">
+              <section className="crm-section crm-edit-section">
+                <div className="crm-edit-grid">
+                  {childEditor.fields.map(field => {
+                    const value = childDraft[field.key];
+
+                    if (field.type === 'checkbox') {
+                      return (
+                        <label className="crm-checkbox" key={field.key}>
+                          <input
+                            type="checkbox"
+                            checked={Boolean(value)}
+                            onChange={event => setChildDraft(current => ({ ...current, [field.key]: event.target.checked }))}
+                          />
+                          <span>{field.label}</span>
+                        </label>
+                      );
+                    }
+
+                    if (field.type === 'textarea') {
+                      return (
+                        <label className="crm-edit-field wide" key={field.key}>
+                          <span>{field.label}</span>
+                          <textarea
+                            rows={3}
+                            value={String(value ?? '')}
+                            onChange={event => setChildDraft(current => ({ ...current, [field.key]: event.target.value || null }))}
+                          />
+                        </label>
+                      );
+                    }
+
+                    return (
+                      <label className="crm-edit-field" key={field.key}>
+                        <span>{field.label}</span>
+                        <input
+                          type={field.type || 'text'}
+                          step={field.type === 'number' ? 'any' : undefined}
+                          value={String(value ?? '')}
+                          onChange={event => {
+                            const raw = event.target.value;
+                            const nextValue = field.type === 'number'
+                              ? (raw === '' ? null : Number(raw))
+                              : (raw === '' ? null : raw);
+                            setChildDraft(current => ({ ...current, [field.key]: nextValue }));
+                          }}
+                        />
+                      </label>
+                    );
+                  })}
+                </div>
+
+                <div className="crm-edit-actions">
+                  <button className="button" type="button" disabled={childBusy} onClick={() => void saveChildRecord()}>
+                    {childBusy ? 'Saving…' : 'Save changes'}
+                  </button>
+                  <button className="button danger" type="button" disabled={childBusy} onClick={() => void deleteChildRecord()}>
+                    Delete
+                  </button>
+                </div>
+              </section>
             </div>
           </div>
         </div>
