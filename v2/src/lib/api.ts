@@ -23,6 +23,12 @@ export type MasterReviewItem = MasterRecord & {
   summary: string;
   payloadJson?: string | null;
   resolved: boolean;
+  suggestedEntityId?: string | null;
+  suggestedConfidence?: number | null;
+  decision?: string | null;
+  resolvedEntityId?: string | null;
+  resolvedBy?: string | null;
+  resolvedAtUtc?: string | null;
   resolutionNotes?: string | null;
   createdAtUtc: string;
   updatedAtUtc: string;
@@ -37,6 +43,11 @@ export type SiteCrmProfile = {
   externalIdentities: MasterRecord[];
   routeTimes: MasterRecord[];
   customerContacts: MasterRecord[];
+  knowledge: MasterRecord[];
+  equipment: MasterRecord[];
+  bookingRules: MasterRecord[];
+  documents: MasterRecord[];
+  history: MasterAuditEntry[];
   reviewItems: MasterReviewItem[];
 };
 
@@ -47,6 +58,30 @@ export type ReviewAllocation = {
   summary: string;
   reference?: string | null;
   source?: string | null;
+};
+
+export type MasterAuditEntry = {
+  id: string;
+  entityType: string;
+  entityId: string;
+  action: string;
+  changesJson?: string | null;
+  sourceSystem?: string | null;
+  updatedBy?: string | null;
+  createdAtUtc: string;
+};
+
+export type FieldGovernance = {
+  id: string;
+  entityType: string;
+  fieldName: string;
+  owner: string;
+  sourceSystem?: string | null;
+  locked: boolean;
+  requiresReview: boolean;
+  confidence?: number | null;
+  updatedAtUtc: string;
+  notes?: string | null;
 };
 
 export type MasterCounts = {
@@ -64,6 +99,9 @@ export type MasterCounts = {
   fuelPrices: number;
   aliasCandidates: number;
   reviewItems: number;
+  siteKnowledge: number;
+  siteBookingRules: number;
+  siteDocuments: number;
 };
 
 export type MasterWorkbookImportResult = {
@@ -156,14 +194,46 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ kind, id, siteId }),
     }),
+
+  queueReviewCandidate: (payload: {
+    sourceSystem: string;
+    entityType: string;
+    externalKey: string;
+    displayName: string;
+    payloadJson?: string | null;
+    suggestedEntityId?: string | null;
+    confidence?: number | null;
+  }) =>
+    request('/api/v2/master/review/candidates', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  decideReview: (id: string, decision: string, existingEntityId?: string | null, resolutionNotes?: string | null) =>
+    request(`/api/v2/master/review/${id}/decision`, {
+      method: 'POST',
+      body: JSON.stringify({ decision, existingEntityId: existingEntityId || null, resolutionNotes: resolutionNotes || null }),
+    }),
   siteCrm: (id: string) => request<SiteCrmProfile>(`/api/v2/master/sites/${id}/crm`),
   masterCounts: () => request<MasterCounts>('/api/v2/master/summary'),
+
+  createMasterRecord: (entity: string, payload: Record<string, unknown>) =>
+    request<MasterRecord>(`/api/v2/master/${entity}`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
 
   updateMasterRecord: (entity: string, id: string, payload: Record<string, unknown>) =>
     request<MasterRecord>(`/api/v2/master/${entity}/${id}`, {
       method: 'PUT',
       body: JSON.stringify(payload),
     }),
+
+  masterHistory: (entity: string, id: string) =>
+    request<MasterAuditEntry[]>(`/api/v2/master/${entity}/${id}/history`),
+
+  governance: () =>
+    request<FieldGovernance[]>('/api/v2/master/governance'),
 
   deleteMasterRecord: async (entity: string, id: string) => {
     const response = await fetch(`${API_BASE}/api/v2/master/${entity}/${id}`, {
