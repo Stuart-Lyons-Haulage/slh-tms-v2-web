@@ -1072,7 +1072,7 @@ export function MasterDataPage() {
                   Search
                   <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search…" />
                 </label>
-                {activeTab !== 'fuelCards' && <button className="button" onClick={startCreate}>+ Add</button>}
+                {activeTab !== 'fuelCards' && activeTab !== 'markets' && <button className="button" onClick={startCreate}>+ Add</button>}
                 <button className="button secondary" disabled={loading} onClick={() => void loadRows(activeTab)}>{loading ? 'Loading…' : 'Refresh'}</button>
               </div>
             </div>
