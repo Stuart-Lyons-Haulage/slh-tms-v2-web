@@ -8,6 +8,7 @@ import { MasterDataOperational, type MasterDataTab } from './MasterDataOperation
 import { GeofenceOperational } from './GeofenceOperational';
 import { MasterDataCsvImport } from './MasterDataCsvImport';
 import { MasterDataDuplicateReviewPanel } from '../components/MasterDataDuplicateReviewPanel';
+import { NavLink } from 'react-router-dom';
 
 type MasterSection = MasterDataTab | 'fuel-cards' | 'markets' | 'fuel-prices';
 type DuplicateEntity = 'sites' | 'drivers' | 'vehicles' | 'trailers' | 'markets';
@@ -70,6 +71,10 @@ export function MasterDataHub({ initialSection = 'drivers' }: { initialSection?:
       {section === 'vehicles' && <FleetMasterUnified kind="vehicles" />}
       {section === 'trailers' && <FleetMasterUnified kind="trailers" />}
       {section === 'sites' && <>
+        <div className="panel roadrunner-review-link-panel" style={{ marginBottom: 18 }}>
+          <div><p className="eyebrow">RoadRunner identity governance</p><h2>RoadRunner Site Review</h2><p className="hint">Review imported RoadRunner identities, link them to active canonical Sites, selectively accept fields, or create a new SITE### record.</p></div>
+          <NavLink className="primary roadrunner-review-link" to="/master-data/roadrunner-review">Open RoadRunner review</NavLink>
+        </div>
         <MasterDataOperational initialTab="sites" showCategoryButtons={false} showHeading={false} />
         <div className="panel" style={{ marginTop: 18, marginBottom: 18 }}>
           <p className="eyebrow">Site execution evidence</p>

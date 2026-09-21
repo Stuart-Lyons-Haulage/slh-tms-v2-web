@@ -5,6 +5,7 @@ import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation } from 're
 const PlannerEnhanced = lazy(() => import('./pages/PlannerEnhanced').then(module => ({ default: module.PlannerEnhanced })));
 const PalletPlanningControl = lazy(() => import('./pages/PalletPlanningControl').then(module => ({ default: module.PalletPlanningControl })));
 const MasterDataHub = lazy(() => import('./pages/MasterDataHub').then(module => ({ default: module.MasterDataHub })));
+const RoadrunnerSiteReview = lazy(() => import('./pages/RoadrunnerSiteReview').then(module => ({ default: module.RoadrunnerSiteReview })));
 const DashboardOperational = lazy(() => import('./pages/DashboardOperational').then(module => ({ default: module.DashboardOperational })));
 const DailyCompliance = lazy(() => import('./pages/DailyCompliance').then(module => ({ default: module.DailyCompliance })));
 const NightOutReport = lazy(() => import('./pages/NightOutReport').then(module => ({ default: module.NightOutReport })));
@@ -109,6 +110,7 @@ function Shell() {
         <Route path="/dashboard" element={<DashboardOperational />} />
         <Route path="/pallet-control" element={<PalletPlanningControl />} />
         <Route path="/master-data" element={<MasterDataHub />} />
+        <Route path="/master-data/roadrunner-review" element={<RoadrunnerSiteReview />} />
         <Route path="/drivers" element={<MasterDataHub initialSection="drivers" />} />
         <Route path="/fleet-assets" element={<MasterDataHub initialSection="vehicles" />} />
         <Route path="/fuel-cards" element={<MasterDataHub initialSection="fuel-cards" />} />
