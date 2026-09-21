@@ -35,6 +35,7 @@ import { apiScope, useAccessToken } from './lib/auth';
 import { request } from './lib/api';
 import { connectPlanningEventStream } from './lib/planningEvents';
 import { startVisiblePolling } from './lib/visiblePolling';
+import { isDesktopApp } from './lib/desktop';
 import { TmsAssistant } from './components/TmsAssistant';
 import { GlobalSearch } from './components/GlobalSearch';
 import { HeaderIntelligence } from './components/HeaderIntelligence';
@@ -65,7 +66,22 @@ function Shell() {
   const [reviewOrderCount, setReviewOrderCount] = useState<number>();
   const location = useLocation();
   const tvMode = location.pathname === '/operations-wallboard/tv' || location.pathname === '/live-runs/tv' || location.pathname === '/tv';
-  const signIn = () => instance.loginRedirect({ scopes: apiScope ? [apiScope] : [] });
+  const signIn = async () => {
+    const request = { scopes: apiScope ? [apiScope] : [] };
+    if (!isDesktopApp()) {
+      await instance.loginRedirect(request);
+      return;
+    }
+    const result = await instance.loginPopup(request);
+    if (result.account) instance.setActiveAccount(result.account);
+  };
+  const signOut = async () => {
+    if (!isDesktopApp()) {
+      await instance.logoutRedirect({ account: accounts[0] });
+      return;
+    }
+    await instance.logoutPopup({ account: accounts[0] });
+  };
 
   useEffect(() => { setOpen(false); }, [location.pathname]);
 
@@ -97,7 +113,7 @@ function Shell() {
   const tvContent = <RouteErrorBoundary key={location.pathname + location.search}><Suspense fallback={loadingContent}><PublicTvBoard /></Suspense></RouteErrorBoundary>;
 
   return <div className={`app-shell ${authenticated && !tvMode ? 'with-system-strip top-navigation-shell' : ''} ${tvMode ? 'tv-public-mode' : ''}`}>
-    {!tvMode && <header className="top-app-header"><button className="menu" onClick={() => setOpen(!open)} aria-label="Toggle navigation" aria-expanded={open}>☰</button><NavLink className="brand" to="/dashboard"><span>SLH</span><small>Transport management</small></NavLink>{authenticated ? <div className="top-nav-search"><GlobalSearch /></div> : <div className="header-context"><b>Daily transport control</b></div>}<div className="header-actions">{authenticated ? <><span className="user">{accounts[0]?.name}</span><button onClick={() => instance.logoutRedirect()}>Sign out</button></> : <button className="primary" onClick={signIn} disabled={!apiScope}>Sign in with Microsoft</button>}</div></header>}
+    {!tvMode && <header className="top-app-header"><button className="menu" onClick={() => setOpen(!open)} aria-label="Toggle navigation" aria-expanded={open}>☰</button><NavLink className="brand" to="/dashboard"><span>SLH</span><small>Transport management</small></NavLink>{authenticated ? <div className="top-nav-search"><GlobalSearch /></div> : <div className="header-context"><b>Daily transport control</b></div>}<div className="header-actions">{authenticated ? <><span className="user">{accounts[0]?.name}</span><button onClick={() => void signOut()}>Sign out</button></> : <button className="primary" onClick={() => void signIn()} disabled={!apiScope>>Sign in with Microsoft</button>}</div></header>}
     {authenticated && !tvMode && <nav className={`top-navigation ${open ? 'mobile-open' : ''}`} aria-label="Primary TMS navigation"><NavLink className="top-nav-direct" to="/dashboard">Daily Dashboard</NavLink>{topNavigation.map(group => <TopNavGroup key={group.label} group={group} current={location.pathname} reviewOrderCount={reviewOrderCount} />)}</nav>}
     {authenticated && !tvMode && <div className="system-strip"><HeaderIntelligence /></div>}
     <main className={tvMode ? 'tv-main' : undefined}>{tvMode ? tvContent : authenticated ? <><Suspense fallback={loadingContent}>{location.pathname === '/management' && <ManagementStabilityBanner />}<RouteErrorBoundary key={location.pathname}><Routes>
