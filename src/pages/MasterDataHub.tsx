@@ -4,13 +4,12 @@ import { DriversMasterOperational } from './DriversMasterOperational';
 import { FleetMasterUnified } from './FleetMasterUnified';
 import { FuelCardsOperational } from './FuelCardsOperational';
 import { MarketsMasterClean } from './MarketsMasterClean';
-import { OrderIntakeMappingAdmin } from './OrderIntakeMappingAdmin';
 import { MasterDataOperational, type MasterDataTab } from './MasterDataOperational';
 import { GeofenceOperational } from './GeofenceOperational';
 import { MasterDataCsvImport } from './MasterDataCsvImport';
 import { MasterDataDuplicateReviewPanel } from '../components/MasterDataDuplicateReviewPanel';
 
-type MasterSection = MasterDataTab | 'fuel-cards' | 'markets' | 'fuel-prices' | 'intake-rules';
+type MasterSection = MasterDataTab | 'fuel-cards' | 'markets' | 'fuel-prices';
 type DuplicateEntity = 'sites' | 'drivers' | 'vehicles' | 'trailers' | 'markets';
 
 const sections: Array<{ key: MasterSection; label: string; detail: string }> = [
@@ -21,7 +20,6 @@ const sections: Array<{ key: MasterSection; label: string; detail: string }> = [
   { key: 'sites', label: 'Sites', detail: 'SQL site register for aliases, addresses, planning data and linked execution geofences.' },
   { key: 'customers', label: 'Customers', detail: 'SQL customer register for identity, trading name, account ownership, service notes and default site.' },
   { key: 'markets', label: 'Markets', detail: 'SQL market and contact register used by order intake and planning.' },
-  { key: 'intake-rules', label: 'Email & route rules', detail: 'SQL sender-to-customer mappings and evidence-based route rules used by email intake.' },
   { key: 'fuel-prices', label: 'Fuel prices', detail: 'SQL fuel pricing reference data.' },
 ];
 
@@ -46,7 +44,7 @@ export function MasterDataHub({ initialSection = 'drivers' }: { initialSection?:
       <div>
         <p className="eyebrow">TMS master data · SQL authority</p>
         <h1>Master data</h1>
-        <p className="intro">SQL is the single operational master for the TMS. Planning, dispatch, order intake and integrations read and update the same controlled records.</p>
+        <p className="intro">SQL is the single operational master for the TMS. Planning, compliance and integrations read the same controlled records.</p>
       </div>
       <div>
         <span className="status approved">SQL is authoritative</span>
@@ -83,7 +81,6 @@ export function MasterDataHub({ initialSection = 'drivers' }: { initialSection?:
       {section === 'customers' && <MasterDataOperational initialTab="customers" showCategoryButtons={false} showHeading={false} />}
       {section === 'fuel-cards' && <FuelCardsOperational />}
       {section === 'markets' && <MarketsMasterClean />}
-      {section === 'intake-rules' && <OrderIntakeMappingAdmin />}
       {section === 'fuel-prices' && <FuelMaster />}
     </div>
   </section>;
