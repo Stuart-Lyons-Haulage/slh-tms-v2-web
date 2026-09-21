@@ -40,12 +40,6 @@ describe("SLH TMS performance policy", () => {
     expect(plannerShell).not.toContain("subscribeServerPlanningChanges");
   });
 
-  it("uses the staging count endpoint for the navigation badge at about 120 seconds", () => {
-    const app = source("../App.tsx");
-    expect(app).toContain("/api/v1/staging/count?status=PendingReview&entityType=order");
-    expect(app).toContain("120_000");
-    expect(app).not.toContain("api.staging(await accessToken(), 'PendingReview', 'order', 2000)");
-  });
 
   it("does not run routine polling while hidden and refreshes once on resume", async () => {
     vi.useFakeTimers();

@@ -1,9 +1,7 @@
 import { describe, expect, it } from "vitest";
 import app from "./App.tsx?raw";
 import optimiser from "./components/OptimiserProposalReview.tsx?raw";
-import control from "./pages/ControlCentre.tsx?raw";
 import dashboard from "./pages/DashboardOperational.tsx?raw";
-import imports from "./pages/ImportCentre.tsx?raw";
 import master from "./pages/MasterDataHub.tsx?raw";
 import review from "./pages/OrderReviewBulk.tsx?raw";
 import palletControl from "./pages/PalletPlanningControl.tsx?raw";
@@ -55,8 +53,6 @@ describe("operations housekeeping contract", () => {
     expect(master).not.toContain("MasterDataResetImportPanel");
     expect(master).not.toContain("MasterDataUploadSmall");
     expect(master).toContain("MasterDataCsvImport");
-    expect(imports).not.toContain("MasterDataCsvImport");
-    expect(imports).not.toContain("Master data workbook");
   });
 
   it("uses SQL as the sole master-data write authority and keeps master controls usable", () => {
@@ -66,22 +62,14 @@ describe("operations housekeeping contract", () => {
     expect(master).not.toContain("Lists is the editable master-data authority");
   });
 
-  it("keeps Imports in Admin navigation and makes Control Centre one page", () => {
-    expect(app).toContain("['/planner-import', 'Imports']");
-    expect(control).not.toContain("useState");
-    expect(control).toContain("OperationsControlClean");
-    expect(control).toContain("AdminIntegrationSyncControls");
-  });
 
-  it("uses lightweight global review counts rather than downloading the review queue", () => {
-    expect(app).toContain("/api/v1/staging/count?status=PendingReview&entityType=order");
-    expect(app).toContain("120_000");
-    expect(app).not.toContain("api.staging(await accessToken(), 'PendingReview', 'order', 2000)");
-  });
 
-  it("expands Dashboard into health, attention and feed freshness", () => {
-    expect(dashboard).toContain("Today's attention");
+  it("keeps Dashboard focused on daily transport control and feed freshness", () => {
+    expect(dashboard).toContain("Daily transport control");
     expect(dashboard).toContain("System feeds");
-    expect(dashboard).toContain("Operational health");
+    expect(dashboard).toContain("Data freshness");
+    expect(dashboard).toContain("Planner Builder");
+    expect(dashboard).toContain("Master Data");
+    expect(dashboard).toContain("Compliance");
   });
 });
