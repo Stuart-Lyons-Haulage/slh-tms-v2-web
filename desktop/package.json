@@ -1,0 +1,13 @@
+{
+  "name": "slh-tms-desktop-host",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Desktop host for the existing SLH TMS V2 web application",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^44.0.0"
+  }
+}
