@@ -1,0 +1,50 @@
+name: Seed Clean V2 Web
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - ".github/workflows/seed-clean-v2.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  seed:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout target
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Pull canonical clean V2 web
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch "migration/v2-clean-web" \
+            https://github.com/Stuart-Lyons-Haulage/slh-tms-web.git /tmp/source
+          rm -rf /tmp/source/.git
+          rm -rf /tmp/source/v2
+          rm -rf /tmp/source/desktop
+          rm -f /tmp/source/.env.localtest
+
+      - name: Replace repository contents
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/keep/.github/workflows
+          cp .github/workflows/seed-clean-v2.yml /tmp/keep/.github/workflows/seed-clean-v2.yml
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp -a /tmp/source/. .
+          mkdir -p .github/workflows
+          cp /tmp/keep/.github/workflows/seed-clean-v2.yml .github/workflows/seed-clean-v2.yml
+          rm -f SEED.md
+
+      - name: Commit clean V2 baseline
+        run: |
+          set -euo pipefail
+          git config user.name "SLH V2 Migration"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "feat: establish clean blue-theme SLH TMS V2 web baseline"
+          git push origin HEAD:main
