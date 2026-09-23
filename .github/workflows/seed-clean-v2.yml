@@ -25,6 +25,7 @@ jobs:
           git clone --depth 1 --branch "migration/v2-clean-web" \
             https://github.com/Stuart-Lyons-Haulage/slh-tms-web.git /tmp/source
           rm -rf /tmp/source/.git
+          rm -rf /tmp/source/.github/workflows
           rm -rf /tmp/source/v2
           rm -rf /tmp/source/desktop
           rm -f /tmp/source/.env.localtest
