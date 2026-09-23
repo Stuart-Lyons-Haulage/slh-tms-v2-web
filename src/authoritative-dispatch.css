@@ -1,0 +1,272 @@
+.smart-dispatch-table.authoritative {
+  min-width: 1460px;
+}
+
+.smart-dispatch-table.authoritative th:nth-child(1) { width: 13%; }
+.smart-dispatch-table.authoritative th:nth-child(2) { width: 6%; }
+.smart-dispatch-table.authoritative th:nth-child(3) { width: 16%; }
+.smart-dispatch-table.authoritative th:nth-child(4) { width: 8%; }
+.smart-dispatch-table.authoritative th:nth-child(5) { width: 11%; }
+.smart-dispatch-table.authoritative th:nth-child(6) { width: 10%; }
+.smart-dispatch-table.authoritative th:nth-child(7) { width: 9%; }
+.smart-dispatch-table.authoritative th:nth-child(8) { width: 11%; }
+.smart-dispatch-table.authoritative th:nth-child(9) { width: 8%; }
+.smart-dispatch-table.authoritative th:nth-child(10) { width: 8%; }
+
+.smart-date-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border: 1px solid rgba(255,255,255,.3);
+  border-radius: 9px;
+  font-size: .75rem;
+  font-weight: 700;
+}
+
+.smart-date-control input {
+  min-height: 30px;
+  border: 0;
+  border-radius: 6px;
+  padding: 4px 6px;
+}
+
+.smart-status-cell,
+.smart-dispatch-action-cell {
+  display: table-cell;
+}
+
+.smart-status-pill {
+  display: inline-block;
+  padding: 4px 7px;
+  border-radius: 999px;
+  font-size: .7rem;
+  font-weight: 800;
+  border: 1px solid #d5dee5;
+  background: #f5f7f9;
+  color: #425c70;
+}
+
+.smart-status-pill.ready { background: #eef7ff; border-color: #bed8ee; color: #245574; }
+.smart-status-pill.awaiting { background: #fff7e8; border-color: #efd09a; color: #714b08; }
+.smart-status-pill.confirmed { background: #edf9f2; border-color: #bfe2cd; color: #145c36; }
+
+.smart-status-cell small,
+.smart-dispatch-action-cell small {
+  display: block;
+  margin-top: 5px;
+}
+
+.smart-dispatch-action-cell .smart-action {
+  width: 100%;
+  margin-bottom: 5px;
+}
+
+.smart-action.ghost.dark {
+  background: #fff;
+  color: #29485f;
+  border-color: #cdd8e2;
+}
+
+.smart-dispatch-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(5, 26, 40, .56);
+}
+
+.smart-dispatch-modal {
+  width: min(820px, 96vw);
+  max-height: 92vh;
+  overflow: auto;
+  padding: 18px;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 24px 70px rgba(5, 26, 40, .28);
+}
+
+.smart-dispatch-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.smart-dispatch-modal-head .smart-eyebrow { color: #126244; }
+.smart-dispatch-modal-head h2 { margin: 3px 0 4px; color: #163e5a; }
+.smart-dispatch-modal-head p { margin: 0 0 12px; color: #5c7183; font-size: .86rem; }
+
+.smart-dispatch-modal textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  min-height: 330px;
+  padding: 12px;
+  border: 1px solid #cdd8e2;
+  border-radius: 9px;
+  font: inherit;
+  line-height: 1.45;
+}
+
+.smart-dispatch-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+/* Production guard: the authoritative Smart Dispatch toolbar must remain visible.
+   A later stylesheet must not be able to collapse the operational controls. */
+.smart-dispatch-board > .smart-dispatch-header {
+  display: flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  position: relative !important;
+  width: auto !important;
+  height: auto !important;
+  min-height: 72px !important;
+  overflow: visible !important;
+  clip: auto !important;
+  clip-path: none !important;
+}
+
+.smart-dispatch-board > .smart-dispatch-header .smart-dispatch-actions {
+  display: flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+.smart-dispatch-board > .smart-dispatch-header .smart-date-control,
+.smart-dispatch-board > .smart-dispatch-header .smart-action {
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+.smart-dispatch-workspace {
+  display: grid;
+  grid-template-columns: minmax(220px, 260px) minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 0 12px 12px;
+}
+
+.smart-dispatch-workspace .smart-dispatch-table-wrap { margin: 0; }
+
+.smart-run-sidebar {
+  position: sticky;
+  top: 12px;
+  max-height: calc(100vh - 150px);
+  overflow: auto;
+  border: 1px solid #d3dde6;
+  border-radius: 11px;
+  background: #fff;
+}
+
+.smart-run-sidebar-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 11px;
+  background: #123f63;
+  color: #fff;
+}
+
+.smart-run-sidebar-head span {
+  min-width: 24px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.16);
+  text-align: center;
+  font-size: .72rem;
+  font-weight: 800;
+}
+
+.smart-run-sidebar > p {
+  margin: 0;
+  padding: 9px 10px;
+  border-bottom: 1px solid #e1e7ec;
+  color: #617483;
+  font-size: .7rem;
+  line-height: 1.3;
+}
+
+.smart-run-card-list {
+  display: grid;
+  gap: 7px;
+  padding: 8px;
+}
+
+.smart-run-card {
+  border: 1px solid #d5dfe7;
+  border-radius: 9px;
+  padding: 8px;
+  background: #fafdff;
+}
+
+.smart-run-card.available { border-left: 4px solid #23885b; }
+.smart-run-card.allocated { border-left: 4px solid #5e7d93; background: #f4f7f9; }
+
+.smart-run-card-title {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  align-items: center;
+}
+
+.smart-run-card-title strong { color: #153f63; }
+.smart-run-card-title span {
+  font-size: .62rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: #547084;
+}
+
+.smart-run-time {
+  margin: 5px 0 6px;
+  color: #126244;
+  font-size: .9rem;
+  font-weight: 900;
+}
+
+.smart-run-route {
+  display: grid;
+  gap: 5px;
+}
+
+.smart-run-route span {
+  display: grid;
+  gap: 1px;
+  color: #314f63;
+  font-size: .7rem;
+  line-height: 1.2;
+}
+
+.smart-run-route b {
+  color: #78909f;
+  font-size: .58rem;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.smart-run-card small {
+  display: block;
+  margin-top: 6px;
+  color: #637987;
+  font-size: .66rem;
+}
+
+.smart-run-card .smart-run-fit { color: #17633b; font-weight: 750; }
+.smart-run-card .smart-run-warning { color: #8a5c00; font-weight: 750; }
+
+@media (max-width: 1150px) {
+  .smart-dispatch-workspace { grid-template-columns: 1fr; }
+  .smart-run-sidebar { position: static; max-height: none; }
+  .smart-run-card-list { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+}

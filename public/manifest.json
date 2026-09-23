@@ -1,0 +1,31 @@
+{
+  "name": "SLH Operations Portal",
+  "short_name": "SLH TMS",
+  "description": "Stuart Lyons Haulage Transport Management System",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#063b5c",
+  "theme_color": "#063b5c",
+  "shortcuts": [
+    { "name": "Dashboard", "short_name": "Dashboard", "url": "/dashboard" },
+    { "name": "Planner", "short_name": "Planner", "url": "/" },
+    { "name": "Runs", "short_name": "Runs", "url": "/loads" },
+    { "name": "Imports", "short_name": "Imports", "url": "/planner-import" }
+  ],
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

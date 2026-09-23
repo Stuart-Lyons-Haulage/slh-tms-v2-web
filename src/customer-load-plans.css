@@ -1,0 +1,184 @@
+.customer-load-plan-launch {
+  border-color: #1f6b45 !important;
+  background: linear-gradient(135deg, #123b62, #1f6b45) !important;
+  color: #fff !important;
+  font-weight: 800;
+}
+
+.load-plan-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  background: rgba(8, 22, 36, 0.72);
+  backdrop-filter: blur(3px);
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.load-plan-modal {
+  width: min(1480px, 96vw);
+  max-height: 94vh;
+  overflow: auto;
+  border-radius: 18px;
+  background: var(--surface, #fff);
+  box-shadow: 0 24px 70px rgba(4, 20, 34, 0.28);
+  border: 1px solid rgba(18, 59, 98, 0.18);
+  padding: 22px;
+}
+
+.load-plan-modal-head {
+  position: sticky;
+  top: -22px;
+  z-index: 3;
+  margin: -22px -22px 18px;
+  padding: 20px 22px;
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  align-items: center;
+  background: linear-gradient(115deg, #0f3355, #14537a 62%, #1f6b45);
+  color: #fff;
+  border-radius: 18px 18px 0 0;
+}
+
+.load-plan-modal-head .eyebrow,
+.load-plan-modal-head .hint { color: rgba(255,255,255,.78); }
+.load-plan-modal-head h2 { margin: 2px 0 5px; color: #fff; }
+.load-plan-head-actions { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; justify-content: flex-end; }
+.load-plan-head-actions button { background: rgba(255,255,255,.12); border-color: rgba(255,255,255,.35); color: #fff; }
+
+/* The modal close action must remain reachable even if the application header or a
+   short viewport overlaps the modal's sticky header. */
+.load-plan-modal-backdrop .load-plan-head-actions button:last-child {
+  position: fixed;
+  top: 14px;
+  right: 18px;
+  z-index: 1305;
+  min-width: 82px;
+  background: #fff;
+  color: #123b62;
+  border: 1px solid rgba(18,59,98,.28);
+  box-shadow: 0 6px 22px rgba(4,20,34,.24);
+  font-weight: 850;
+}
+
+.load-plan-warning {
+  margin: 8px 0;
+  border: 1px solid #e4ba65;
+  background: #fff8e8;
+  color: #6f4b0c;
+  padding: 9px 12px;
+  border-radius: 9px;
+  font-size: 13px;
+}
+
+.load-plan-cards { display: grid; gap: 18px; }
+.load-plan-card {
+  border: 1px solid #cfd8e1;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 5px 18px rgba(13, 40, 63, .06);
+}
+.load-plan-card-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 15px 17px;
+  border-bottom: 1px solid #dbe2e8;
+  background: #f8fbfd;
+}
+.load-plan-card-title h3 { margin: 3px 0 2px; color: #123b62; }
+.load-plan-customer-code {
+  display: inline-flex;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: #e5f1ec;
+  color: #17613f;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .04em;
+}
+.load-plan-state { display: flex; align-items: flex-end; flex-direction: column; gap: 4px; }
+.load-plan-state-pill { border-radius: 999px; padding: 5px 9px; font-size: 12px; font-weight: 800; background: #e9eef3; color: #33495c; }
+.load-plan-state-pill.queued { background: #fff0cc; color: #78520a; }
+.load-plan-state-pill.sent { background: #dff3e7; color: #17613f; }
+.load-plan-state-pill.failed { background: #fde5e2; color: #9b2c20; }
+
+.load-plan-attachment {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 17px;
+  border-bottom: 1px solid #e2e7ec;
+}
+.load-plan-attachment div { display: flex; flex-direction: column; min-width: 0; }
+.load-plan-attachment strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.load-plan-file-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  background: #123b62;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.load-plan-mini-table { margin: 0 17px 14px; border: 1px solid #dae1e7; border-radius: 10px; overflow: hidden; }
+.load-plan-mini-head,
+.load-plan-mini-row {
+  display: grid;
+  grid-template-columns: 110px minmax(250px, 2.1fr) 70px 80px minmax(180px, 1.2fr);
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+}
+.load-plan-mini-head { background: #153f63; color: #fff; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; }
+.load-plan-mini-row { border-top: 1px solid #e3e8ed; font-size: 12px; }
+.load-plan-mini-row:nth-child(odd) { background: #f8fafb; }
+.load-plan-mini-row > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.load-plan-mini-row small { display: block; color: #677783; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; }
+.load-plan-more { padding: 8px 10px; background: #f3f7f9; color: #526675; font-size: 12px; font-weight: 700; }
+
+.load-plan-email-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 11px 14px;
+  padding: 0 17px 15px;
+}
+.load-plan-email-grid label { display: flex; flex-direction: column; gap: 5px; font-size: 12px; font-weight: 700; color: #33495c; }
+.load-plan-email-grid input,
+.load-plan-email-grid textarea { width: 100%; box-sizing: border-box; }
+.load-plan-subject,
+.load-plan-body { grid-column: 1 / -1; }
+.load-plan-body textarea { resize: vertical; min-height: 116px; }
+
+.load-plan-card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 17px;
+  background: #eef5f2;
+  border-top: 1px solid #d5e4dc;
+  color: #315144;
+  font-size: 12px;
+}
+.load-plan-card-actions .primary { min-width: 210px; font-weight: 900; letter-spacing: .02em; }
+
+@media (max-width: 900px) {
+  .load-plan-modal-backdrop { padding: 8px; }
+  .load-plan-modal { width: 98vw; padding: 14px; max-height: 97vh; }
+  .load-plan-modal-head { margin: -14px -14px 14px; top: -14px; padding: 14px; align-items: flex-start; flex-direction: column; }
+  .load-plan-email-grid { grid-template-columns: 1fr; }
+  .load-plan-subject, .load-plan-body { grid-column: auto; }
+  .load-plan-mini-table { overflow-x: auto; }
+  .load-plan-mini-head, .load-plan-mini-row { min-width: 810px; }
+  .load-plan-card-actions { align-items: stretch; flex-direction: column; }
+  .load-plan-modal-backdrop .load-plan-head-actions button:last-child { top: 8px; right: 8px; }
+}

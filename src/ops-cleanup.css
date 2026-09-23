@@ -1,0 +1,122 @@
+/* 18 Aug operational simplification: TMS is an operational system, not a costing tool. */
+.commercial-editor,
+.negative-margin {
+  display: none !important;
+}
+
+/* Manual contingency now lives in Import Centre only. */
+.order-review-page .import-panel {
+  display: none !important;
+}
+
+.import-centre-heading {
+  margin-bottom: 18px;
+}
+.import-centre-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+.import-centre-body > section > .page-heading:first-child,
+.import-centre-body > .orders-operational > .title-row:first-child {
+  margin-top: 0;
+}
+.import-subpage {
+  display: grid;
+  gap: 16px;
+}
+.import-centre-metrics {
+  margin: 8px 0 14px;
+}
+
+.dashboard-readiness {
+  margin-bottom: 18px;
+  overflow: hidden;
+}
+.readiness-picture {
+  border-radius: 14px;
+  padding: 18px;
+  margin-top: 12px;
+  border: 2px solid #d7e2e7;
+  background: linear-gradient(135deg, #f6f9fa, #eef4f6);
+}
+.readiness-picture.ready {
+  border-color: #5e9875;
+  background: linear-gradient(135deg, #edf8f1, #f8fcf9);
+}
+.readiness-picture.not-ready {
+  border-color: #c99a56;
+  background: linear-gradient(135deg, #fff8ea, #fffdf8);
+}
+.readiness-picture-state {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+.readiness-picture-state > span {
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-size: 28px;
+  font-weight: 900;
+  background: #fff;
+  border: 1px solid currentColor;
+}
+.readiness-picture-state strong {
+  display: block;
+  font-size: clamp(1.15rem, 2vw, 1.65rem);
+  letter-spacing: .02em;
+}
+.readiness-picture-state small {
+  display: block;
+  margin-top: 3px;
+}
+.readiness-picture-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
+  gap: 9px;
+}
+.readiness-picture-grid article {
+  background: rgba(255,255,255,.82);
+  border: 1px solid #d8e3e7;
+  border-radius: 9px;
+  padding: 10px;
+  display: grid;
+  gap: 2px;
+}
+.readiness-picture-grid article.attention { border-color: #d5a256; }
+.readiness-picture-grid article.good { border-color: #82ad92; }
+.readiness-picture-grid article strong { font-size: 1.25rem; }
+.readiness-picture-grid article small { color: #607685; }
+.readiness-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 12px;
+}
+
+.run-lock-control {
+  margin-bottom: 18px;
+}
+.run-lock-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 13px;
+  border-radius: 10px;
+  background: #f4f8fa;
+}
+.run-lock-status div {
+  display: grid;
+  gap: 2px;
+}
+
+@media (max-width: 720px) {
+  .run-lock-status { align-items: stretch; flex-direction: column; }
+  .readiness-picture { padding: 14px; }
+}

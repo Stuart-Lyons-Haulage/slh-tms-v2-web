@@ -1,0 +1,399 @@
+/* Mobile-first operational refinements. Desktop layout is intentionally unchanged. */
+@media (max-width: 700px) {
+  html,
+  body,
+  #root {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  /* Give the signed-in mobile header a dedicated search row instead of
+     squeezing menu, brand, search and account controls into one line. */
+  .with-system-strip header {
+    height: 112px;
+    display: grid;
+    grid-template-columns: 40px auto minmax(0, 1fr) auto;
+    grid-template-rows: 40px 42px;
+    align-items: center;
+    gap: 8px;
+    padding: 10px max(12px, env(safe-area-inset-right)) 10px max(12px, env(safe-area-inset-left));
+  }
+
+  .with-system-strip .menu {
+    grid-column: 1;
+    grid-row: 1;
+    width: 40px;
+    min-height: 40px;
+    font-size: 1.35rem;
+  }
+
+  .with-system-strip .brand {
+    grid-column: 2;
+    grid-row: 1;
+    min-width: 0;
+  }
+
+  .with-system-strip .brand span {
+    font-size: 1.25rem;
+  }
+
+  .with-system-strip .header-actions {
+    grid-column: 4;
+    grid-row: 1;
+    gap: 6px;
+  }
+
+  .with-system-strip .header-actions button {
+    min-height: 40px;
+    padding: .45rem .65rem;
+    font-size: .78rem;
+    white-space: nowrap;
+  }
+
+  .with-system-strip .global-search {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    width: 100%;
+    max-width: none;
+    margin: 0;
+  }
+
+  .global-search input {
+    min-height: 42px;
+    font-size: 16px;
+  }
+
+  .global-search-results {
+    top: 46px;
+    max-height: min(52vh, 420px);
+  }
+
+  .system-strip {
+    top: 112px;
+    height: 36px;
+    padding: 0 max(12px, env(safe-area-inset-right)) 0 max(12px, env(safe-area-inset-left));
+  }
+
+  .with-system-strip .side-nav {
+    top: 148px;
+  }
+
+  .with-system-strip main {
+    margin-top: 148px;
+  }
+
+  .side-nav {
+    width: min(86vw, 320px);
+    z-index: 8;
+    padding: 18px 12px calc(36px + env(safe-area-inset-bottom));
+    box-shadow: 12px 0 30px rgba(8, 46, 71, .24);
+  }
+
+  .side-nav a,
+  .nav-toggle,
+  .new-order {
+    min-height: 44px;
+    display: flex !important;
+    align-items: center;
+  }
+
+  main {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    padding: 18px 12px calc(72px + env(safe-area-inset-bottom));
+  }
+
+  h1 {
+    font-size: 1.55rem;
+    line-height: 1.12;
+    margin-bottom: 1.25rem;
+  }
+
+  .title-row,
+  .management-heading,
+  .intel-heading,
+  .management-section-heading {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  /* 44px touch targets and 16px fields avoid accidental taps and iOS form zoom. */
+  button,
+  .button-link {
+    min-height: 44px;
+  }
+
+  input,
+  select,
+  textarea {
+    max-width: 100%;
+    font-size: 16px !important;
+  }
+
+  input:not([type="checkbox"]):not([type="radio"]),
+  select {
+    min-height: 44px;
+  }
+
+  textarea {
+    min-height: 88px;
+  }
+
+  .metrics,
+  .management-kpis,
+  .review-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .metric,
+  .management-kpi,
+  .review-metrics article,
+  .intel-summary article {
+    padding: 13px;
+  }
+
+  .metric strong,
+  .management-kpi strong,
+  .review-metrics strong,
+  .intel-summary strong {
+    font-size: 1.45rem;
+  }
+
+  .tracking-grid,
+  .master-grid,
+  .allocation-load-list,
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .panel,
+  .management-panel,
+  .order-review-card,
+  .lock-panel,
+  .readiness-banner {
+    padding: 14px;
+  }
+
+  .panel a {
+    margin-left: 0;
+  }
+
+  /* Tables remain complete, but use the full phone width and momentum scrolling. */
+  .table-wrap,
+  .management-table-wrap {
+    width: calc(100% + 24px);
+    margin-left: -12px;
+    margin-right: -12px;
+    border-left: 0;
+    border-right: 0;
+    border-radius: 0;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+  }
+
+  table,
+  .management-table,
+  .data-table {
+    min-width: 660px;
+  }
+
+  th,
+  td,
+  .management-table th,
+  .management-table td {
+    padding: 11px 12px;
+  }
+
+  .actions,
+  .review-actions,
+  .management-actions,
+  .title-actions {
+    width: 100%;
+    gap: 8px;
+  }
+
+  .actions button,
+  .review-actions button,
+  .management-actions button,
+  .title-actions button {
+    flex: 1 1 auto;
+  }
+
+  .management-filters,
+  .review-toolbar,
+  .reset-controls,
+  .master-filters {
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .management-filters label,
+  .review-toolbar label,
+  .reset-controls label,
+  .master-filter {
+    width: 100%;
+  }
+
+  .management-filters input,
+  .management-filters select,
+  .review-toolbar input,
+  .reset-controls input,
+  .master-filter input,
+  .master-filter select {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .management-presets {
+    width: 100%;
+  }
+
+  .management-presets button {
+    flex: 1;
+  }
+
+  .management-filters > .primary {
+    width: 100%;
+  }
+
+  .date-pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    width: 100%;
+  }
+
+  .date-pair label,
+  .date-pair input {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .attention-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px 12px;
+    padding: 13px;
+  }
+
+  .attention-row .severity {
+    grid-column: 1 / -1;
+  }
+
+  .attention-row > div {
+    grid-column: 1;
+    min-width: 0;
+  }
+
+  .attention-row .open-arrow {
+    grid-column: 2;
+    grid-row: 2;
+    align-self: center;
+  }
+
+  .readiness-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .timeline {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .timeline-card,
+  .timeline-card p,
+  .timeline-card small {
+    overflow-wrap: anywhere;
+  }
+
+  .management-period {
+    align-items: flex-start;
+  }
+
+  .management-stat-list {
+    grid-template-columns: 1fr;
+  }
+
+  .eta-precision-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .order-review-card header {
+    position: static;
+    inset: auto;
+    height: auto;
+    padding: 0;
+    background: transparent;
+    color: inherit;
+  }
+
+  .review-toolbar > span {
+    margin-left: 0;
+    padding-bottom: 0;
+  }
+
+  .review-fields,
+  .source-evidence,
+  .reset-preview {
+    grid-template-columns: 1fr;
+  }
+
+  .tab-bar {
+    width: calc(100% + 24px);
+    margin-left: -12px;
+    padding: 0 12px;
+    overflow-x: auto;
+    white-space: nowrap;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .tab-bar .tab {
+    flex: 0 0 auto;
+    min-height: 44px;
+  }
+
+  .vehicle-detail-panel,
+  .vehicle-detail-main {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .tacho-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .state {
+    padding: 28px 14px;
+  }
+
+  .tms-assistant {
+    max-width: calc(100vw - 24px);
+  }
+}
+
+@media (max-width: 420px) {
+  .metrics,
+  .management-kpis,
+  .review-metrics,
+  .readiness-grid,
+  .eta-precision-grid,
+  .tacho-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .date-pair {
+    grid-template-columns: 1fr;
+  }
+
+  .with-system-strip .header-actions button {
+    padding-inline: .5rem;
+    font-size: .72rem;
+  }
+
+  .with-system-strip .brand span {
+    font-size: 1.15rem;
+  }
+}

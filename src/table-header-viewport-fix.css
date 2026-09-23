@@ -1,0 +1,66 @@
+/* Run identity is system-derived: RUN X + AM/PM. Route/job is not a planner-entered name. */
+.planner-enhanced-page .simple-run-details > label:first-child {
+  display: none !important;
+}
+.planner-enhanced-page .simple-run-header > div:first-child > strong {
+  text-transform: uppercase;
+}
+
+@media (min-width: 901px) {
+  /* Do not pin every table header to the browser viewport. Individual data grids
+     can keep their own local sticky behaviour inside their scroll container. */
+  .top-navigation-shell table th {
+    position: static !important;
+    top: auto !important;
+    z-index: auto !important;
+  }
+
+  /* Driver Dispatch is a genuine scrollable workbench, so retain a compact
+     two-row header locally rather than letting it float over the whole page. */
+  .top-navigation-shell .dispatch-table-wrap {
+    max-height: calc(100vh - 190px);
+    overflow: auto;
+  }
+  .top-navigation-shell .dispatch-table thead tr:first-child th {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 6 !important;
+    padding-top: 5px !important;
+    padding-bottom: 5px !important;
+    line-height: 1.05 !important;
+  }
+  .top-navigation-shell .dispatch-table .dispatch-filter-row th {
+    position: sticky !important;
+    top: 22px !important;
+    z-index: 7 !important;
+    padding-top: 3px !important;
+    padding-bottom: 3px !important;
+  }
+  .top-navigation-shell .dispatch-filter-row input {
+    min-height: 22px !important;
+    height: 22px !important;
+    padding: 2px 4px !important;
+    font-size: 10px !important;
+  }
+
+  /* Keep ordinary table headings compact and visible without dominating rows. */
+  .top-navigation-shell table thead th {
+    line-height: 1.1 !important;
+    vertical-align: middle;
+  }
+  .top-navigation-shell .dispatch-table td {
+    padding-top: 5px !important;
+    padding-bottom: 5px !important;
+  }
+
+  .planner-enhanced-page .simple-run-details {
+    grid-template-columns: auto minmax(260px, 1fr) !important;
+  }
+
+  .dispatch-text-first-modal .title-row {
+    margin-bottom: 8px !important;
+  }
+  .dispatch-text-first-modal textarea {
+    min-height: 320px;
+  }
+}

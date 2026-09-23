@@ -1,0 +1,284 @@
+/* iPhone/mobile application shell. Loaded after the legacy responsive rules. */
+.mobile-dock,
+.mobile-nav-search,
+.mobile-sign-out,
+.mobile-nav-scrim { display: none; }
+
+@media (max-width: 700px) {
+  html { -webkit-text-size-adjust: 100%; }
+  html, body, #root, .app-shell { min-height: 100%; width: 100%; max-width: 100%; }
+  body { overscroll-behavior-y: none; }
+
+  /* Compact iPhone header: navigation and brand only. Search moves into More. */
+  .with-system-strip header,
+  header {
+    height: calc(58px + env(safe-area-inset-top));
+    min-height: calc(58px + env(safe-area-inset-top));
+    display: grid;
+    grid-template-columns: 44px 1fr 44px;
+    grid-template-rows: 58px;
+    align-items: center;
+    gap: 6px;
+    padding: env(safe-area-inset-top) max(10px, env(safe-area-inset-right)) 0 max(10px, env(safe-area-inset-left));
+    z-index: 30;
+  }
+  .with-system-strip .menu,
+  .menu {
+    display: grid;
+    place-items: center;
+    grid-column: 1;
+    grid-row: 1;
+    width: 44px;
+    height: 44px;
+    min-height: 44px;
+    font-size: 1.25rem;
+  }
+  .with-system-strip .brand,
+  .brand {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: center;
+    min-width: 0;
+    text-decoration: none;
+  }
+  .with-system-strip .brand span,
+  .brand span { font-size: 1.28rem; }
+  .brand small { display: block; font-size: .68rem; letter-spacing: .01em; white-space: nowrap; }
+  header > .global-search,
+  .with-system-strip header > .global-search,
+  .with-system-strip .header-actions,
+  .header-actions { display: none !important; }
+  .system-strip { display: none !important; }
+
+  .with-system-strip main,
+  main {
+    margin: calc(58px + env(safe-area-inset-top)) 0 0;
+    padding: 14px 10px calc(94px + env(safe-area-inset-bottom));
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  /* Full-height slide-out menu, independent of page scroll. */
+  .with-system-strip .side-nav,
+  .side-nav {
+    display: block;
+    position: fixed;
+    inset: 0 auto 0 0;
+    top: 0;
+    bottom: 0;
+    width: min(88vw, 340px);
+    height: 100dvh;
+    transform: translateX(-105%);
+    z-index: 60;
+    padding: calc(14px + env(safe-area-inset-top)) 12px calc(24px + env(safe-area-inset-bottom));
+    box-shadow: 14px 0 36px rgba(8, 46, 71, .28);
+    background: #082e47;
+  }
+  .side-nav.open { transform: translateX(0); }
+  .mobile-nav-scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 55;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    border-radius: 0;
+    background: rgba(4, 23, 36, .46);
+    padding: 0;
+  }
+  .mobile-nav-search { display: block; margin: 4px 2px 14px; position: relative; }
+  .mobile-nav-search .global-search { display: block !important; width: 100%; max-width: none; margin: 0; }
+  .mobile-nav-search .global-search input { width: 100%; min-height: 46px; font-size: 16px !important; }
+  .mobile-nav-search .global-search-results { position: absolute; top: 48px; left: 0; right: 0; z-index: 80; max-height: 46vh; }
+  .mobile-sign-out {
+    display: block;
+    width: 100%;
+    margin-top: 18px;
+    min-height: 46px;
+    color: #dbe8ed;
+    border-color: rgba(219, 232, 237, .25);
+    background: rgba(255,255,255,.06);
+    text-align: left;
+  }
+
+  /* Thumb navigation for the four daily screens used most often. */
+  .mobile-dock {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 50;
+    min-height: calc(64px + env(safe-area-inset-bottom));
+    padding: 5px max(6px, env(safe-area-inset-right)) env(safe-area-inset-bottom) max(6px, env(safe-area-inset-left));
+    border-top: 1px solid #cfdde1;
+    background: rgba(255,255,255,.97);
+    box-shadow: 0 -8px 24px rgba(8,46,71,.09);
+    backdrop-filter: blur(16px);
+  }
+  .mobile-dock a,
+  .mobile-dock button {
+    min-width: 0;
+    min-height: 58px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    padding: 4px 2px;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    color: #56707d;
+    text-decoration: none;
+    font-weight: 700;
+  }
+  .mobile-dock a span,
+  .mobile-dock button span { font-size: 1.18rem; line-height: 1; }
+  .mobile-dock a small,
+  .mobile-dock button small { font-size: .61rem; white-space: nowrap; }
+  .mobile-dock a.active { color: #006d6c; background: #edf8f5; }
+
+  /* Keep pages narrow and controls finger-friendly. */
+  h1 { font-size: 1.45rem; line-height: 1.12; margin: .15rem 0 1rem; }
+  h2 { line-height: 1.25; }
+  p.intro, .intro { font-size: .9rem; }
+  .title-row,
+  .management-heading,
+  .intel-heading,
+  .resource-board-heading,
+  .rollout-heading,
+  .op-planner-header { display: flex; flex-direction: column; align-items: stretch; gap: 10px; }
+  .title-actions,
+  .actions,
+  .management-actions,
+  .review-actions,
+  .op-header-actions { width: 100%; display: grid; grid-template-columns: 1fr; gap: 8px; }
+  .title-actions > *, .actions > *, .management-actions > *, .review-actions > *, .op-header-actions > * { width: 100%; min-width: 0; }
+  .title-actions label, .op-header-actions label { display: grid; gap: 4px; }
+
+  button, .button-like, .button-link, input, select { min-height: 44px; }
+  input, select, textarea { width: 100%; max-width: 100%; min-width: 0; font-size: 16px !important; }
+
+  .panel,
+  .management-panel,
+  .order-review-card,
+  .lock-panel,
+  .readiness-banner,
+  .vehicle-detail-panel {
+    max-width: 100%;
+    min-width: 0;
+    padding: 13px;
+    border-radius: 10px;
+  }
+  .panel { align-items: stretch; }
+  .panel > * { min-width: 0; max-width: 100%; }
+
+  .metrics,
+  .management-kpis,
+  .review-metrics,
+  .intel-summary,
+  .readiness-grid,
+  .master-counts {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px;
+  }
+  .metric, .management-kpi, .review-metrics article, .intel-summary article, .master-counts article { padding: 11px; }
+  .metric strong, .management-kpi strong, .review-metrics strong, .intel-summary strong, .master-counts strong { font-size: 1.3rem; }
+  .metric small, .management-kpi small { font-size: .72rem; }
+
+  /* Horizontal datasets remain complete but no longer force the whole page wider. */
+  .table-wrap,
+  .management-table-wrap,
+  .master-table-wrap,
+  .structured-preview,
+  .table-scroll {
+    width: calc(100% + 20px) !important;
+    max-width: none !important;
+    margin-left: -10px !important;
+    margin-right: -10px !important;
+    overflow-x: auto !important;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    border-left: 0 !important;
+    border-right: 0 !important;
+    border-radius: 0 !important;
+  }
+  table, .data-table, .management-table { min-width: 640px; }
+  th, td { padding: 9px 10px; font-size: .79rem; }
+  th { font-size: .64rem; }
+  .master-table-wrap th:first-child,
+  .master-table-wrap td:first-child { position: sticky; left: 0; z-index: 3; background: #fff; }
+  .master-table-wrap thead th:first-child { z-index: 6; background: #eef4f5; }
+
+  /* Import Centre becomes three large mobile tabs. */
+  .import-centre-heading { display: block; }
+  .import-centre-tabs { display: grid !important; grid-template-columns: 1fr; gap: 7px; width: 100%; margin-top: 10px; }
+  .import-centre-tabs button { width: 100%; }
+  .file-drop { width: 100%; min-height: 112px; }
+
+  /* Planner: Runs first, jobs second, map last. Desktop drag/drop remains; mobile uses tap buttons. */
+  .operational-planner { width: 100%; min-width: 0; }
+  .op-metrics { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 7px; }
+  .op-metrics span { min-width: 0; padding: 8px 9px; font-size: .75rem; }
+  .op-workspace {
+    display: flex !important;
+    flex-direction: column;
+    width: 100%;
+    height: auto !important;
+    min-height: 0 !important;
+    gap: 10px;
+  }
+  .op-runs-column { order: 1 !important; min-height: 0 !important; max-height: none; }
+  .op-jobs-column { order: 2 !important; min-height: 0 !important; max-height: none; }
+  .op-map-panel { order: 3 !important; min-height: 0 !important; }
+  .op-run-list, .op-job-list { max-height: none; overflow: visible; }
+  .op-new-run { display: none; }
+  .op-job-card { cursor: default; }
+  .op-job-card > div:last-child { display: grid !important; grid-template-columns: 1fr !important; }
+  .op-job-card > div:last-child button { width: 100%; }
+  .op-allocation { grid-template-columns: 1fr; }
+  .op-map-panel > div[style] { min-height: 0 !important; }
+  .op-map-panel iframe { min-height: 240px !important; height: 240px !important; max-height: 240px; }
+  .op-map-panel div[style*="max-height"] { max-height: 120px !important; }
+  .planner-desktop-secondary { display: none !important; }
+
+  /* Pallet control remains a second-screen matrix on desktop but can be inspected on phone. */
+  .pallet-mobile-note { display: block; }
+  .master-table-wrap table.master-table { font-size: .78rem; }
+  .master-table-wrap table.master-table th[style*="writing-mode"] { height: 118px !important; min-width: 72px !important; }
+
+  /* Vehicle/tacho/dashboard blocks stack naturally. */
+  .vehicle-detail-panel, .vehicle-detail-main { display: block; width: 100%; }
+  .tacho-detail { border-left: 0; border-top: 1px solid #c9dfda; padding: 12px 0 0; margin-top: 12px; }
+  .tacho-metrics { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .tracking-grid, .master-grid, .allocation-load-list, .form-grid, .management-two-column { grid-template-columns: 1fr !important; }
+  .fleet-view-filter { width: 100%; display: grid; gap: 6px; }
+  .fleet-view-filter label, .fleet-view-filter select { width: 100%; }
+
+  /* Assistant is a mobile sheet and never sits underneath the dock. */
+  .tms-assistant { right: 10px !important; bottom: calc(76px + env(safe-area-inset-bottom)) !important; max-width: calc(100vw - 20px) !important; z-index: 52 !important; }
+  .tms-assistant.open { left: 10px; width: auto !important; }
+  .assistant-panel { width: calc(100vw - 20px) !important; max-width: none !important; max-height: min(70dvh, 640px) !important; overflow-y: auto; }
+  .assistant-launch { min-height: 46px; }
+
+  .management-filters, .review-toolbar, .master-filters, .reset-controls { display: grid; grid-template-columns: 1fr; gap: 8px; }
+  .management-presets { display: grid; grid-template-columns: repeat(3, 1fr); }
+  .date-pair { grid-template-columns: 1fr; }
+  .attention-row { min-width: 0; }
+  .timeline { min-width: 0; }
+  .timeline article { grid-template-columns: 14px minmax(0,1fr) !important; }
+  .timeline-time { grid-column: 2 !important; }
+  .timeline-card { grid-column: 2 !important; overflow-wrap: anywhere; }
+}
+
+@media (max-width: 390px) {
+  .brand small { display: none; }
+  .metrics, .management-kpis, .review-metrics, .intel-summary, .readiness-grid, .master-counts, .tacho-metrics { grid-template-columns: 1fr !important; }
+  .op-metrics { grid-template-columns: 1fr 1fr; }
+  .mobile-dock a small, .mobile-dock button small { font-size: .57rem; }
+}

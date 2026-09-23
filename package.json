@@ -1,0 +1,42 @@
+{
+  "name": "slh-tms-web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "eslint . --max-warnings=0",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "typecheck": "tsc -b",
+    "dev:local": "vite --mode localtest",
+    "build:local": "vite build --mode localtest"
+  },
+  "dependencies": {
+    "@azure/msal-browser": "^4.18.0",
+    "@azure/msal-react": "^3.0.19",
+    "@vitejs/plugin-react": "^5.2.0",
+    "azure-maps-control": "^3.7.4",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-router-dom": "^7.18.3",
+    "vite": "^6.2.2",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
+    "zod": "4.5.4"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.22.0",
+    "@playwright/test": "1.63.0",
+    "@types/react": "^19.0.10",
+    "@types/react-dom": "^19.2.7",
+    "eslint": "^9.22.0",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.5.6",
+    "globals": "^17.12.0",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.69.0",
+    "vitest": "^5.0.0"
+  }
+}

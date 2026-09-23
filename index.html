@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+  <meta name="theme-color" content="#063b5c" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="SLH TMS" />
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="apple-touch-icon" href="/icon-192.png" />
+  <title>SLH Transport Management</title>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+  <script>
+    (function () {
+      var path = window.location.pathname;
+      var tv = path === '/tv' || path === '/operations-wallboard/tv' || path === '/live-runs/tv';
+      if (!tv) return;
+
+      // React is the primary TV renderer. Older office-TV browsers that do not
+      // execute module scripts get the same API-backed compatibility wallboard.
+      function appendScript(src, onload) {
+        var script = document.createElement('script');
+        script.src = src;
+        script.async = false;
+        if (onload) script.onload = onload;
+        document.body.appendChild(script);
+      }
+
+      function startCompatibilityWallboard() {
+        if (window.__SLH_TV_COMPATIBILITY__) return;
+        window.__SLH_TV_COMPATIBILITY__ = true;
+        var css = document.createElement('link');
+        css.rel = 'stylesheet';
+        css.href = '/tv-wallboard-v2.css?v=20260910-wallboard-v10';
+        document.head.appendChild(css);
+        appendScript('/tv-wallboard-v4.js?v=20260910-wallboard-v10');
+      }
+
+      window.setTimeout(function () {
+        var root = document.getElementById('root');
+        if (!root || String(root.textContent || '').replace(/\s+/g, '') !== '' || window.__SLH_TV_REACT_STARTED__) return;
+        startCompatibilityWallboard();
+      }, 20000);
+    }());
+  </script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('/sw.js').catch(function () {});
+      });
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,26 @@
+.ops-linkage-panel{margin:0 0 16px;padding:14px;border:1px solid var(--border,#d0d7de);border-radius:10px;background:var(--surface,#fff)}
+.ops-linkage-summary{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:10px}.ops-linkage-summary>div{display:flex;flex-direction:column;gap:2px}.ops-linkage-summary span{font-size:12px;opacity:.72}
+.ops-linkage-error{margin:8px 0;font-size:13px}.ops-linkage-runs{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:8px}.ops-linkage-runs details{border:1px solid var(--border,#d0d7de);border-radius:8px;padding:8px}.ops-linkage-runs details.needs-link{border-color:#b26a00}.ops-linkage-runs summary{display:flex;justify-content:space-between;gap:10px;cursor:pointer}.ops-linkage-runs summary span{font-size:12px;opacity:.75}.ops-linkage-stops{display:grid;gap:6px;margin-top:8px}.ops-linkage-stops>div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 8px;padding:7px;border-top:1px solid var(--border,#e5e7eb)}.ops-linkage-stops>div.needs-link{font-weight:600}.ops-linkage-stops b{overflow-wrap:anywhere}.ops-linkage-stops span{font-size:11px;font-weight:700}.ops-linkage-stops small{grid-column:1/-1;opacity:.75}
+
+/* Shared read-only linkage strip. Both the signed-in TMS wallboard and a paired TV
+   portal the same per-run geofence hit/time-in/time-out evidence into each row. */
+.ops-board-row>.ops-row-geofence{grid-column:1/-1;margin:0;border:0;border-top:1px solid #314754;background:#0a131b;color:#dceaf1;padding:0 10px 8px;min-width:0}
+.ops-board-row>.ops-row-geofence.needs-link{border-top-color:#9b6a1c}
+.ops-row-geofence>summary{display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:pointer;padding:8px 0 2px;list-style:none}
+.ops-row-geofence>summary::-webkit-details-marker{display:none}
+.ops-row-geofence>summary strong{font-size:12px;color:#75d5ff;white-space:normal}
+.ops-row-geofence>summary span{font-size:11px;color:#9eb3c2;font-weight:800}
+.ops-row-geofence-stops{display:grid;gap:5px;margin-top:7px}
+.ops-row-geofence-stop{display:grid;grid-template-columns:minmax(220px,1.5fr) minmax(92px,.45fr) minmax(76px,.35fr) minmax(76px,.35fr);gap:8px;align-items:center;padding:7px 8px;border:1px solid #263b49;border-radius:5px;background:#101d27}
+.ops-row-geofence-stop.hit{border-left:4px solid #30b566}
+.ops-row-geofence-stop.needs-link{border-left:4px solid #e2a421}
+.ops-row-geofence-stop>span{display:flex;flex-direction:column;min-width:0}
+.ops-row-geofence-stop b{font-size:12px;color:#f5fbfd;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ops-row-geofence-stop small{font-size:10px;color:#9eb3c2;margin:0;white-space:normal}
+.ops-row-geofence-stop .stop-name b{white-space:normal}
+
+@media(max-width:900px){.ops-row-geofence-stop{grid-template-columns:minmax(180px,1fr) repeat(3,minmax(70px,.4fr))}}
+@media(max-width:700px){.ops-linkage-summary{flex-direction:column}.ops-linkage-runs{grid-template-columns:1fr}.ops-row-geofence>summary{align-items:flex-start;flex-direction:column}.ops-row-geofence-stop{grid-template-columns:1fr 1fr}.ops-row-geofence-stop .stop-name{grid-column:1/-1}}
+
+.ops-wallboard.tv .ops-row-geofence>summary{align-items:center;flex-direction:row;min-width:0}
+.ops-wallboard.tv .ops-row-geofence>summary span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

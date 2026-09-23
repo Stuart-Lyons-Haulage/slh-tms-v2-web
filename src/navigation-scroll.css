@@ -1,0 +1,21 @@
+.side-nav {
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 36px;
+}
+
+.side-nav::-webkit-scrollbar {
+  width: 8px;
+}
+
+.side-nav::-webkit-scrollbar-thumb {
+  background: rgba(219, 232, 237, 0.28);
+  border-radius: 999px;
+}
+
+.side-nav::-webkit-scrollbar-track {
+  background: transparent;
+}

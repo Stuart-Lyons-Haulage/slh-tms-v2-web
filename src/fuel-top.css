@@ -1,0 +1,23 @@
+/* Fuel tab: keep the weekly entry form at the top so users do not need to scroll through history first. */
+section:has(> form.master-edit-form input[type="number"][step="0.01"]) {
+  display: flex;
+  flex-direction: column;
+}
+
+section:has(> form.master-edit-form input[type="number"][step="0.01"]) > * {
+  order: 10;
+}
+
+section:has(> form.master-edit-form input[type="number"][step="0.01"]) > .title-row {
+  order: 1;
+}
+
+section:has(> form.master-edit-form input[type="number"][step="0.01"]) > .intro {
+  order: 2;
+}
+
+section:has(> form.master-edit-form input[type="number"][step="0.01"]) > form.master-edit-form {
+  order: 3;
+  margin-top: 0;
+  margin-bottom: 24px;
+}
