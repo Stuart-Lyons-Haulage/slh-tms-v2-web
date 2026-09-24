@@ -1,10 +1,10 @@
 import type { AccountInfo } from '@azure/msal-browser';
 import { useMsal } from '@azure/msal-react';
 import { useCallback } from 'react';
+import { requireApiBaseUrl } from './runtimeConfig';
 
 const productionApiScope = 'api://497f6ea5-9753-43ee-8ccf-afaa0a3869c2/Tms.Access';
 const localSessionKey = 'slh-tms-local-session';
-const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '/tms-api').replace(/\/$/, '');
 
 export const apiScope = import.meta.env.VITE_ENTRA_API_SCOPE || productionApiScope;
 export const e2eAuthEnabled = import.meta.env.VITE_E2E_AUTH === 'true';
@@ -37,7 +37,7 @@ export function getLocalAuthSession(): LocalAuthSession | null {
 }
 
 export async function localLogin(username: string, password: string): Promise<LocalAuthSession> {
-  const response = await fetch(`${apiBaseUrl}/api/v1/auth/login`, {
+  const response = await fetch(`${requireApiBaseUrl()}/api/v1/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, password })

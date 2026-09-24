@@ -52,6 +52,26 @@ function safeDownloadName(name: string) {
   return cleaned || "source-email-attachment";
 }
 
+const safeAttachmentContentTypes = new Set([
+  "application/pdf",
+  "application/octet-stream",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "text/plain",
+  "text/csv",
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+]);
+
+function safeAttachmentContentType(input: unknown) {
+  const candidate = String(input ?? "").split(";", 1)[0].trim().toLowerCase();
+  return safeAttachmentContentTypes.has(candidate) ? candidate : "application/octet-stream";
+}
+
 function attachmentRows(payload: Record<string, unknown>) {
   const source = payload.sourceAttachments ?? payload.attachments;
   if (!Array.isArray(source)) return "";
@@ -62,7 +82,7 @@ function attachmentRows(payload: Record<string, unknown>) {
       if (record.isInline === true || record.IsInline === true) return "";
       const name = String(record.name ?? record.Name ?? "").trim();
       if (!name) return "";
-      const contentType = String(record.contentType ?? record.ContentType ?? "application/octet-stream").trim() || "application/octet-stream";
+      const contentType = safeAttachmentContentType(record.contentType ?? record.ContentType);
       const size = Number(record.size ?? record.Size ?? 0);
       const sizeText = Number.isFinite(size) && size > 0 ? ` (${Math.ceil(size / 1024)} KB)` : "";
       const base64 = normaliseBase64(record.contentBase64 ?? record.ContentBase64 ?? record.contentBytes ?? record.ContentBytes);

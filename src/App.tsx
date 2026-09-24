@@ -101,12 +101,15 @@ function Shell() {
 
   useEffect(() => {
     if (!authenticated) return;
-    let stopped = false;
-    let disconnect: (() => void) | undefined;
-    void accessToken().then(token => {
-      if (!stopped) disconnect = connectPlanningEventStream(token);
-    }).catch(error => console.warn('Planning real-time connection could not start.', error));
-    return () => { stopped = true; disconnect?.(); };
+    const disconnect = connectPlanningEventStream(accessToken, {
+      onAuthenticationRequired: error => {
+        if (!localAuthEnabled) return;
+        localLogout();
+        setLocalSession(null);
+        setSignInError(error.message || 'Your TMS sign-in has expired. Please sign in again.');
+      },
+    });
+    return disconnect;
   }, [accessToken, authenticated]);
 
   const loadingContent = <section className="sign-in-panel" aria-live="polite"><p className="eyebrow">Loading</p><h1>Opening TMS screen…</h1></section>;

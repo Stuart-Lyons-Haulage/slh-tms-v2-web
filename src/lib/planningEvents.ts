@@ -1,4 +1,4 @@
-import { apiBaseUrl } from './api';
+import { requireApiBaseUrl } from './runtimeConfig';
 
 const PLANNING_CHANGED_EVENT = "slh:orders-changed";
 const PLANNING_SERVER_CHANGED_EVENT = "slh:planning-server-changed";
@@ -47,7 +47,11 @@ export function subscribeServerPlanningChanges(listener: () => void) {
   return () => window.removeEventListener(PLANNING_SERVER_CHANGED_EVENT, listener);
 }
 
-export function connectPlanningEventStream(token: string) {
+export type PlanningEventStreamOptions = {
+  onAuthenticationRequired?: (error: Error) => void;
+};
+
+export function connectPlanningEventStream(getAccessToken: () => Promise<string>, options: PlanningEventStreamOptions = {}) {
   const controller = new AbortController();
   let stopped = false;
   let retryTimer: number | undefined;
@@ -55,11 +59,25 @@ export function connectPlanningEventStream(token: string) {
   const connect = async () => {
     if (stopped) return;
     try {
-      const response = await fetch(`${apiBaseUrl}/api/v1/planning-events/stream`, {
+      let token: string;
+      try {
+        token = await getAccessToken();
+      } catch (error) {
+        const authError = error instanceof Error ? error : new Error('TMS authentication needs refreshing.');
+        options.onAuthenticationRequired?.(authError);
+        throw authError;
+      }
+
+      const response = await fetch(`${requireApiBaseUrl()}/api/v1/planning-events/stream`, {
         headers: { Accept: 'text/event-stream', Authorization: `Bearer ${token}` },
         cache: 'no-store',
         signal: controller.signal,
       });
+      if (response.status === 401) {
+        const authError = new Error('Your TMS sign-in has expired. Please sign in again.');
+        options.onAuthenticationRequired?.(authError);
+        throw authError;
+      }
       if (!response.ok || !response.body) throw new Error(`Planning event stream failed (${response.status}).`);
       const reader = response.body.getReader();
       const decoder = new TextDecoder();

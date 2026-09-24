@@ -1,5 +1,7 @@
 import { geocode as geocodeAddress } from '../api/maps';
 import { normaliseMarketContacts, normaliseMarketMasterRecords } from '../api/market';
+import { requireApiBaseUrl } from './runtimeConfig';
+export { apiBaseUrl } from './runtimeConfig';
 import type { DriverAssignmentDto, DriverDto, VehicleDto } from '../types/dto/allocation';
 import type { DispatchSmsResponseDto, RunDispatchDto } from '../types/dto/dispatch';
 import type { OrderDto } from '../types/dto/order';
@@ -180,8 +182,6 @@ export type SiteUpdate = Omit<Site, 'id'>;
 
 type UnknownRecord = Record<string, unknown>;
 
-export const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '/tms-api').replace(/\/$/, '');
-const baseUrl = apiBaseUrl;
 export class ApiError extends Error { constructor(public status: number, message: string) { super(message); } }
 
 function errorMessage(payload: unknown): string | undefined {
@@ -192,7 +192,7 @@ function errorMessage(payload: unknown): string | undefined {
 
 export async function request<T = unknown>(path: string, token?: string, init?: RequestInit, ..._legacyArgs: unknown[]): Promise<T> {
   void _legacyArgs;
-  if (!baseUrl) throw new ApiError(0, 'Set VITE_API_BASE_URL to connect the TMS API.');
+  const baseUrl = requireApiBaseUrl();
   const response = await fetch(`${baseUrl}${path}`, { ...init, headers: { Accept: 'application/json', ...(init?.body ? { 'Content-Type': 'application/json' } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}), ...init?.headers } });
   if (!response.ok) {
     const errorPayload: unknown = await response.json().catch(() => null);

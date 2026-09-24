@@ -86,6 +86,24 @@ describe("resolveSourceEvidence", () => {
     expect(html).toContain("data:application/pdf;base64,SGVsbG8=");
   });
 
+  it("falls back to a non-executable MIME type for unsafe attachment content types", () => {
+    const result = resolve?.({
+      sourceSubject: "Order with unsafe attachment metadata",
+      sourceBodyText: "Please review the attachment.",
+      sourceAttachments: [{
+        name: "booking.bin",
+        contentType: "text/html\"><img src=x onerror=alert(1)>",
+        contentBase64: "SGVsbG8=",
+        size: 5,
+        isInline: false,
+      }],
+    });
+
+    const html = decodeURIComponent(result?.webLink.split(",", 2)[1] || "");
+    expect(html).toContain("data:application/octet-stream;base64,SGVsbG8=");
+    expect(html).not.toContain("text/html\"><img");
+  });
+
   it("escapes retained email content before rendering the snapshot", () => {
     const result = resolve?.({
       sourceSubject: "<script>alert(1)</script>",
