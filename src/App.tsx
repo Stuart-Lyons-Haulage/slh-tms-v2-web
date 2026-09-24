@@ -8,7 +8,6 @@ const MasterDataHub = lazy(() => import('./pages/MasterDataHub').then(module => 
 const RoadrunnerSiteReview = lazy(() => import('./pages/RoadrunnerSiteReview').then(module => ({ default: module.RoadrunnerSiteReview })));
 const DashboardOperational = lazy(() => import('./pages/DashboardOperational').then(module => ({ default: module.DashboardOperational })));
 const DailyCompliance = lazy(() => import('./pages/DailyCompliance').then(module => ({ default: module.DailyCompliance })));
-const NightOutReport = lazy(() => import('./pages/NightOutReport').then(module => ({ default: module.NightOutReport })));
 const JobInvoiceHistory = lazy(() => import('./pages/JobInvoiceHistory').then(module => ({ default: module.JobInvoiceHistory })));
 const DriverAssignments = lazy(() => import('./pages/Pages').then(module => ({ default: module.DriverAssignments })));
 const Orders = lazy(() => import('./pages/Pages').then(module => ({ default: module.Orders })));
@@ -18,7 +17,7 @@ const DriverTimesheets = lazy(() => import('./pages/DriverTimesheets').then(modu
 const UserManagement = lazy(() => import('./pages/UserManagement').then(module => ({ default: module.UserManagement })));
 const AdminIntegrationSyncControls = lazy(() => import('./components/AdminIntegrationSyncControls').then(module => ({ default: module.AdminIntegrationSyncControls })));
 
-import { apiScope, getLocalAuthSession, localAuthEnabled, localLogin, localLogout, useAccessToken, type LocalAuthSession } from './lib/auth';
+import { apiScope, localTestAuthEnabled, useAccessToken } from './lib/auth';
 import { api } from './lib/api';
 import { connectPlanningEventStream } from './lib/planningEvents';
 import { isDesktopApp } from './lib/desktop';
@@ -75,36 +74,25 @@ function AdminNav({ current }: { current: string }) {
   </details>;
 }
 
+function accountHasRole(account: ReturnType<ReturnType<typeof useMsal>['instance']['getActiveAccount']>, role: string) {
+  if (!account?.idTokenClaims) return false;
+  const claims = account.idTokenClaims as Record<string, unknown>;
+  const roles = Array.isArray(claims.roles) ? claims.roles.filter((value): value is string => typeof value === 'string') : [];
+  return roles.includes(role);
+}
+
 function Shell() {
   const entraAuthenticated = useIsAuthenticated();
   const { instance, accounts } = useMsal();
   const accessToken = useAccessToken();
-  const [localSession, setLocalSession] = useState<LocalAuthSession | null>(() => getLocalAuthSession());
-  const authenticated = localAuthEnabled ? localSession !== null : entraAuthenticated;
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [signInError, setSignInError] = useState<string>();
-  const [signingIn, setSigningIn] = useState(false);
+  const authenticated = localTestAuthEnabled || entraAuthenticated;
   const [open, setOpen] = useState(false);
   const [pendingOrderReviews, setPendingOrderReviews] = useState(0);
   const location = useLocation();
-  const isAdmin = localAuthEnabled && localSession?.role === 'TMS.Admin';
+  const activeAccount = instance.getActiveAccount() || accounts[0];
+  const isAdmin = localTestAuthEnabled || accountHasRole(activeAccount, 'TMS.Admin');
 
   const signIn = async () => {
-    if (localAuthEnabled) {
-      setSigningIn(true);
-      setSignInError(undefined);
-      try {
-        const session = await localLogin(username, password);
-        setLocalSession(session);
-        setPassword('');
-      } catch (error) {
-        setSignInError(error instanceof Error ? error.message : 'Sign in failed.');
-      } finally {
-        setSigningIn(false);
-      }
-      return;
-    }
     const request = { scopes: apiScope ? [apiScope] : [] };
     if (!isDesktopApp()) {
       await instance.loginRedirect(request);
@@ -115,16 +103,11 @@ function Shell() {
   };
 
   const signOut = async () => {
-    if (localAuthEnabled) {
-      localLogout();
-      setLocalSession(null);
-      return;
-    }
     if (!isDesktopApp()) {
-      await instance.logoutRedirect({ account: accounts[0] });
+      await instance.logoutRedirect({ account: activeAccount });
       return;
     }
-    await instance.logoutPopup({ account: accounts[0] });
+    await instance.logoutPopup({ account: activeAccount });
   };
 
   useEffect(() => { setOpen(false); }, [location.pathname]);
@@ -133,10 +116,7 @@ function Shell() {
     if (!authenticated) return;
     const disconnect = connectPlanningEventStream(accessToken, {
       onAuthenticationRequired: error => {
-        if (!localAuthEnabled) return;
-        localLogout();
-        setLocalSession(null);
-        setSignInError(error.message || 'Your TMS sign-in has expired. Please sign in again.');
+        console.warn('Microsoft authentication is required for planning updates.', error);
       },
     });
     return disconnect;
@@ -179,10 +159,8 @@ function Shell() {
       <div className="header-context"><b>Daily transport control</b></div>
       <div className="header-actions">
         {authenticated
-          ? <><span className="user">{localAuthEnabled ? localSession?.displayName : accounts[0]?.name}</span><button onClick={() => void signOut()}>Sign out</button></>
-          : localAuthEnabled
-            ? null
-            : <button className="primary" onClick={() => void signIn()} disabled={!apiScope}>Sign in with Microsoft</button>}
+          ? <><span className="user">{activeAccount?.name || activeAccount?.username || 'Microsoft user'}</span><button onClick={() => void signOut()}>Sign out</button></>
+          : <button className="primary" onClick={() => void signIn()} disabled={!apiScope}>Sign in with Microsoft</button>}
       </div>
     </header>
 
@@ -236,22 +214,8 @@ function Shell() {
       </Routes></RouteErrorBoundary></Suspense> : <section className="sign-in-panel">
         <p className="eyebrow">Secure operations portal</p>
         <h1>Sign in to Stuart Lyons Haulage TMS</h1>
-        {localAuthEnabled ? <>
-          <p>Use your individual TMS account.</p>
-          <form onSubmit={event => { event.preventDefault(); void signIn(); }} style={{ width: '100%', maxWidth: 420, display: 'grid', gap: 12 }}>
-            <label style={{ textAlign: 'left' }}>Username
-              <input autoComplete="username" value={username} onChange={event => setUsername(event.target.value)} required />
-            </label>
-            <label style={{ textAlign: 'left' }}>Password
-              <input type="password" autoComplete="current-password" value={password} onChange={event => setPassword(event.target.value)} required />
-            </label>
-            {signInError && <p role="alert">{signInError}</p>}
-            <button className="primary" type="submit" disabled={signingIn || !username || !password}>{signingIn ? 'Signing in…' : 'Sign in'}</button>
-          </form>
-        </> : <>
-          <p>Use your Lyons Microsoft account to open planning, master data and compliance.</p>
-          <button className="primary" onClick={() => void signIn()} disabled={!apiScope}>Sign in with Microsoft</button>
-        </>}
+        <p>Use your Lyons Microsoft account to open planning, master data and compliance.</p>
+        <button className="primary" onClick={() => void signIn()} disabled={!apiScope}>Sign in with Microsoft</button>
       </section>}
     </main>
 
