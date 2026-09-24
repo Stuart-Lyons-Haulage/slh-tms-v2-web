@@ -27,17 +27,23 @@ type NavItem = [string, string];
 const coreNavigation: NavItem[] = [
   ['/dashboard', 'Dashboard'],
   ['/orders', 'Order Entry'],
-  ['/staging', 'Staging Review'],
+  ['/staging', 'Orders'],
   ['/', 'Planner Builder'],
   ['/pallet-control', 'Pallet Order'],
   ['/driver-dispatch', 'Driver Dispatch'],
   ['/master-data', 'Master Data'],
+  ['/night-outs', 'Invoice / Job History'],
 ];
 
 const complianceNavigation: NavItem[] = [
   ['/compliance', 'Compliance'],
-  ['/night-outs', 'Invoice History'],
   ['/driver-assignments', 'Driver History'],
+];
+
+const adminNavigation: NavItem[] = [
+  ['/admin/staging', 'Import Reviews'],
+  ['/master-data/roadrunner-review', 'RoadRunner Review'],
+  ['/admin/users', 'Users'],
 ];
 
 function pathActive(current: string, path: string) {
@@ -54,6 +60,16 @@ function ComplianceNav({ current }: { current: string }) {
   </details>;
 }
 
+function AdminNav({ current }: { current: string }) {
+  const active = adminNavigation.some(([path]) => pathActive(current, path));
+  return <details className={`top-nav-group ${active ? 'active' : ''}`}>
+    <summary>Admin<span aria-hidden="true">⌄</span></summary>
+    <div className="top-nav-menu">
+      {adminNavigation.map(([path, label]) => <NavLink key={path} to={path}>{label}</NavLink>)}
+    </div>
+  </details>;
+}
+
 function Shell() {
   const entraAuthenticated = useIsAuthenticated();
   const { instance, accounts } = useMsal();
@@ -66,6 +82,7 @@ function Shell() {
   const [signingIn, setSigningIn] = useState(false);
   const [open, setOpen] = useState(false);
   const location = useLocation();
+  const isAdmin = localAuthEnabled && localSession?.role === 'TMS.Admin';
 
   const signIn = async () => {
     if (localAuthEnabled) {
@@ -138,7 +155,7 @@ function Shell() {
     {authenticated && <nav className={`top-navigation ${open ? 'mobile-open' : ''}`} aria-label="Primary TMS navigation">
       {coreNavigation.map(([path, label]) => <NavLink key={path} className="top-nav-direct" to={path} end={path === '/'}>{label}</NavLink>)}
       <ComplianceNav current={location.pathname} />
-      {localAuthEnabled && localSession?.role === 'TMS.Admin' && <NavLink className="top-nav-direct" to="/admin/users">Users</NavLink>}
+      {isAdmin && <AdminNav current={location.pathname} />}
     </nav>}
 
     {authenticated && <div className="system-strip"><HeaderIntelligence /></div>}
@@ -148,11 +165,11 @@ function Shell() {
         <Route path="/" element={<PlannerEnhanced />} />
         <Route path="/dashboard" element={<DashboardOperational />} />
         <Route path="/orders" element={<Orders />} />
-        <Route path="/staging" element={<StagingQueue />} />
+        <Route path="/staging" element={<StagingQueue ordersOnly />} />
         <Route path="/pallet-control" element={<PalletPlanningControl />} />
         <Route path="/driver-dispatch" element={<DriverDispatchOperational />} />
         <Route path="/master-data" element={<MasterDataHub />} />
-        <Route path="/master-data/roadrunner-review" element={<RoadrunnerSiteReview />} />
+        <Route path="/master-data/roadrunner-review" element={isAdmin ? <RoadrunnerSiteReview /> : <Navigate to="/dashboard" replace />} />
         <Route path="/drivers" element={<MasterDataHub initialSection="drivers" />} />
         <Route path="/fleet-assets" element={<MasterDataHub initialSection="vehicles" />} />
         <Route path="/fuel-cards" element={<MasterDataHub initialSection="fuel-cards" />} />
@@ -163,7 +180,8 @@ function Shell() {
         <Route path="/compliance" element={<DailyCompliance />} />
         <Route path="/night-outs" element={<JobInvoiceHistory />} />
         <Route path="/driver-assignments" element={<DriverAssignments />} />
-        <Route path="/admin/users" element={localAuthEnabled && localSession?.role === 'TMS.Admin' ? <UserManagement /> : <Navigate to="/dashboard" replace />} />
+        <Route path="/admin/staging" element={isAdmin ? <StagingQueue /> : <Navigate to="/dashboard" replace />} />
+        <Route path="/admin/users" element={isAdmin ? <UserManagement /> : <Navigate to="/dashboard" replace />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes></RouteErrorBoundary></Suspense> : <section className="sign-in-panel">
         <p className="eyebrow">Secure operations portal</p>

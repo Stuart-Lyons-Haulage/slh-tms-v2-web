@@ -83,7 +83,7 @@ function buildRows(orders: TransportOrder[], runs: Load[], assignments: DriverAs
       jobType: order.jobType || order.customerSupplier || "Transport",
       collection: order.collectionLocation || order.collectionAddress || "—",
       delivery: order.deliveryLocation || order.deliveryAddress || "—",
-      pallets: order.pallets ?? "",
+      pallets: order.pallets == null ? ("" as const) : Number(order.pallets),
       status: order.status,
       loadReference: run?.reference || "—",
       loadStatus: run?.status || "Unplanned",
