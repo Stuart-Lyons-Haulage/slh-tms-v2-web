@@ -1,5 +1,6 @@
 import { Component, lazy, Suspense, type ErrorInfo, type ReactNode, useEffect, useState } from 'react';
 import { useIsAuthenticated, useMsal } from '@azure/msal-react';
+import type { AccountInfo } from '@azure/msal-browser';
 import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom';
 
 const PlannerEnhanced = lazy(() => import('./pages/PlannerEnhanced').then(module => ({ default: module.PlannerEnhanced })));
@@ -16,6 +17,7 @@ const DriverDispatchOperational = lazy(() => import('./pages/DriverDispatchOpera
 const DriverTimesheets = lazy(() => import('./pages/DriverTimesheets').then(module => ({ default: module.DriverTimesheets })));
 const UserManagement = lazy(() => import('./pages/UserManagement').then(module => ({ default: module.UserManagement })));
 const AdminIntegrationSyncControls = lazy(() => import('./components/AdminIntegrationSyncControls').then(module => ({ default: module.AdminIntegrationSyncControls })));
+const MobileOperations = lazy(() => import('./pages/MobileOperations').then(module => ({ default: module.MobileOperations })));
 
 import { apiScope, localTestAuthEnabled, useAccessToken } from './lib/auth';
 import { api } from './lib/api';
@@ -74,7 +76,7 @@ function AdminNav({ current }: { current: string }) {
   </details>;
 }
 
-function accountHasRole(account: ReturnType<ReturnType<typeof useMsal>['instance']['getActiveAccount']>, role: string) {
+function accountHasRole(account: AccountInfo | null | undefined, role: string) {
   if (!account?.idTokenClaims) return false;
   const claims = account.idTokenClaims as Record<string, unknown>;
   const roles = Array.isArray(claims.roles) ? claims.roles.filter((value): value is string => typeof value === 'string') : [];
@@ -190,6 +192,7 @@ function Shell() {
       {authenticated ? <Suspense fallback={loadingContent}><RouteErrorBoundary key={location.pathname}><Routes>
         <Route path="/" element={<PlannerEnhanced />} />
         <Route path="/dashboard" element={<DashboardOperational />} />
+        <Route path="/mobile" element={<MobileOperations />} />
         <Route path="/orders" element={<Orders />} />
         <Route path="/staging" element={<StagingQueue ordersOnly />} />
         <Route path="/pallet-control" element={<PalletPlanningControl />} />
