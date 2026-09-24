@@ -97,6 +97,58 @@ export type Load = RunDto;
 export type LoadDispatch = RunDispatchDto;
 export type CreateLoad = CreateRunDto;
 export type DriverAssignment = DriverAssignmentDto;
+export type DriverTimesheetDay = {
+  date: string;
+  startUtc?: string;
+  finishUtc?: string;
+  dutySpanMinutes?: number;
+  activityMinutes?: number;
+  driveMinutes: number;
+  workMinutes: number;
+  availableMinutes: number;
+  restMinutes: number;
+  breakCount: number;
+  breakMinutes: number;
+  tachoStartUtc?: string;
+  tachoEndUtc?: string;
+  firstMovementUtc?: string;
+  lastMovementUtc?: string;
+  movementSpanMinutes?: number;
+  startVarianceMinutes?: number;
+  finishVarianceMinutes?: number;
+  vehicles: string[];
+  runs: string[];
+  routeAllocated: boolean;
+  status: 'Confirmed' | 'Review' | 'Tacho only' | 'Tracker only' | 'Open duty' | 'Missing evidence' | 'No work';
+  notes: string[];
+};
+export type DriverTimesheetDriver = {
+  driverId: string;
+  driverName: string;
+  employeeNumber: string;
+  employmentType: 'Employed' | 'Agency';
+  agencyName?: string;
+  daysWorked: number;
+  reviewDays: number;
+  dutySpanMinutes: number;
+  activityMinutes: number;
+  driveMinutes: number;
+  workMinutes: number;
+  availableMinutes: number;
+  restMinutes: number;
+  status: 'Confirmed' | 'Review';
+  days: DriverTimesheetDay[];
+};
+export type DriverTimesheetReport = {
+  from: string;
+  to: string;
+  weekStarts: string;
+  weekEnds: string;
+  generatedAtUtc: string;
+  sourceStatus: { tachoMaster: string; roadTech: string };
+  summary: { drivers: number; employedDrivers: number; agencyDrivers: number; reviewDrivers: number; unmatchedTachoDuties: number };
+  drivers: DriverTimesheetDriver[];
+};
 export type ReturnLoadSuggestion = { driverId: string; driverName: string; employeeNumber: string; consecutiveDays: number; previousLoadReference: string; previousPlanningDate: string; lastLocation?: string; latitude?: number; longitude?: number; suggestedLoadId?: string; suggestedLoadReference?: string; priority: number; reason: string };
 export type ReturnLoadSuggestions = { planningDate: string; generatedAtUtc: string; suggestions: ReturnLoadSuggestion[] };
 export type SageHrStatus = { configured: boolean; connected: boolean; employeeCount: number; driverCandidateCount: number; missingSettings?: string[]; message: string };
@@ -238,6 +290,7 @@ export interface TmsApi {
   operationsReconciliation(date: string, token?: string): Promise<OperationsReconciliation>;
   operationsExceptions(date: string, token?: string): Promise<OperationsExceptions>;
   driverAssignments(from: string, to: string, token?: string): Promise<DriverAssignment[]>;
+  driverTimesheets(from: string, to: string, token?: string): Promise<DriverTimesheetReport>;
   returnLoadSuggestions(date: string, token?: string): Promise<ReturnLoadSuggestions>;
   deliveryEtas(date: string, token?: string): Promise<DeliveryEtas>;
   sendDispatchSms(loadId: string, token?: string): Promise<DispatchSmsResponseDto>;
@@ -297,6 +350,7 @@ export const api: TmsApi = {
   operationsReconciliation: (date, token) => request<OperationsReconciliation>(`/api/v1/operations/reconciliation?date=${encodeURIComponent(date)}`, token),
   operationsExceptions: (date, token) => request<OperationsExceptions>(`/api/v1/operations/exceptions?date=${encodeURIComponent(date)}`, token),
   driverAssignments: (from, to, token) => request<DriverAssignment[]>(`/api/v1/driver-assignments?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, token),
+  driverTimesheets: (from, to, token) => request<DriverTimesheetReport>(`/api/v1/driver-timesheets?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, token),
   returnLoadSuggestions: (date, token) => request<ReturnLoadSuggestions>(`/api/v1/planning/return-load-suggestions?date=${encodeURIComponent(date)}`, token),
   deliveryEtas: (date, token) => request<DeliveryEtas>(`/api/v1/operations/delivery-etas?date=${encodeURIComponent(date)}`, token),
   sendDispatchSms: (loadId, token) => request<DispatchSmsResponseDto>(`/api/v1/loads/${loadId}/dispatch/sms`, token, { method: 'POST' }),
