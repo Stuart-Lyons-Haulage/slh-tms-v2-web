@@ -351,7 +351,7 @@ export function DriverDispatch() {
     try {
       const access = await token();
       const [workbench, master] = await Promise.all([
-        request<Workbench>(`/api/v1/driver-dispatch?date=${encodeURIComponent(date)}`, access, undefined, 90000),
+        request<Workbench>(`/api/v2/driver-dispatch?date=${encodeURIComponent(date)}`, access, undefined, 90000),
         getMasterDispatchData(access)
       ]);
       const masterDriver = (driver: DispatchDriver) => master.drivers.find(item =>
@@ -378,7 +378,7 @@ export function DriverDispatch() {
         vehicles: workbench.vehicles.map(vehicle => ({ ...vehicle, masterCompliance: masterVehicle(vehicle) }))
       });
       try {
-        const statusResponse = await request<{ planningDate: string; drivers: DriverDispatchStatus[] }>(`/api/v1/driver-dispatch-status?date=${encodeURIComponent(date)}`, access, undefined, 90000);
+        const statusResponse = await request<{ planningDate: string; drivers: DriverDispatchStatus[] }>(`/api/v2/driver-dispatch-status?date=${encodeURIComponent(date)}`, access, undefined, 90000);
         setStatuses(Object.fromEntries(statusResponse.drivers.map(item => [item.driverId, item])));
       } catch (statusException) {
         setStatuses({});
@@ -487,7 +487,7 @@ export function DriverDispatch() {
     setDriverToolBusy(true);
     setDriverToolNotice(undefined);
     try {
-      await request(`/api/v1/driver-master/tachomaster/sync`, await token(), { method: "POST" }, 180000);
+      await request(`/api/v2/driver-master/tachomaster/sync`, await token(), { method: "POST" }, 180000);
       setDriverToolNotice("Driver Master sync completed.");
       await refresh();
     } catch (exception) {
@@ -513,7 +513,7 @@ export function DriverDispatch() {
     setDriverToolBusy(true);
     setDriverToolNotice(undefined);
     try {
-      const result = await request<{ message?: string }>(`/api/v1/driver-dispatch/drivers`, await token(), {
+      const result = await request<{ message?: string }>(`/api/v2/driver-dispatch/drivers`, await token(), {
         method: "POST",
         body: JSON.stringify({
           displayName: driverForm.displayName.trim(),
@@ -752,12 +752,12 @@ function DispatchRow({ driver, data, status, calculatedStart, showGroup, token, 
       const access = await token();
       const previous = data.loads.find(load => load.id === driver.assignedLoadId);
       if (previous && previous.id !== loadId) {
-        await request(`/api/v1/runs/${encodeURIComponent(previous.id)}/allocation`, access, {
+        await request(`/api/v2/runs/${encodeURIComponent(previous.id)}/allocation`, access, {
           method: "PUT",
           body: JSON.stringify({ driverId: null, vehicleId: null, trailerId: null })
         });
       }
-      const saved = await request<DispatchLoad>(`/api/v1/runs/${encodeURIComponent(loadId)}/allocation`, access, {
+      const saved = await request<DispatchLoad>(`/api/v2/runs/${encodeURIComponent(loadId)}/allocation`, access, {
         method: "PUT",
         body: JSON.stringify({ driverId: driver.driverId, vehicleId, trailerId: trailerId || null })
       });
@@ -783,7 +783,7 @@ function DispatchRow({ driver, data, status, calculatedStart, showGroup, token, 
     setBusy(true);
     setNotice(undefined);
     try {
-      const saved = await request<DispatchLoad>(`/api/v1/runs/${encodeURIComponent(assigned.id)}/allocation`, await token(), {
+      const saved = await request<DispatchLoad>(`/api/v2/runs/${encodeURIComponent(assigned.id)}/allocation`, await token(), {
         method: "PUT",
         body: JSON.stringify({ driverId: null, vehicleId: null, trailerId: null })
       });
@@ -827,7 +827,7 @@ function DispatchRow({ driver, data, status, calculatedStart, showGroup, token, 
     setNotice(undefined);
     try {
       const access = await token();
-      await request(`/api/v1/runs/${encodeURIComponent(loadId)}/allocation`, access, {
+      await request(`/api/v2/runs/${encodeURIComponent(loadId)}/allocation`, access, {
         method: "PUT",
         body: JSON.stringify({ driverId: driver.driverId, vehicleId, trailerId: trailerId || null })
       });
@@ -835,7 +835,7 @@ function DispatchRow({ driver, data, status, calculatedStart, showGroup, token, 
       const minutes = routeMinutes(route);
       if (!minutes) throw new Error("The run could not be routed. The response did not contain a driving time.");
 
-      let readiness = await request<DispatchReadiness>(`/api/v1/loads/${encodeURIComponent(loadId)}/dispatch-readiness`, access, {
+      let readiness = await request<DispatchReadiness>(`/api/v2/loads/${encodeURIComponent(loadId)}/dispatch-readiness`, access, {
         method: "POST",
         body: JSON.stringify({ routeDrivingMinutes: minutes, acknowledgeUnverified: false })
       }, 90000);
@@ -844,7 +844,7 @@ function DispatchRow({ driver, data, status, calculatedStart, showGroup, token, 
         const warnings = readiness.structuralReadiness.checks.filter(check => !check.passed).map(check => `• ${check.message}`).join("\n");
         if (!window.confirm(`Pre-dispatch warnings:\n\n${warnings}\n\nAcknowledge and continue?`)) throw new Error("Dispatch cancelled; warnings were not acknowledged.");
         acknowledged = true;
-        readiness = await request<DispatchReadiness>(`/api/v1/loads/${encodeURIComponent(loadId)}/dispatch-readiness`, access, {
+        readiness = await request<DispatchReadiness>(`/api/v2/loads/${encodeURIComponent(loadId)}/dispatch-readiness`, access, {
           method: "POST",
           body: JSON.stringify({ routeDrivingMinutes: minutes, acknowledgeUnverified: true })
         }, 90000);
@@ -993,7 +993,7 @@ function MessageDialog({ state, token, close, sent }: { state: MessageState; tok
     setBusy(true);
     setError(undefined);
     try {
-      await request(`/api/v1/loads/${encodeURIComponent(state.load.id)}/driver-message/sms`, await token(), {
+      await request(`/api/v2/loads/${encodeURIComponent(state.load.id)}/driver-message/sms`, await token(), {
         method: "POST",
         body: JSON.stringify({
           message: text,

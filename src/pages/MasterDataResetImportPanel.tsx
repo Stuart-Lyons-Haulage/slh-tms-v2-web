@@ -55,7 +55,7 @@ export function MasterDataResetImportPanel({ onApplied }: { onApplied: () => voi
     setMessage(undefined);
     try {
       const result = await request<{ message?: string; deleted?: Record<string, number>; inserted?: Record<string, number> }>(
-        '/api/v1/master-data/rebuild-reviewed-register',
+        '/api/v2/master-data/rebuild-reviewed-register',
         await token(),
         {
           method: 'POST',

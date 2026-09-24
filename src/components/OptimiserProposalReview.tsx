@@ -28,14 +28,14 @@ export function OptimiserProposalReview({ planningDate, onApplied }: { planningD
 
   async function generate() {
     setBusy(true); setMessage(undefined); setAcknowledgeUnverified(false);
-    try { const result = await request<Proposal>("/api/v1/planning/optimiser/proposals", await token(), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ planningDate, period }) }, 180000); setProposal(result); setExpandedRun(result.runs.find((run) => !run.isLocked)?.id || result.runs[0]?.id); setMessage(`Proposal v${result.version} generated. Review the evidence before applying it.`); }
+    try { const result = await request<Proposal>("/api/v2/planning/optimiser/proposals", await token(), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ planningDate, period }) }, 180000); setProposal(result); setExpandedRun(result.runs.find((run) => !run.isLocked)?.id || result.runs[0]?.id); setMessage(`Proposal v${result.version} generated. Review the evidence before applying it.`); }
     catch (error) { setMessage(error instanceof Error ? error.message : "Proposal generation failed."); }
     finally { setBusy(false); }
   }
 
   async function apply() {
     if (!proposal) return; setBusy(true); setMessage(undefined);
-    try { const result = await request<ApplyResult>(`/api/v1/planning/optimiser/proposals/${proposal.id}/apply`, await token(), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ acknowledgeUnverified }) }, 180000); setProposal((current) => current ? { ...current, status: result.status } : current); signalPlanningChange(); await onApplied?.(); const suffix = result.warnings.length ? ` ${result.warnings.join(" ")}` : ""; setMessage(`${result.createdRunCount} draft run${result.createdRunCount === 1 ? "" : "s"} created from the reviewed proposal.${suffix}`); }
+    try { const result = await request<ApplyResult>(`/api/v2/planning/optimiser/proposals/${proposal.id}/apply`, await token(), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ acknowledgeUnverified }) }, 180000); setProposal((current) => current ? { ...current, status: result.status } : current); signalPlanningChange(); await onApplied?.(); const suffix = result.warnings.length ? ` ${result.warnings.join(" ")}` : ""; setMessage(`${result.createdRunCount} draft run${result.createdRunCount === 1 ? "" : "s"} created from the reviewed proposal.${suffix}`); }
     catch (error) { setMessage(error instanceof Error ? error.message : "Proposal could not be applied."); }
     finally { setBusy(false); }
   }

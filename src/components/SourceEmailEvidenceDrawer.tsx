@@ -267,7 +267,7 @@ export function SourceEmailEvidenceDrawer({ stagingId, onClose }: { stagingId: s
     setPreview(undefined);
     void (async () => {
       try {
-        const result = await request<SourceEmailEvidence>(`/api/v1/order-intake/source-email/${encodeURIComponent(stagingId)}`, await token());
+        const result = await request<SourceEmailEvidence>(`/api/v2/order-intake/source-email/${encodeURIComponent(stagingId)}`, await token());
         if (active) setEvidence(result);
       } catch {
         if (active) setError("Source email unavailable in the TMS. The retained message could not be retrieved for this load.");

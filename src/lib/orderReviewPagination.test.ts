@@ -8,7 +8,7 @@ function source(relative: string) {
 describe("Order Review pagination", () => {
   it("uses the server-paged lightweight queue and caps each page at 100", () => {
     const review = source("../pages/OrderReviewBulk.tsx");
-    expect(review).toContain("/api/v1/staging/queue?status=PendingReview&entityType=order&page=");
+    expect(review).toContain("/api/v2/staging/queue?status=PendingReview&entityType=order&page=");
     expect(review).toContain("const queuePageSize = 100");
     expect(review).toContain("queue.data?.records");
     expect(review).not.toContain("api.staging(await token(), \"PendingReview\", \"order\", 100)");
@@ -17,7 +17,7 @@ describe("Order Review pagination", () => {
 
   it("loads the complete staged payload only when edit is opened", () => {
     const review = source("../pages/OrderReviewBulk.tsx");
-    expect(review).toContain("const detail = await request<StagedImport>(`/api/v1/staging/${row.item.id}`");
+    expect(review).toContain("const detail = await request<StagedImport>(`/api/v2/staging/${row.item.id}`");
     expect(review).toContain("setDraft(parsedDetail.payload)");
   });
 

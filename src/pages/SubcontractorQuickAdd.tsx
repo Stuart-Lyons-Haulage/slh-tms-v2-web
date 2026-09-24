@@ -28,7 +28,7 @@ export function SubcontractorQuickAdd() {
     setMessage(undefined);
     setError(undefined);
     try {
-      const result = await request<Result>("/api/v1/subcontractors/resources", await token(), {
+      const result = await request<Result>("/api/v2/subcontractors/resources", await token(), {
         method: "POST",
         body: JSON.stringify({
           company,

@@ -17,7 +17,7 @@ const regions = ["North", "Midlands", "East", "London", "South East", "South Wes
 
 export function SitePlanningProfiles() {
   const token = useAccessToken();
-  const profiles = useApi(useCallback(async () => request<Profile[]>("/api/v1/site-planning-profiles", await token()), [token]));
+  const profiles = useApi(useCallback(async () => request<Profile[]>("/api/v2/site-planning-profiles", await token()), [token]));
   const [editing, setEditing] = useState<Profile>();
   const [temperature, setTemperature] = useState("");
   const [region, setRegion] = useState("Other");
@@ -37,7 +37,7 @@ export function SitePlanningProfiles() {
     if (value != null && !Number.isFinite(value)) { setMessage("Enter a valid temperature or leave it blank."); return; }
     setSaving(true);
     try {
-      await request(`/api/v1/site-planning-profiles/${editing.siteId}`, await token(), {
+      await request(`/api/v2/site-planning-profiles/${editing.siteId}`, await token(), {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ defaultTemperatureC: value, region }),

@@ -41,7 +41,6 @@ type Integrity = {
   recentHits: Hit[];
 };
 
-const dt = (value?: string) => value ? new Date(value).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' }) : '—';
 const text = (value: unknown) => value == null || value === '' ? '—' : String(value);
 
 export function GeofenceOperational() {
@@ -64,8 +63,8 @@ export function GeofenceOperational() {
     try {
       const access = await token();
       const [integrity, siteOptions] = await Promise.all([
-        request<Integrity>('/api/v1/geofence-integrity', access),
-        request<SiteOption[]>('/api/v1/site-geofence-sync/sites', access).then(rows => { lastGoodSites.current = rows; return rows; }).catch(() => lastGoodSites.current),
+        request<Integrity>('/api/v2/geofence-integrity', access),
+        request<SiteOption[]>('/api/v2/site-geofence-sync/sites', access).then(rows => { lastGoodSites.current = rows; return rows; }).catch(() => lastGoodSites.current),
       ]);
       setData(integrity);
       setSites(siteOptions);
@@ -103,7 +102,7 @@ export function GeofenceOperational() {
 
     setSaving(true); setError(undefined); setNotice(undefined);
     try {
-      const result = await request<SiteOption>(`/api/v1/site-geofence-sync/geofences/${selected.id}/link`, await token(), {
+      const result = await request<SiteOption>(`/api/v2/site-geofence-sync/geofences/${selected.id}/link`, await token(), {
         method: 'POST',
         body: JSON.stringify({ siteCode }),
       });
@@ -135,7 +134,7 @@ export function GeofenceOperational() {
     if (!selected) return;
     setSaving(true); setError(undefined); setNotice(undefined);
     try {
-      await request(`/api/v1/operational-master-data/geofences/${selected.id}`, await token(), {
+      await request(`/api/v2/operational-master-data/geofences/${selected.id}`, await token(), {
         method: 'PUT',
         body: JSON.stringify({
           name: draft.name,
@@ -160,7 +159,7 @@ export function GeofenceOperational() {
     setSaving(true); setError(undefined); setNotice(undefined);
     try {
       if (locationOnly) {
-        const result = await request<{ locationOnly?: boolean }>(`/api/v1/operational-master-data/geofences/${selected.id}/sync-site`, await token(), {
+        const result = await request<{ locationOnly?: boolean }>(`/api/v2/operational-master-data/geofences/${selected.id}/sync-site`, await token(), {
           method: 'POST',
           body: JSON.stringify({ name: draft.name || selected.name, siteId: null, locationOnly: true, polygonJson: draft.polygonJson || selected.polygonJson }),
         });
@@ -168,7 +167,7 @@ export function GeofenceOperational() {
       } else {
         const siteCode = String(draft.siteNumber || draft.siteCode || '').trim();
         if (!siteCode) throw new Error('Choose a canonical SITE### record before saving this geofence link.');
-        const result = await request<SiteOption>(`/api/v1/site-geofence-sync/geofences/${selected.id}/link`, await token(), {
+        const result = await request<SiteOption>(`/api/v2/site-geofence-sync/geofences/${selected.id}/link`, await token(), {
           method: 'POST',
           body: JSON.stringify({ siteCode }),
         });
@@ -184,7 +183,7 @@ export function GeofenceOperational() {
     if (!window.confirm(`${active ? 'Restore' : 'Archive'} geofence “${row.name}”?`)) return;
     setSaving(true); setError(undefined); setNotice(undefined);
     try {
-      await request(`/api/v1/master-data-cleanup/geofences/${row.id}/${active ? 'restore' : 'archive'}`, await token(), { method: 'POST' });
+      await request(`/api/v2/master-data-cleanup/geofences/${row.id}/${active ? 'restore' : 'archive'}`, await token(), { method: 'POST' });
       setNotice(`Geofence ${active ? 'restored' : 'archived'}.`); await load();
     } catch (e) { setError(e instanceof Error ? e.message : 'Archive/restore failed.'); }
     finally { setSaving(false); }
@@ -195,7 +194,7 @@ export function GeofenceOperational() {
     if (!window.confirm(`Permanently delete geofence “${row.name}”? The TMS will block this if visit history exists.`)) return;
     setSaving(true); setError(undefined); setNotice(undefined);
     try {
-      await request(`/api/v1/master-data-cleanup/geofences/${row.id}`, await token(), { method: 'DELETE' });
+      await request(`/api/v2/master-data-cleanup/geofences/${row.id}`, await token(), { method: 'DELETE' });
       setNotice('Unused duplicate geofence deleted.'); await load();
     } catch (e) { setError(e instanceof Error ? e.message : 'Delete failed.'); }
     finally { setSaving(false); }
@@ -204,7 +203,7 @@ export function GeofenceOperational() {
   async function syncAllSites() {
     setSaving(true); setError(undefined); setNotice(undefined);
     try {
-      const result = await request<{ sitesCoded: number; geofencesLinked: number; geofencesUnlinked: number; sitesMissingGeofence: number }>('/api/v1/site-geofence-sync/sync-sites', await token(), { method: 'POST' });
+      const result = await request<{ sitesCoded: number; geofencesLinked: number; geofencesUnlinked: number; sitesMissingGeofence: number }>('/api/v2/site-geofence-sync/sync-sites', await token(), { method: 'POST' });
       setNotice(`Sites synced: ${result.sitesCoded} code(s) canonicalised, ${result.geofencesLinked} geofence(s) linked, ${result.geofencesUnlinked} stale link(s) removed, ${result.sitesMissingGeofence} site(s) need review.`);
       await load();
     } catch (e) { setError(e instanceof Error ? e.message : 'Site/geofence sync failed.'); }
@@ -215,34 +214,15 @@ export function GeofenceOperational() {
     if (!window.confirm('Reload the 53 SLH Falcon geofences supplied on 17 August? Existing matching geofences will be updated, not duplicated.')) return;
     setSaving(true); setError(undefined); setNotice(undefined);
     try {
-      const result = await request<{ supplied: number; inserted: number; updated: number; siteMatched: number }>('/api/v1/geofences/import-slh-seed', await token(), { method: 'POST' });
+      const result = await request<{ supplied: number; inserted: number; updated: number; siteMatched: number }>('/api/v2/geofences/import-slh-seed', await token(), { method: 'POST' });
       setNotice(`${result.supplied} SLH geofences checked: ${result.inserted} inserted, ${result.updated} updated, ${result.siteMatched} site matches.`); await load();
     } catch (e) { setError(e instanceof Error ? e.message : 'SLH geofence reload failed.'); }
     finally { setSaving(false); }
   }
 
-  const latest = data?.latestGeofenceHit;
-  const confirmed = data?.latestConfirmedHit;
-
   return <section>
-    <div className="title-row">
-      <div><p className="eyebrow">RoadTech → geofence → Live Runs</p><h2>Geofence integrity</h2><p className="hint">Geofence-to-Site links use canonical SITE### records. Choosing a Linked Site saves that relationship immediately.</p></div>
-      <div className="title-actions"><button onClick={() => void load()} disabled={loading}>Refresh status</button><button className="primary" onClick={() => void syncAllSites()} disabled={saving}>{saving ? 'Syncing…' : 'Sync Sites'}</button><button onClick={() => void reloadSeed()} disabled={saving}>Reload SLH geofences</button></div>
-    </div>
-
     {error && <p className="notice" style={{ borderColor: '#b42318' }}>{error}</p>}
     {notice && <p className="notice">{notice}</p>}
-    {data && !data.liveRunProgressionReady && <p className="notice" style={{ borderColor: '#b42318' }}><strong>Live-run geofence progression is not fully ready.</strong> Engine: {data.engineReady ? 'ready' : 'not ready'} · site links: {data.planningLinkReady ? 'ready' : 'not ready'} · RoadTech: {data.trackingFresh ? 'fresh' : 'stale/unavailable'}.</p>}
-
-    {data && <>
-      <div className="metrics" style={{ marginBottom: 16 }}>
-        <article className="metric"><span>Live-run progression</span><strong>{data.liveRunProgressionReady ? 'READY' : 'CHECK'}</strong><small>engine + links + fresh tracking</small></article>
-        <article className="metric"><span>Active / valid</span><strong>{data.geofences.active} / {data.geofences.valid}</strong><small>{data.geofences.invalid} invalid polygon(s)</small></article>
-        <article className="metric"><span>Linked to Sites</span><strong>{data.geofences.linked}</strong><small>{data.geofences.unlinked} valid but unlinked</small></article>
-        <article className="metric"><span>RoadTech age</span><strong>{data.trackingAgeMinutes == null ? '—' : `${Math.round(data.trackingAgeMinutes)}m`}</strong><small>{data.latestTracking ? `${data.latestTracking.vehicleIdentifier} · ${dt(data.latestTracking.eventTimeUtc)}` : 'No tracking event'}</small></article>
-      </div>
-      <div className="panel" style={{ marginBottom: 16 }}><div className="title-row"><div><p className="eyebrow">Actual progression evidence</p><h3>Latest geofence hits</h3></div></div><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))', gap: 12 }}><article><strong>Latest entry / visit</strong>{latest ? <p>{latest.geofenceName}<br/><small>{latest.vehicleIdentifier} · {dt(latest.enteredAtUtc)} · {latest.status}<br/>Run {latest.loadId || 'not linked'} · stop {latest.loadStopId || 'not linked'}</small></p> : <p className="hint">No geofence hit has been recorded yet.</p>}</article><article><strong>Latest confirmed dwell hit</strong>{confirmed ? <p>{confirmed.geofenceName}<br/><small>{confirmed.vehicleIdentifier} · confirmed {dt(confirmed.confirmedAtUtc)} · {confirmed.dwellMinutes} min<br/>Run {confirmed.loadId || 'not linked'} · stop {confirmed.loadStopId || 'not linked'}</small></p> : <p className="hint">No confirmed dwell hit has been recorded yet.</p>}</article></div></div>
-    </>}
 
     {selected && <div className="crm-modal-backdrop" role="dialog" aria-modal="true" aria-label="Edit geofence Master Data" onMouseDown={event => { if (event.target === event.currentTarget && !saving) setSelected(undefined); }}>
       <div className="crm-modal">
@@ -268,8 +248,8 @@ export function GeofenceOperational() {
       </div>
     </div>}
 
-    <div className="panel">
-      <div className="title-row"><div><h3>Geofences</h3><small>{rows.length} shown</small></div><div className="title-actions"><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search geofence, Site or category…"/><label className="check-label"><input type="checkbox" checked={includeArchived} onChange={e => setIncludeArchived(e.target.checked)}/> Include archived</label></div></div>
+    <div className="panel master-data-record-panel">
+      <div className="title-row"><div><h2>Geofences</h2><small>{rows.length} shown</small></div><div className="master-data-actions"><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search geofence, Site or category…"/><label className="check-label"><input type="checkbox" checked={includeArchived} onChange={e => setIncludeArchived(e.target.checked)}/> Include archived</label><button onClick={() => void load()} disabled={loading}>Refresh</button><button className="primary" onClick={() => void syncAllSites()} disabled={saving}>{saving ? 'Syncing…' : 'Sync Sites'}</button><button onClick={() => void reloadSeed()} disabled={saving}>Reload SLH geofences</button></div></div>
       {loading && !data ? <div className="state">Loading geofence data…</div> : <div style={{ overflowX: 'auto' }}><table><thead><tr><th>Geofence</th><th>Site code</th><th>Linked site</th><th>Category</th><th>Polygon</th><th>Site link</th><th>Entry confirm</th><th>Max wait</th><th>Status</th><th>Actions</th></tr></thead><tbody>{rows.map(row => <tr key={row.id}><td><strong>{row.name}</strong></td><td>{row.locationOnly ? 'Location only' : text(row.siteCode || row.siteNumber)}</td><td>{text(row.siteName)}</td><td>{text(row.category)}</td><td>{row.polygonValid ? 'Valid' : 'Invalid'}</td><td>{row.locationOnly ? 'Location only' : row.siteLinked ? row.manualOverride ? 'Manual' : 'Linked' : 'Unlinked'}</td><td>{row.pendingEntryMinutes} min</td><td>{row.maxWaitMinutes == null ? '—' : `${row.maxWaitMinutes} min`}</td><td>{row.active ? row.validationStatus : 'Archived'}</td><td style={{ whiteSpace: 'nowrap' }}><button onClick={() => { setSelected(row); setDraft({ ...row, siteNumber: row.siteCode || row.siteNumber || '' }); }}>Edit</button>{' '}<button disabled={saving} onClick={() => void setActive(row, !row.active)}>{row.active ? 'Archive' : 'Restore'}</button>{!row.active && <>{' '}<button disabled={saving} onClick={() => void deleteFence(row)} style={{ borderColor: '#b42318', color: '#b42318' }}>Delete</button></>}</td></tr>)}</tbody></table>{!rows.length && <div className="state">No geofences match this filter.</div>}</div>}
     </div>
   </section>;

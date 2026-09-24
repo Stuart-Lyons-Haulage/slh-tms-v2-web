@@ -30,7 +30,7 @@ function time(value?: string) {
 
 export function IntakeHealthPanel() {
   const token = useAccessToken();
-  const health = useApi(useCallback(async () => request<IntakeHealth>("/api/v1/intake-health", await token()), [token]));
+  const health = useApi(useCallback(async () => request<IntakeHealth>("/api/v2/intake-health", await token()), [token]));
 
   return <section className="panel" style={{ marginBottom: 18 }}>
     <div className="title-row" style={{ alignItems: "end" }}>

@@ -81,7 +81,7 @@ export function DailyCompliance() {
   const [status, setStatus] = useState("all");
   const [employment, setEmployment] = useState("all");
   const [search, setSearch] = useState("");
-  const report = useApi(useCallback(async () => request<ComplianceReport>(`/api/v1/daily-compliance/report?date=${date}`, await token(), undefined, 90000), [date, token]));
+  const report = useApi(useCallback(async () => request<ComplianceReport>(`/api/v2/daily-compliance/report?date=${date}`, await token(), undefined, 90000), [date, token]));
   const drivers = useApi(useCallback(async () => api.drivers(await token()), [token]));
 
   const canonicalRows = useMemo(() => {

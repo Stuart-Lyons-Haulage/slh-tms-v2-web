@@ -33,7 +33,7 @@ describe("staging queue API contract", () => {
       }),
     ));
 
-    const result = await request<StagingQueuePage>("/api/v1/staging/queue?status=PendingReview&entityType=order&page=1&pageSize=100", "token");
+    const result = await request<StagingQueuePage>("/api/v2/staging/queue?status=PendingReview&entityType=order&page=1&pageSize=100", "token");
 
     expect(result).toEqual({ page: 1, pageSize: 100, total: 215, hasMore: true, records: [record] });
     expect(Array.isArray(result)).toBe(false);

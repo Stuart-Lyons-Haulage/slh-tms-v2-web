@@ -47,7 +47,7 @@ function dateLabel(value: string) {
 
 export function SageHrLeavePanel({ date = todayIsoDate(), days = 5, maxItems = 10, compact = false }: SageHrLeavePanelProps) {
   const token = useAccessToken();
-  const leave = useApi(useCallback(async () => request<SageHrDriverLeaveResponse>(`/api/v1/integrations/sage-hr/driver-leave?from=${encodeURIComponent(date)}&days=${days}`, await token(), undefined, 30000), [date, days, token]));
+  const leave = useApi(useCallback(async () => request<SageHrDriverLeaveResponse>(`/api/v2/integrations/sage-hr/driver-leave?from=${encodeURIComponent(date)}&days=${days}`, await token(), undefined, 30000), [date, days, token]));
   const items = leave.data?.items || [];
   const todayItems = items.filter(item => item.date === date);
   const upcoming = items.filter(item => item.date !== date);

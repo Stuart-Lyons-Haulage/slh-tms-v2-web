@@ -58,9 +58,9 @@ export function DispatchCalculatedStarts() {
       const date = currentDispatchDate();
       const access = await token();
       const [starts, workbench, statusResponse] = await Promise.all([
-        request<StartResponse>(`/api/v1/planner-starts?date=${encodeURIComponent(date)}`, access),
-        request<Workbench>(`/api/v1/driver-dispatch?date=${encodeURIComponent(date)}`, access, undefined, 90000),
-        request<{ drivers: CalculatedDriverStatus[] }>(`/api/v1/driver-dispatch-status?date=${encodeURIComponent(date)}`, access, undefined, 90000),
+        request<StartResponse>(`/api/v2/planner-starts?date=${encodeURIComponent(date)}`, access),
+        request<Workbench>(`/api/v2/driver-dispatch?date=${encodeURIComponent(date)}`, access, undefined, 90000),
+        request<{ drivers: CalculatedDriverStatus[] }>(`/api/v2/driver-dispatch-status?date=${encodeURIComponent(date)}`, access, undefined, 90000),
       ]);
 
       const rows = starts.rows || [];
@@ -88,7 +88,7 @@ export function DispatchCalculatedStarts() {
         return;
       }
 
-      await Promise.all(eligible.map((row) => request(`/api/v1/planner-starts/${encodeURIComponent(row.loadId)}/apply`, access, { method: "PUT" })));
+      await Promise.all(eligible.map((row) => request(`/api/v2/planner-starts/${encodeURIComponent(row.loadId)}/apply`, access, { method: "PUT" })));
       signalPlanningChange();
       publishStarts(date, rows, statusResponse.drivers);
       setMessage(`${eligible.length} allocated run${eligible.length === 1 ? "" : "s"} updated; all driver Day/Start evidence refreshed.`);

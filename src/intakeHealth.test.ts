@@ -12,7 +12,7 @@ describe("mailbox intake health and review performance", () => {
     const panel = source("./components/IntakeHealthPanel.tsx");
     expect(control).not.toContain("<IntakeHealthPanel />");
     expect(operations).toContain("<IntakeHealthPanel />");
-    expect(panel).toContain('/api/v1/intake-health');
+    expect(panel).toContain('/api/v2/intake-health');
     expect(panel).toContain("Mapping exceptions");
     expect(panel).toContain("Orders extracted");
   });
@@ -27,7 +27,7 @@ describe("mailbox intake health and review performance", () => {
 
   it("uses the lightweight paged Order Review queue and never requests 2000 staging rows", () => {
     const review = source("./pages/OrderReviewBulk.tsx");
-    expect(review).toContain('/api/v1/staging/queue?status=PendingReview&entityType=order&page=');
+    expect(review).toContain('/api/v2/staging/queue?status=PendingReview&entityType=order&page=');
     expect(review).toContain("planningDate=${encodeURIComponent(date)}");
     expect(review).toContain("const queuePageSize = 100");
     expect(review).not.toContain('api.staging(await token(), "PendingReview", "order", 2000)');

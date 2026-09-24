@@ -245,7 +245,7 @@ export function OrderReviewBulk({ date }: { date: string }) {
 
   const queue = useApi(useCallback(async () =>
     request<StagingQueuePage>(
-      `/api/v1/staging/queue?status=PendingReview&entityType=order&page=${queuePage}&pageSize=${queuePageSize}&planningDate=${encodeURIComponent(date)}`,
+      `/api/v2/staging/queue?status=PendingReview&entityType=order&page=${queuePage}&pageSize=${queuePageSize}&planningDate=${encodeURIComponent(date)}`,
       await token(),
     ), [date, queuePage, token]));
 
@@ -309,7 +309,7 @@ export function OrderReviewBulk({ date }: { date: string }) {
     setBusyId(row.item.id);
     setNotice(undefined);
     try {
-      const detail = await request<StagedImport>(`/api/v1/staging/${row.item.id}`, await token());
+      const detail = await request<StagedImport>(`/api/v2/staging/${row.item.id}`, await token());
       const parsedDetail = parse(detail);
       if (parsedDetail.parseError) throw new Error("The complete staged order could not be read.");
       setEditingId(row.item.id);
@@ -331,7 +331,7 @@ export function OrderReviewBulk({ date }: { date: string }) {
         ...draft,
         pallets: numberText(draft.pallets) === "" ? undefined : Number(draft.pallets),
       };
-      await request<StagedImport>(`/api/v1/staging/${row.item.id}/payload`, await token(), {
+      await request<StagedImport>(`/api/v2/staging/${row.item.id}/payload`, await token(), {
         method: "PUT",
         body: JSON.stringify({ payload: next, note: "Corrected directly in Order Control before approval." }),
       });
@@ -378,7 +378,7 @@ export function OrderReviewBulk({ date }: { date: string }) {
       const approvalChecks = await Promise.all(selectedRows.map(async (row) => ({
         row,
         comparison: await request<ApprovalComparison>(
-          `/api/v1/order-intake/duplicate-check/staging/${encodeURIComponent(row.item.id)}/comparison`,
+          `/api/v2/order-intake/duplicate-check/staging/${encodeURIComponent(row.item.id)}/comparison`,
           await token(),
         ),
       })));
@@ -399,7 +399,7 @@ export function OrderReviewBulk({ date }: { date: string }) {
       }
 
       const result = await request<BulkApproveResponse>(
-        "/api/v1/staging/orders/bulk-approve",
+        "/api/v2/staging/orders/bulk-approve",
         await token(),
         {
           method: "POST",

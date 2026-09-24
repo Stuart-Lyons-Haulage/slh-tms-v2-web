@@ -71,7 +71,7 @@ export function CustomerLoadPlanActions({ date }: { date: string }) {
     setLoading(true);
     setError(undefined);
     try {
-      const result = await request<PreviewResponse>(`/api/v1/customer-load-plans/preview?date=${encodeURIComponent(date)}`, await token());
+      const result = await request<PreviewResponse>(`/api/v2/customer-load-plans/preview?date=${encodeURIComponent(date)}`, await token());
       setData(result);
       setDrafts(Object.fromEntries(result.plans.map(plan => [plan.customerCode, {
         to: recipientText(plan.to),
@@ -100,7 +100,7 @@ export function CustomerLoadPlanActions({ date }: { date: string }) {
     setError(undefined);
     try {
       const access = await token();
-      const response = await fetch(`${apiBaseUrl}/api/v1/customer-load-plans/pdf?date=${encodeURIComponent(date)}&customerCode=${encodeURIComponent(plan.customerCode)}`, {
+      const response = await fetch(`${apiBaseUrl}/api/v2/customer-load-plans/pdf?date=${encodeURIComponent(date)}&customerCode=${encodeURIComponent(plan.customerCode)}`, {
         headers: { Authorization: `Bearer ${access}` },
       });
       if (!response.ok) {
@@ -132,7 +132,7 @@ export function CustomerLoadPlanActions({ date }: { date: string }) {
     setError(undefined);
     setNotice(undefined);
     try {
-      const result = await request<{ message?: string }>("/api/v1/customer-load-plans/queue", await token(), {
+      const result = await request<{ message?: string }>("/api/v2/customer-load-plans/queue", await token(), {
         method: "POST",
         body: JSON.stringify({
           planningDate: date,

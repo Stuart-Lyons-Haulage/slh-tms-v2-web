@@ -85,7 +85,7 @@ export function BetaRouteProposalReview() {
     setAcknowledgeUnverified(false);
     try {
       const result = await request<Proposal>(
-        `/api/v1/beta-optimiser/day-plan/proposal?planningDate=${encodeURIComponent(planningDate)}`,
+        `/api/v2/beta-optimiser/day-plan/proposal?planningDate=${encodeURIComponent(planningDate)}`,
         await token(),
         { method: "POST" },
         180000,
@@ -108,7 +108,7 @@ export function BetaRouteProposalReview() {
     setMessage(undefined);
     try {
       const result = await request<ApplyResult>(
-        `/api/v1/planning/optimiser/proposals/${proposal.id}/apply`,
+        `/api/v2/planning/optimiser/proposals/${proposal.id}/apply`,
         await token(),
         {
           method: "POST",

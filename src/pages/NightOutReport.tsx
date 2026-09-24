@@ -77,7 +77,7 @@ function WeeklyEvidence() {
   const token = useAccessToken();
   const [date, setDate] = useState(wednesday());
   const [view, setView] = useState<"nights" | "non-employed">("nights");
-  const report = useApi(useCallback(async () => request<DriverHoursReport>(`/api/v1/driver-hours-compliance/weekly?date=${date}`, await token(), undefined, 90000), [date, token]));
+  const report = useApi(useCallback(async () => request<DriverHoursReport>(`/api/v2/driver-hours-compliance/weekly?date=${date}`, await token(), undefined, 90000), [date, token]));
 
   const confirmedNights = useMemo(() => (report.data?.nightOuts || []).filter(row => row.status === "Confirmed").length, [report.data]);
   const detectedNights = useMemo(() => (report.data?.nightOuts || []).filter(row => row.status.startsWith("Detected")).length, [report.data]);
@@ -85,7 +85,7 @@ function WeeklyEvidence() {
 
   async function exportAgencyHours() {
     const accessToken = await token();
-    const response = await fetch(`/tms-api/api/v1/driver-hours-compliance/non-employed.csv?date=${encodeURIComponent(date)}`, {
+    const response = await fetch(`/tms-api/api/v2/driver-hours-compliance/non-employed.csv?date=${encodeURIComponent(date)}`, {
       headers: { ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) },
     });
     if (!response.ok) throw new Error(`Agency-hours export failed (${response.status}).`);

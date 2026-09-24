@@ -273,7 +273,7 @@ function DriverTachoOverview({ rows, preferences }: { rows: Driver[]; preference
 export function DriversOperational() {
   const token = useAccessToken();
   const drivers = useApi(useCallback(async () => api.drivers(await token()), [token]));
-  const preferences = useApi(useCallback(async () => request<PreferredVehicleResponse>("/api/v1/driver-vehicle-preferences", await token()), [token]));
+  const preferences = useApi(useCallback(async () => request<PreferredVehicleResponse>("/api/v2/driver-vehicle-preferences", await token()), [token]));
   const [syncing, setSyncing] = useState(false);
   const [assigningVehicles, setAssigningVehicles] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -297,7 +297,7 @@ export function DriversOperational() {
     setAssigningVehicles(true);
     setMessage(undefined);
     try {
-      const result = await request<PreferredVehicleRefresh>("/api/v1/driver-vehicle-preferences/refresh?days=28", await token(), { method: "POST" }, 120000);
+      const result = await request<PreferredVehicleRefresh>("/api/v2/driver-vehicle-preferences/refresh?days=28", await token(), { method: "POST" }, 120000);
       setMessage(`Regular vehicle analysis complete: ${result.applied} preferred vehicle pairing(s) assigned, ${result.skipped} left as suggestions only.${result.changes.length ? ` ${result.changes.slice(0, 5).join("; ")}${result.changes.length > 5 ? "; …" : ""}` : ""}`);
       await preferences.refresh();
     } catch (exception) {
@@ -315,7 +315,7 @@ export function DriversOperational() {
     setMessage(undefined);
     try {
       const rows = parseWorkerList(await file.text());
-      const result = await request<IdentityImportResult>("/api/v1/integrations/tachomaster/identity/workers", await token(), {
+      const result = await request<IdentityImportResult>("/api/v2/integrations/tachomaster/identity/workers", await token(), {
         method: "POST", body: JSON.stringify(rows),
       });
       setMessage(result.message);
@@ -336,7 +336,7 @@ export function DriversOperational() {
     setMessage(undefined);
     try {
       const rows = parseVehicleList(await file.text());
-      const result = await request<IdentityImportResult>("/api/v1/integrations/tachomaster/identity/vehicles", await token(), {
+      const result = await request<IdentityImportResult>("/api/v2/integrations/tachomaster/identity/vehicles", await token(), {
         method: "POST", body: JSON.stringify(rows),
       });
       setMessage(result.message);

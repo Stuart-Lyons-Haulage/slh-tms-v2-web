@@ -29,14 +29,14 @@ export function PlannerCalculatedStarts({ planningDate }: { planningDate: string
     setMessage(undefined);
     try {
       const access = await token();
-      const payload = await request<unknown>(`/api/v1/planner-starts?date=${encodeURIComponent(planningDate)}`, access);
+      const payload = await request<unknown>(`/api/v2/planner-starts?date=${encodeURIComponent(planningDate)}`, access);
       const data = normaliseResponse(payload, planningDate);
       const applicable = data.rows.filter((row) => Boolean(row.suggestedStartUtc));
       if (!applicable.length) {
         setMessage("No calculated starts available yet.");
         return;
       }
-      await Promise.all(applicable.map((row) => request(`/api/v1/planner-starts/${row.loadId}/apply`, access, { method: "PUT" })));
+      await Promise.all(applicable.map((row) => request(`/api/v2/planner-starts/${row.loadId}/apply`, access, { method: "PUT" })));
       signalPlanningChange();
       setMessage(`${applicable.length} start time${applicable.length === 1 ? "" : "s"} populated for Dispatch.`);
     } catch (error) {

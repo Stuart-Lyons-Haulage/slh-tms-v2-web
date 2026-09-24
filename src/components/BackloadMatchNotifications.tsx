@@ -88,7 +88,7 @@ export function BackloadMatchNotifications() {
     setErrors(current => ({ ...current, [key]: '' }));
     try {
       const token = await accessToken();
-      await request('/api/dispatch/accept-backload', token, {
+      await request('/api/v2/dispatch/accept-backload', token, {
         method: 'POST',
         body: JSON.stringify({ loadId: card.loadId, orderId: card.orderId })
       });
@@ -111,7 +111,7 @@ export function BackloadMatchNotifications() {
     setErrors(current => ({ ...current, [key]: '' }));
     try {
       const token = await accessToken();
-      await request('/api/dispatch/decline-backload', token, {
+      await request('/api/v2/dispatch/decline-backload', token, {
         method: 'POST',
         body: JSON.stringify({ loadId: card.loadId, orderId: card.orderId, reason })
       });

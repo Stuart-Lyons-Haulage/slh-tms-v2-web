@@ -284,7 +284,7 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
 
   const refreshAll = useCallback(async () => {
     const access = await token();
-    const nextControl = await request<PlanningControlData>(`/api/v1/planning-control/pallets?date=${encodeURIComponent(date)}`, access);
+    const nextControl = await request<PlanningControlData>(`/api/v2/planning-control/pallets?date=${encodeURIComponent(date)}`, access);
     const [loadsResult, sitesResult, marketsResult] = await Promise.allSettled([listRuns(date, access), api.sites(access), api.marketContacts(access)]);
     const safeLoads = loadsResult.status === "fulfilled" && Array.isArray(loadsResult.value) ? loadsResult.value : [];
     const safeSites = sitesResult.status === "fulfilled" && Array.isArray(sitesResult.value) ? sitesResult.value : [];
@@ -298,7 +298,7 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
   }, [date, hydrate, token]);
 
   const refreshControl = useCallback(async () => {
-    const nextControl = await request<PlanningControlData>(`/api/v1/planning-control/pallets?date=${encodeURIComponent(date)}`, await token());
+    const nextControl = await request<PlanningControlData>(`/api/v2/planning-control/pallets?date=${encodeURIComponent(date)}`, await token());
     setControl(nextControl);
   }, [date, token]);
 
@@ -397,7 +397,7 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
   }
 
   async function allocate(orderId: string, loadId: string, pallets: number, access: string) {
-    return request<AllocationResult>("/api/v1/planning-control/allocations", access, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ orderId, loadId, date, pallets, note: "Auto-saved from live Run Planner" }) });
+    return request<AllocationResult>("/api/v2/planning-control/allocations", access, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ orderId, loadId, date, pallets, note: "Auto-saved from live Run Planner" }) });
   }
 
   async function syncStops(loadId: string, lines: RunLine[], access: string) {
@@ -419,7 +419,7 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
     const next = { ...run, ...patch };
     const load = loads.find((item) => item.id === run.loadId);
     try {
-      await request(`/api/v1/loads/${run.loadId}/utilisation`, await token(), { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ palletSpacesUsed: runTotal(run), totalPalletSpaces: load?.totalPalletSpaces ?? 26, capacityType: load?.capacityType ?? "Standard pallets", depotSplits: load?.depotSplits, temperatureC: load?.temperatureC, plannerNotes: notesForRun(next) }) });
+      await request(`/api/v2/loads/${run.loadId}/utilisation`, await token(), { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ palletSpacesUsed: runTotal(run), totalPalletSpaces: load?.totalPalletSpaces ?? 26, capacityType: load?.capacityType ?? "Standard pallets", depotSplits: load?.depotSplits, temperatureC: load?.temperatureC, plannerNotes: notesForRun(next) }) });
       signalPlanningChange();
     } catch (error) { setMessage(error instanceof Error ? error.message : "Run details could not be auto-saved."); }
   }

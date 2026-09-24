@@ -32,8 +32,8 @@ export function PalletPlanningControl() {
   const [message, setMessage] = useState<string>();
   const [busyKey, setBusyKey] = useState<string>();
   const [allocationDrafts, setAllocationDrafts] = useState<Record<string, { loadId: string; pallets: string }>>({});
-  const control = useApi(useCallback(async () => request<PlanningControlData>(`/api/v1/planning-control/pallets?date=${encodeURIComponent(date)}`, await token()), [date, token]));
-  const regions = useApi(useCallback(async () => request<RegionData>(`/api/v1/planning-control/regions?date=${encodeURIComponent(date)}`, await token()), [date, token]));
+  const control = useApi(useCallback(async () => request<PlanningControlData>(`/api/v2/planning-control/pallets?date=${encodeURIComponent(date)}`, await token()), [date, token]));
+  const regions = useApi(useCallback(async () => request<RegionData>(`/api/v2/planning-control/regions?date=${encodeURIComponent(date)}`, await token()), [date, token]));
   const refreshControl = control.refresh;
   const refreshRegions = regions.refresh;
 
@@ -73,7 +73,7 @@ export function PalletPlanningControl() {
     const pallets = Number(draftValue.pallets); if (!Number.isInteger(pallets) || pallets < 0) { setMessage("Enter a whole load-unit quantity of zero or more."); return; }
     setBusyKey(order.id); setMessage(undefined);
     try {
-      const result = await request<{ outstandingPallets: number; overplannedPallets: number; loadReference: string; runCapacityStatus?: string; runUtilisationPercent?: number; trolleyPositionsRemaining?: number }>("/api/v1/planning-control/allocations", await token(), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ orderId: order.id, loadId: draftValue.loadId, date, pallets, note: "Updated from live Pallet Control" }) });
+      const result = await request<{ outstandingPallets: number; overplannedPallets: number; loadReference: string; runCapacityStatus?: string; runUtilisationPercent?: number; trolleyPositionsRemaining?: number }>("/api/v2/planning-control/allocations", await token(), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ orderId: order.id, loadId: draftValue.loadId, date, pallets, note: "Updated from live Pallet Control" }) });
       const capacity = result.runCapacityStatus ? ` · trailer ${result.runCapacityStatus}${result.runUtilisationPercent != null ? ` ${result.runUtilisationPercent.toFixed(1)}%` : ""}` : "";
       setMessage(`${order.reference}: ${pallets} allocated · ${result.outstandingPallets} remaining${result.overplannedPallets > 0 ? ` · ${result.overplannedPallets} over-planned` : ""}${capacity}.`);
       setAllocationDrafts(current => { const next = { ...current }; delete next[order.id]; return next; });

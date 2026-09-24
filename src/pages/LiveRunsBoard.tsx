@@ -221,7 +221,7 @@ export function LiveRunsBoard({ tvMode = false }: { tvMode?: boolean }) {
 
   const { data: progressData, error: progressError, refresh: refreshProgress } = useApi(useCallback(async () => {
     const access = await token();
-    const current = await request<RunProgressResponse>(`/api/v1/run-progress?date=${encodeURIComponent(date)}`, access);
+    const current = await request<RunProgressResponse>(`/api/v2/run-progress?date=${encodeURIComponent(date)}`, access);
     return { ...current, records: current.records.filter((progress) => loadData?.some((load) => load.id === progress.loadId) ?? true) };
   }, [date, loadData, token]));
 

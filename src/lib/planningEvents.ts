@@ -55,7 +55,7 @@ export function connectPlanningEventStream(token: string) {
   const connect = async () => {
     if (stopped) return;
     try {
-      const response = await fetch(`${apiBaseUrl}/api/v1/planning-events/stream`, {
+      const response = await fetch(`${apiBaseUrl}/api/v2/planning-events/stream`, {
         headers: { Accept: 'text/event-stream', Authorization: `Bearer ${token}` },
         cache: 'no-store',
         signal: controller.signal,

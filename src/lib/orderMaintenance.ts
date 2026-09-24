@@ -22,13 +22,13 @@ export type OrderUpdatePayload = {
 
 export const orderMaintenance = {
   update: (id: string, payload: OrderUpdatePayload, token?: string) =>
-    request<TransportOrder>(`/api/v1/operational-recovery/orders/${id}`, token, {
+    request<TransportOrder>(`/api/v2/operational-recovery/orders/${id}`, token, {
       method: "PUT",
       body: JSON.stringify(payload),
     }),
   cancel: (id: string, token?: string) =>
     request<{ id: string; reference: string; status: string; removedStops: number; warning?: string }>(
-      `/api/v1/operational-recovery/orders/${id}`,
+      `/api/v2/operational-recovery/orders/${id}`,
       token,
       { method: "DELETE" },
     ),

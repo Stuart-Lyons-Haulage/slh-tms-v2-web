@@ -15,19 +15,29 @@ export function DispatchResourceQuickAdd({ onSaved }: Props) {
   const [employeeNumber, setEmployeeNumber] = useState("");
   const [driverType, setDriverType] = useState<ResourceType>("Agency");
   const [organisationName, setOrganisationName] = useState("");
+  const [startDate, setStartDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [days, setDays] = useState(7);
 
   async function save() {
     setBusy(true);
     setNotice(undefined);
     try {
-      const result = await request<{ message?: string }>("/api/v1/driver-dispatch/resources", await token(), {
+      const result = await request<{ id: string; message?: string }>("/api/v2/driver-dispatch/resources", await token(), {
         method: "POST",
         body: JSON.stringify({ displayName, employeeNumber, driverType, organisationName })
       }, 90000);
-      setNotice(result.message || "Resource added.");
+      if (driverType === "Agency") {
+        await request("/api/v2/driver-dispatch/agency-roster", await token(), {
+          method: "POST",
+          body: JSON.stringify({ driverId: result.id, startDate, days })
+        }, 90000);
+      }
+      setNotice(driverType === "Agency" ? `${result.message || "Agency driver added."} Rostered ${startDate} for ${days} day${days === 1 ? "" : "s"}.` : (result.message || "Resource added."));
       setDisplayName("");
       setEmployeeNumber("");
       setOrganisationName("");
+      setStartDate(new Date().toISOString().slice(0, 10));
+      setDays(7);
       onSaved?.();
     } catch (exception) {
       setNotice(exception instanceof Error ? exception.message : "The driver/subbie could not be added.");
@@ -54,6 +64,10 @@ export function DispatchResourceQuickAdd({ onSaved }: Props) {
         </select></label>
         {(driverType === "Employed" || driverType === "Casual") && <label>Employee number<input value={employeeNumber} onChange={event => setEmployeeNumber(event.target.value)} placeholder="Employee number" /></label>}
         {(driverType === "Agency" || driverType === "Subcontractor") && <label>{driverType === "Subcontractor" ? "Subbie / company" : "Agency"}<input value={organisationName} onChange={event => setOrganisationName(event.target.value)} placeholder={driverType === "Subcontractor" ? "Company or trading name" : "Agency name"} /></label>}
+        {driverType === "Agency" && <>
+          <label>Available from<input type="date" value={startDate} onChange={event => setStartDate(event.target.value)} /></label>
+          <label>Available days<select value={days} onChange={event => setDays(Number(event.target.value))}>{[1, 2, 3, 4, 5, 6, 7].map(value => <option key={value} value={value}>{value}</option>)}</select></label>
+        </>}
         {notice && <div className="smart-dispatch-notice" role="status">{notice}</div>}
         <footer>
           <button className="smart-action primary" type="button" disabled={busy || !displayName.trim()} onClick={() => void save()}>{busy ? "Saving…" : driverType === "Subcontractor" ? "Add Subbie" : "Add Driver"}</button>

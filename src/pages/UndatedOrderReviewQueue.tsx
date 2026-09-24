@@ -72,7 +72,7 @@ async function loadPendingOrders(accessToken: string) {
 
   while (hasMore && page <= 50) {
     const result = await request<QueuePage>(
-      `/api/v1/staging/queue?status=PendingReview&entityType=order&page=${page}&pageSize=100`,
+      `/api/v2/staging/queue?status=PendingReview&entityType=order&page=${page}&pageSize=100`,
       accessToken,
     );
     if (page === 1) total = result.total;
@@ -123,7 +123,7 @@ export function UndatedOrderReviewQueue() {
   async function beginFix(row: PendingRow) {
     setBusyId(row.item.id);
     try {
-      const detail = await request<StagedImport>(`/api/v1/staging/${row.item.id}`, await token());
+      const detail = await request<StagedImport>(`/api/v2/staging/${row.item.id}`, await token());
       const payload = JSON.parse(detail.payloadJson || "{}") as Payload;
       setEditing({ id: row.item.id, payload });
     } catch (err) {
@@ -145,7 +145,7 @@ export function UndatedOrderReviewQueue() {
     setBusyId(row.item.id);
     setError(undefined);
     try {
-      await request<StagedImport>(`/api/v1/staging/${row.item.id}/payload`, await token(), {
+      await request<StagedImport>(`/api/v2/staging/${row.item.id}/payload`, await token(), {
         method: "PUT",
         body: JSON.stringify({
           payload: editing.payload,

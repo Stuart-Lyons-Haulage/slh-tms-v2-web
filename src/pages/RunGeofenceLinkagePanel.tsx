@@ -85,7 +85,7 @@ export function RunGeofenceLinkagePanel({ tvAccessKey }: { tvAccessKey?: string 
       const init = tvAccessKey
         ? { cache: "no-store" as const, headers: { "X-TV-Display-Key": tvAccessKey, "X-TMS-TV-Key": tvAccessKey } }
         : { cache: "no-store" as const };
-      const response = await request<LinkageResponse>(`/api/v1/planning/geofence-linkage?date=${encodeURIComponent(date)}`, access, init, 90000);
+      const response = await request<LinkageResponse>(`/api/v2/planning/geofence-linkage?date=${encodeURIComponent(date)}`, access, init, 90000);
       setData(response);
       setError(undefined);
     } catch (exception) {

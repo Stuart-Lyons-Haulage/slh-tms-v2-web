@@ -95,7 +95,7 @@ function OrderIntakeCacheRecovery({ date }: { date: string }) {
     setLoading(true);
     setError(undefined);
     try {
-      const result = await request<CachedEmailResponse>(`/api/v1/order-intake/cache?fromUtc=${encodeURIComponent(window.fromUtc)}&toUtc=${encodeURIComponent(window.toUtc)}&take=1000`, await token());
+      const result = await request<CachedEmailResponse>(`/api/v2/order-intake/cache?fromUtc=${encodeURIComponent(window.fromUtc)}&toUtc=${encodeURIComponent(window.toUtc)}&take=1000`, await token());
       setData(result);
       setNotice(`${result.count} cached emails found · ${result.records.filter(item => (item.existingOrderCount ?? 0) === 0).length} with no order row.`);
     } catch (err) {
@@ -109,7 +109,7 @@ function OrderIntakeCacheRecovery({ date }: { date: string }) {
     setForcing(evidenceId);
     setError(undefined);
     try {
-      const result = await request<ForceReviewResponse>(`/api/v1/order-intake/cache/${evidenceId}/force-review`, await token(), { method: "POST" });
+      const result = await request<ForceReviewResponse>(`/api/v2/order-intake/cache/${evidenceId}/force-review`, await token(), { method: "POST" });
       setNotice(result.stagedImportId ? "Cached email forced into Pending Review." : `Force review result: ${result.status ?? "completed"}.`);
       await loadCache();
       refreshVisibleReviewData();
@@ -125,7 +125,7 @@ function OrderIntakeCacheRecovery({ date }: { date: string }) {
     setForcing("all");
     setError(undefined);
     try {
-      const result = await request<ForceReviewResponse>(`/api/v1/order-intake/cache/force-review?fromUtc=${encodeURIComponent(window.fromUtc)}&toUtc=${encodeURIComponent(window.toUtc)}&take=1000`, await token(), { method: "POST" });
+      const result = await request<ForceReviewResponse>(`/api/v2/order-intake/cache/force-review?fromUtc=${encodeURIComponent(window.fromUtc)}&toUtc=${encodeURIComponent(window.toUtc)}&take=1000`, await token(), { method: "POST" });
       const created = (result.results ?? []).filter(item => item.status === "created_manual_review_order").length;
       const existing = (result.results ?? []).filter(item => item.status === "existing_order_found" || item.status === "manual_review_already_created").length;
       setNotice(`Recovery complete: ${created} forced into Pending Review, ${existing} already had orders.`);
@@ -213,7 +213,7 @@ export function OrderControl({ initialTab = "review" }: { initialTab?: OrderCont
     let active = true;
     void (async () => {
       try {
-        const result = await request<NwfRepairResponse>("/api/v1/staging/orders/repair-nwf-references", await token(), { method: "POST" });
+        const result = await request<NwfRepairResponse>("/api/v2/staging/orders/repair-nwf-references", await token(), { method: "POST" });
         if (!active || result.repaired <= 0) return;
         setRepairNotice(result.message);
         refreshVisibleReviewData();

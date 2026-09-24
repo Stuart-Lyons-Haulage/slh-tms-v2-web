@@ -14,7 +14,7 @@ describe("Order Review source email evidence", () => {
   });
 
   it("loads retained email evidence inside the TMS instead of requiring Outlook", () => {
-    expect(drawerSource).toContain("/api/v1/order-intake/source-email/");
+    expect(drawerSource).toContain("/api/v2/order-intake/source-email/");
     expect(drawerSource).toContain("Email body");
     expect(drawerSource).toContain("Attachments");
     expect(drawerSource).not.toContain("Open original in Outlook");

@@ -93,19 +93,19 @@ export function compareRuns(left: Pick<Run, 'planningDate' | 'reference'>, right
 }
 
 export async function listRuns(date?: string, token?: string): Promise<Run[]> {
-  const path = `/api/v1/runs${date ? `?date=${encodeURIComponent(date)}` : ''}`;
+  const path = `/api/v2/runs${date ? `?date=${encodeURIComponent(date)}` : ''}`;
   const runs = await apiRequest(path, z.array(runSchema), token);
   return [...runs].sort(compareRuns);
 }
 
-export function createRun(payload: CreateRun, token?: string): Promise<Run> { return apiRequest('/api/v1/runs', runSchema, token, { method: 'POST', body: JSON.stringify(payload) }); }
+export function createRun(payload: CreateRun, token?: string): Promise<Run> { return apiRequest('/api/v2/runs', runSchema, token, { method: 'POST', body: JSON.stringify(payload) }); }
 
 async function confirmPreferredVehicle(runId: string, payload: RunAllocation, token?: string) {
   if (!payload.vehicleId || !payload.driverId) return;
   try {
     const run = (await listRuns(undefined, token)).find(item => item.id === runId); if (!run?.planningDate) return;
     const query = new URLSearchParams({ vehicleId: payload.vehicleId, driverId: payload.driverId, date: run.planningDate });
-    const check = await apiRequest(`/api/v1/driver-vehicle-preferences/allocation-check?${query}`, allocationCheckSchema, token);
+    const check = await apiRequest(`/api/v2/driver-vehicle-preferences/allocation-check?${query}`, allocationCheckSchema, token);
     if (!check.warning || !check.prompt) return;
     const heading = check.protectedVehicle ? 'Protected regular vehicle' : 'Regular vehicle warning';
     if (!window.confirm(`${heading}\n\n${check.prompt}\n\nContinue with this allocation anyway?`)) throw new Error('Allocation cancelled. Choose another vehicle or keep the regular vehicle with its usual driver.');
@@ -115,12 +115,12 @@ async function confirmPreferredVehicle(runId: string, payload: RunAllocation, to
   }
 }
 
-export async function allocateRun(id: string, payload: RunAllocation, token?: string): Promise<Run> { await confirmPreferredVehicle(id, payload, token); return apiRequest(`/api/v1/runs/${encodeURIComponent(id)}/allocation`, runSchema, token, { method: 'PUT', body: JSON.stringify(payload) }); }
-export function updateRunOperational(id: string, payload: RunOperationalUpdateDto, token?: string): Promise<Run> { return apiRequest(`/api/v1/runs/${encodeURIComponent(id)}/operational`, runSchema, token, { method: 'PUT', body: JSON.stringify(payload) }); }
-export function updateRunStops(id: string, stops: CreateRun['stops'], token?: string): Promise<Run> { const path = stops.length === 0 ? `/api/v1/planning-control/runs/${encodeURIComponent(id)}/stops` : `/api/v1/runs/${encodeURIComponent(id)}/stops`; return apiRequest(path, runSchema, token, { method: 'PUT', body: JSON.stringify(stops) }); }
-export function getRunRoute(id: string, token?: string): Promise<Record<string, unknown>> { return apiRequest(`/api/v1/runs/${encodeURIComponent(id)}/route`, unknownObjectSchema, token); }
-export function getDriverDispatchRoute(id: string, token?: string): Promise<Record<string, unknown>> { return apiRequest(`/api/v1/driver-dispatch-routes/${encodeURIComponent(id)}`, unknownObjectSchema, token); }
-export function getRunDispatch(id: string, token?: string): Promise<RunDispatch> { return apiRequest(`/api/v1/runs/${encodeURIComponent(id)}/dispatch`, dispatchSchema, token); }
-export function updateRunStatus(id: string, status: string, token?: string): Promise<Run> { return apiRequest(`/api/v1/runs/${encodeURIComponent(id)}/status`, runSchema, token, { method: 'PUT', body: JSON.stringify({ status }) }); }
+export async function allocateRun(id: string, payload: RunAllocation, token?: string): Promise<Run> { await confirmPreferredVehicle(id, payload, token); return apiRequest(`/api/v2/runs/${encodeURIComponent(id)}/allocation`, runSchema, token, { method: 'PUT', body: JSON.stringify(payload) }); }
+export function updateRunOperational(id: string, payload: RunOperationalUpdateDto, token?: string): Promise<Run> { return apiRequest(`/api/v2/runs/${encodeURIComponent(id)}/operational`, runSchema, token, { method: 'PUT', body: JSON.stringify(payload) }); }
+export function updateRunStops(id: string, stops: CreateRun['stops'], token?: string): Promise<Run> { const path = stops.length === 0 ? `/api/v2/planning-control/runs/${encodeURIComponent(id)}/stops` : `/api/v2/runs/${encodeURIComponent(id)}/stops`; return apiRequest(path, runSchema, token, { method: 'PUT', body: JSON.stringify(stops) }); }
+export function getRunRoute(id: string, token?: string): Promise<Record<string, unknown>> { return apiRequest(`/api/v2/runs/${encodeURIComponent(id)}/route`, unknownObjectSchema, token); }
+export function getDriverDispatchRoute(id: string, token?: string): Promise<Record<string, unknown>> { return apiRequest(`/api/v2/driver-dispatch-routes/${encodeURIComponent(id)}`, unknownObjectSchema, token); }
+export function getRunDispatch(id: string, token?: string): Promise<RunDispatch> { return apiRequest(`/api/v2/runs/${encodeURIComponent(id)}/dispatch`, dispatchSchema, token); }
+export function updateRunStatus(id: string, status: string, token?: string): Promise<Run> { return apiRequest(`/api/v2/runs/${encodeURIComponent(id)}/status`, runSchema, token, { method: 'PUT', body: JSON.stringify({ status }) }); }
 
 export const runsApi = { list: listRuns, create: createRun, allocate: allocateRun, updateOperational: updateRunOperational, updateStops: updateRunStops, route: getRunRoute, dispatch: getRunDispatch, updateStatus: updateRunStatus };

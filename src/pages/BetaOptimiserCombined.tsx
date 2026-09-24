@@ -149,7 +149,7 @@ export function BetaOptimiserCombined() {
   async function buildDay() {
     setBusy(true); setMessage(undefined); setWarnings([]); setComparison(undefined);
     try {
-      const result = await request<BetaDayPlan>(`/api/v1/beta-optimiser/day-plan?planningDate=${encodeURIComponent(planningDate)}`, await token(), undefined, 90000);
+      const result = await request<BetaDayPlan>(`/api/v2/beta-optimiser/day-plan?planningDate=${encodeURIComponent(planningDate)}`, await token(), undefined, 90000);
       setDayPlan(result);
       setMessage(`Beta independently built ${result.runCount} runs from ${result.eligibleOrderLines} order lines for ${formatDateLong(planningDate)}. Planner and Dispatch were not changed.`);
     } catch (error) {
@@ -167,7 +167,7 @@ export function BetaOptimiserCombined() {
       setPlanningDate(payload.planningDate);
       setFileNames(files.map(file => file.name));
       setWarnings(payload.exceptions.map(item => [item.code, item.detail].filter(Boolean).join(": ")).filter(Boolean));
-      const result = await request<BetaDayPlanComparison>("/api/v1/beta-optimiser/day-plan/compare", await token(), {
+      const result = await request<BetaDayPlanComparison>("/api/v2/beta-optimiser/day-plan/compare", await token(), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(comparisonRequest),

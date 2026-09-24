@@ -28,13 +28,13 @@ export function MasterDocuments({ entityType, entityId, title }: { entityType: '
   const [draft, setDraft] = useState<Draft>(empty);
   const [adding, setAdding] = useState(false);
   const [message, setMessage] = useState<string>();
-  const documents = useApi(useCallback(async () => request<MasterDocument[]>(`/api/v1/master-documents/${entityType}/${entityId}`, await token()), [entityId, entityType, token]));
+  const documents = useApi(useCallback(async () => request<MasterDocument[]>(`/api/v2/master-documents/${entityType}/${entityId}`, await token()), [entityId, entityType, token]));
 
   async function add() {
     if (!draft.fileName.trim() || !draft.storageUrl.trim()) { setMessage('File name and SharePoint/OneDrive link are required.'); return; }
     setAdding(true); setMessage(undefined);
     try {
-      await request(`/api/v1/master-documents/${entityType}/${entityId}`, await token(), {
+      await request(`/api/v2/master-documents/${entityType}/${entityId}`, await token(), {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
           fileName: draft.fileName.trim(), documentType: draft.documentType.trim() || 'Other', description: draft.description.trim() || null,
           storageUrl: draft.storageUrl.trim(), storageItemId: null, expiryOrReviewDate: draft.expiryOrReviewDate || null,
@@ -47,7 +47,7 @@ export function MasterDocuments({ entityType, entityId, title }: { entityType: '
 
   async function archive(id: string) {
     if (!window.confirm('Archive this document entry? The SharePoint/OneDrive file will be retained.')) return;
-    try { await request(`/api/v1/master-documents/${id}/archive`, await token(), { method: 'POST' }); await documents.refresh(); }
+    try { await request(`/api/v2/master-documents/${id}/archive`, await token(), { method: 'POST' }); await documents.refresh(); }
     catch (error) { setMessage(error instanceof Error ? error.message : 'Document could not be archived.'); }
   }
 

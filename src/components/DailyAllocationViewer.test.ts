@@ -5,8 +5,8 @@ const source = readFileSync(new URL("./DailyAllocationViewer.tsx", import.meta.u
 
 describe("Dashboard Driver Dispatch mirror", () => {
   it("reads the same workbench and status sources as Driver Dispatch", () => {
-    expect(source).toContain('/api/v1/driver-dispatch?date=');
-    expect(source).toContain('/api/v1/driver-dispatch-status?date=');
+    expect(source).toContain('/api/v2/driver-dispatch?date=');
+    expect(source).toContain('/api/v2/driver-dispatch-status?date=');
     expect(source).not.toContain('driverAssignments(');
   });
 

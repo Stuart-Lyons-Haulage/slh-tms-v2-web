@@ -96,8 +96,8 @@ export function DashboardOperational() {
   const token = useAccessToken();
   const date = todayIsoDate();
   const readiness = useApi(useCallback(async () => intelligenceApi.readiness(date, await token()), [date, token]));
-  const syncState = useApi(useCallback(async () => request<SystemSyncState>("/api/v1/system-sync/state", await token(), undefined, 30000), [token]));
-  const compliance = useApi(useCallback(async () => request<DailyComplianceSummary>(`/api/v1/daily-compliance/report?date=${encodeURIComponent(date)}`, await token(), undefined, 90000), [date, token]));
+  const syncState = useApi(useCallback(async () => request<SystemSyncState>("/api/v2/system-sync/state", await token(), undefined, 30000), [token]));
+  const compliance = useApi(useCallback(async () => request<DailyComplianceSummary>(`/api/v2/daily-compliance/report?date=${encodeURIComponent(date)}`, await token(), undefined, 90000), [date, token]));
   const masterData = useApi(useCallback(async () => getMasterDispatchData(await token()), [token]));
 
   const snapshot = readiness.data;

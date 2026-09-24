@@ -70,11 +70,11 @@ export type MasterDispatchData = {
 
 export async function getMasterDispatchData(token: string): Promise<MasterDispatchData> {
   const [drivers, vehicles, trailers, customers, sites] = await Promise.all([
-    request<MasterDriver[]>("/api/master/drivers", token),
-    request<MasterVehicle[]>("/api/master/vehicles", token),
-    request<MasterTrailer[]>("/api/master/trailers", token),
-    request<MasterCustomer[]>("/api/master/customers", token),
-    request<MasterSite[]>("/api/master/sites", token)
+    request<MasterDriver[]>("/api/v2/master/drivers", token),
+    request<MasterVehicle[]>("/api/v2/master/vehicles", token),
+    request<MasterTrailer[]>("/api/v2/master/trailers", token),
+    request<MasterCustomer[]>("/api/v2/master/customers", token),
+    request<MasterSite[]>("/api/v2/master/sites", token)
   ]);
   return { drivers, vehicles, trailers, customers, sites };
 }

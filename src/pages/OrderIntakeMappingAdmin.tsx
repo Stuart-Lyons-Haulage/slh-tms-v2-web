@@ -71,8 +71,8 @@ export function OrderIntakeMappingAdmin() {
     try {
       const access = await token();
       const [mappingRows, ruleRows] = await Promise.all([
-        request<Mapping[]>('/api/v1/customer-email-mappings?includeInactive=true', access),
-        request<RouteRule[]>('/api/v1/order-intake-route-rules?includeInactive=true', access),
+        request<Mapping[]>('/api/v2/customer-email-mappings?includeInactive=true', access),
+        request<RouteRule[]>('/api/v2/order-intake-route-rules?includeInactive=true', access),
       ]);
       setMappings(mappingRows);
       setRules(ruleRows);
@@ -104,7 +104,7 @@ export function OrderIntakeMappingAdmin() {
     setSaving(true); setMessage(undefined);
     try {
       const access = await token();
-      const path = mappingId ? `/api/v1/customer-email-mappings/${mappingId}` : '/api/v1/customer-email-mappings';
+      const path = mappingId ? `/api/v2/customer-email-mappings/${mappingId}` : '/api/v2/customer-email-mappings';
       await request(path, access, { method: mappingId ? 'PATCH' : 'POST', body: JSON.stringify(mappingDraft) });
       setMappingId(undefined); setMappingEditorOpen(false); setMappingDraft(emptyMapping);
       await load();
@@ -119,7 +119,7 @@ export function OrderIntakeMappingAdmin() {
     setSaving(true); setMessage(undefined);
     try {
       const access = await token();
-      const path = ruleId ? `/api/v1/order-intake-route-rules/${ruleId}` : '/api/v1/order-intake-route-rules';
+      const path = ruleId ? `/api/v2/order-intake-route-rules/${ruleId}` : '/api/v2/order-intake-route-rules';
       const payload = {
         ...ruleDraft,
         effectiveFrom: clean(ruleDraft.effectiveFrom) || null,
@@ -138,7 +138,7 @@ export function OrderIntakeMappingAdmin() {
     setSaving(true); setMessage(undefined);
     try {
       const access = await token();
-      await request(kind === 'mapping' ? `/api/v1/customer-email-mappings/${id}` : `/api/v1/order-intake-route-rules/${id}`, access, { method: 'DELETE' });
+      await request(kind === 'mapping' ? `/api/v2/customer-email-mappings/${id}` : `/api/v2/order-intake-route-rules/${id}`, access, { method: 'DELETE' });
       await load();
       setMessage(kind === 'mapping' ? 'Email mapping deactivated.' : 'Route rule deactivated.');
     } catch (error) {

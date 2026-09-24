@@ -103,7 +103,7 @@ export function parseTachoWorkerCsv(text:string):TachoWorkerRow[]{
 async function postWorkbook(file:File, action:"preview"|"commit", accessToken?:string):Promise<WorkbookResult>{
   const form=new FormData();
   form.append("file",file,file.name);
-  const response=await fetch(`${apiBaseUrl}/api/v1/master-data/workbook/${action}`,{
+  const response=await fetch(`${apiBaseUrl}/api/v2/master-data/workbook/${action}`,{
     method:"POST",
     headers:{Accept:"application/json",...(accessToken?{Authorization:`Bearer ${accessToken}`}:{})},
     body:form,
@@ -165,7 +165,7 @@ export function DriverMasterImport(){
         setMessage(`${driverRows.filter(row=>row.status==="updated").length} Driver row(s) updated · ${driverRows.filter(row=>row.status==="skipped"||row.status==="review").length} held/skipped.`);
       }else{
         if(!rows.length) throw new Error("No TachoMaster workers are ready to import.");
-        const response=await request<ImportResult>("/api/v1/driver-master/tachomaster/import-workers",await token(),{
+        const response=await request<ImportResult>("/api/v2/driver-master/tachomaster/import-workers",await token(),{
           method:"POST",
           body:JSON.stringify(rows),
         },60000);

@@ -57,7 +57,7 @@ async function correctionsFor(
   if (loading) return loading;
   loading = (async () => {
     try {
-      const response = await baseFetch("/tms-api/api/v1/operations/eta-learning?lookbackDays=42", {
+      const response = await baseFetch("/tms-api/api/v2/operations/eta-learning?lookbackDays=42", {
         method: "GET",
         headers: requestHeaders(input, init),
         cache: "no-store",
@@ -121,8 +121,8 @@ export function EtaLearningBridge() {
         return response;
       }
 
-      const deliveryEtas = pathname.endsWith("/api/v1/operations/delivery-etas");
-      const runTiming = pathname.endsWith("/api/v1/run-timing");
+      const deliveryEtas = pathname.endsWith("/api/v2/operations/delivery-etas");
+      const runTiming = pathname.endsWith("/api/v2/run-timing");
       if (!deliveryEtas && !runTiming) return response;
 
       try {

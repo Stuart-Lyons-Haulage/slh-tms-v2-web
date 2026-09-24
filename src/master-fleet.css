@@ -23,9 +23,18 @@
   scroll-snap-align: start;
 }
 .master-section-panel { display: block; }
-.master-section-tabs { margin: -2px 0 8px; }
+.master-data-tabbar { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; }
+.master-data-tabbar > .horizontal-tabs { flex: 1 1 auto; width: auto; padding-bottom: 2px; }
+.master-data-tabbar > button { flex: 0 0 auto; white-space: nowrap; }
+.master-section-tabs { margin: 0; }
 .master-section-tabs button { min-width: 118px; }
 .master-section-hint { max-width: none !important; }
+.master-import-modal { width: min(960px, 94vw); }
+.master-data-record-panel { margin-top: 0; }
+.master-data-actions, .duplicate-control-actions, .duplicate-control-inline { display: flex; align-items: end; gap: 8px; flex-wrap: wrap; }
+.duplicate-control-inline { display: contents; }
+.duplicate-control-inline .notice { flex-basis: 100%; }
+.duplicate-count { display: inline-flex; min-width: 16px; height: 16px; align-items: center; justify-content: center; margin-left: 5px; padding: 0 4px; border-radius: 99px; background: #fff; color: #0a5c36; font-size: .72em; font-weight: 800; }
 
 .fleet-master-panel { display: block; }
 .fleet-master-filter-row { width: 100%; align-items: end; }
@@ -143,6 +152,7 @@
     padding-right: 10px;
   }
   .master-section-tabs button { min-width: auto; }
+  .master-data-tabbar { align-items: flex-start; }
   .fleetio-modal-backdrop {
     align-items: end;
     padding: 0;

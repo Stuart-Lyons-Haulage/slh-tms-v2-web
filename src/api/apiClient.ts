@@ -39,7 +39,7 @@ function headersFor(token: string | undefined, init: RequestInit | undefined) {
 }
 
 function isPlanMutation(path: string, method: string) {
-  return method !== 'GET' && (/\/api\/v1\/(?:runs|loads)(?:\/|$)/.test(path) || path.includes('/api/v1/planning-control/runs/'));
+  return method !== 'GET' && (/\/api\/v2\/(?:runs|loads)(?:\/|$)/.test(path) || path.includes('/api/v2/planning-control/runs/'));
 }
 
 async function tryPlanLockRetry(path: string, token: string | undefined, init: RequestInit | undefined, response: Response) {

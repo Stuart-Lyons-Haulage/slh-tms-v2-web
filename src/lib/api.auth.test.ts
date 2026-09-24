@@ -19,7 +19,7 @@ describe("API authorisation errors", () => {
       }),
     ));
 
-    await expect(request("/api/v1/customers", "token")).rejects.toMatchObject({
+    await expect(request("/api/v2/customers", "token")).rejects.toMatchObject({
       status: 403,
       message:
         "Microsoft sign-in worked, but your account has not been granted TMS API access yet.",

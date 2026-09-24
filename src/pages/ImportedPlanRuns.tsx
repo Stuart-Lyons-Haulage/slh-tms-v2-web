@@ -100,7 +100,7 @@ export function ImportedPlanRuns() {
   async function setPeriod(load: Load, period: "AM" | "PM") {
     setBusy(load.id); setMessage(undefined);
     try {
-      await request(`/api/v1/loads/${load.id}/utilisation`, await token(), {
+      await request(`/api/v2/loads/${load.id}/utilisation`, await token(), {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

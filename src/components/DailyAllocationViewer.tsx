@@ -41,8 +41,8 @@ export function DailyAllocationViewer({ initialDate }: { initialDate: string }) 
   const mirror = useApi(useCallback(async(): Promise<DispatchMirror> => {
     const access = await token();
     const [workbench, statusResponse] = await Promise.all([
-      request<Workbench>(`/api/v1/driver-dispatch?date=${encodeURIComponent(date)}`, access, undefined, 90000),
-      request<{ planningDate: string; drivers: DriverDispatchStatus[] }>(`/api/v1/driver-dispatch-status?date=${encodeURIComponent(date)}`, access, undefined, 90000)
+      request<Workbench>(`/api/v2/driver-dispatch?date=${encodeURIComponent(date)}`, access, undefined, 90000),
+      request<{ planningDate: string; drivers: DriverDispatchStatus[] }>(`/api/v2/driver-dispatch-status?date=${encodeURIComponent(date)}`, access, undefined, 90000)
     ]);
     return { workbench, statuses: Object.fromEntries(statusResponse.drivers.map(item => [item.driverId, item])) };
   },[date,token]));

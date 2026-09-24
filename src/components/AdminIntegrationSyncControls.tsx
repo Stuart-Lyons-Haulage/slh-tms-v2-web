@@ -49,8 +49,8 @@ export function AdminIntegrationSyncControls() {
     try {
       const accessToken = await token();
       const [system, tracking] = await Promise.all([
-        request<SystemState>('/api/v1/system-sync/state', accessToken),
-        request<RoadTechStatus>('/api/v1/integrations/roadtech/status', accessToken),
+        request<SystemState>('/api/v2/system-sync/state', accessToken),
+        request<RoadTechStatus>('/api/v2/integrations/roadtech/status', accessToken),
       ]);
       setState(system);
       setRoadTech(tracking);
@@ -83,7 +83,7 @@ export function AdminIntegrationSyncControls() {
       const rows: SyncResult[] = [];
       for (const item of providers) {
         try {
-          rows.push(await request<SyncResult>(`/api/v1/system-sync/force/${item}`, accessToken, { method: 'POST' }, 120000));
+          rows.push(await request<SyncResult>(`/api/v2/system-sync/force/${item}`, accessToken, { method: 'POST' }, 120000));
         } catch (error) {
           rows.push({
             provider: item,

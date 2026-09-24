@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { request } from '../lib/api';
 import { useAccessToken } from '../lib/auth';
 import { MasterDocuments } from '../components/MasterDocuments';
@@ -30,7 +30,7 @@ function fmtCell(key: string, value: unknown) { if (key === 'defaultTemperatureC
 function isoDate(value?: string) { return value ? new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '—'; }
 function matchesQuery(row: Row, query: string) { const value = query.trim().toLowerCase(); if (!value) return true; return Object.values(row).some(item => item != null && String(item).toLowerCase().includes(value)); }
 
-export function MasterDataOperational({ initialTab = 'drivers', showCategoryButtons = true, showHeading = true }: { initialTab?: MasterDataTab; showCategoryButtons?: boolean; showHeading?: boolean }) {
+export function MasterDataOperational({ initialTab = 'drivers', showCategoryButtons = true, showHeading = true, siteDuplicateControls }: { initialTab?: MasterDataTab; showCategoryButtons?: boolean; showHeading?: boolean; siteDuplicateControls?: ReactNode }) {
   const token = useAccessToken();
   const [tab, setTab] = useState<MasterDataTab>(initialTab);
   const [query, setQuery] = useState('');
@@ -50,7 +50,7 @@ export function MasterDataOperational({ initialTab = 'drivers', showCategoryButt
   const [forceSiteHistoryOverride, setForceSiteHistoryOverride] = useState(false);
   const [siteGeofences, setSiteGeofences] = useState<GeofenceOption[]>([]);
   const current = config[tab];
-  const endpoint = `/api/v1/operational-master-data/${tab}`;
+  const endpoint = `/api/v2/operational-master-data/${tab}`;
   const crmMode = true;
   const bulkDeleteAvailable = tab === 'drivers' || tab === 'sites';
 
@@ -62,10 +62,10 @@ export function MasterDataOperational({ initialTab = 'drivers', showCategoryButt
       const access = await token();
       if (tab === 'sites') {
         const [activeSites, profiles, geofenceStatus, geofenceOptions] = await Promise.all([
-          request<Row[]>('/api/v1/sites', access),
-          request<SitePlanningProfile[]>('/api/v1/site-planning-profiles', access),
-          request<SiteGeofenceStatus[]>('/api/v1/site-geofence-sync/sites', access),
-          request<GeofenceOption[]>('/api/v1/operational-master-data/geofences/search?includeInactive=false&take=5000', access),
+          request<Row[]>('/api/v2/sites', access),
+          request<SitePlanningProfile[]>('/api/v2/site-planning-profiles', access),
+          request<SiteGeofenceStatus[]>('/api/v2/site-geofence-sync/sites', access),
+          request<GeofenceOption[]>('/api/v2/operational-master-data/geofences/search?includeInactive=false&take=5000', access),
         ]);
         setSiteGeofences(geofenceOptions);
         let sourceSites = activeSites;
@@ -102,7 +102,7 @@ export function MasterDataOperational({ initialTab = 'drivers', showCategoryButt
         if (query.trim()) params.set('q', query.trim());
         try { setRows(await request<Row[]>(`${endpoint}/search?${params}`, access)); }
         catch {
-          const fallback = await request<Row[]>(`/api/v1/${tab}`, access);
+          const fallback = await request<Row[]>(`/api/v2/${tab}`, access);
           setRows(fallback.filter(row => (includeInactive || row.active !== false) && matchesQuery(row, query)));
         }
       }
@@ -116,7 +116,7 @@ export function MasterDataOperational({ initialTab = 'drivers', showCategoryButt
 
   const openEdit = async (row: Row) => {
     setSelected(row); setDraft({ ...row }); setAudit([]); setError(undefined); setNotice(undefined);
-    try { const access = await token(); setAudit(await request<Audit[]>(`/api/v1/operational-master-data/audit/${current.entityType}/${row.id}`, access)); } catch { /* history optional */ }
+    try { const access = await token(); setAudit(await request<Audit[]>(`/api/v2/operational-master-data/audit/${current.entityType}/${row.id}`, access)); } catch { /* history optional */ }
   };
 
   const save = async () => {
@@ -129,11 +129,11 @@ export function MasterDataOperational({ initialTab = 'drivers', showCategoryButt
         if (temperatureValue != null && (!Number.isFinite(temperatureValue) || temperatureValue < -30 || temperatureValue > 30)) throw new Error('Default temperature must be between -30°C and +30°C, or left blank.');
         const sitePayload = { ...draft, externalCode: draft.externalCode || selected.externalCode };
         await request(`${endpoint}/${selected.id}`, access, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sitePayload) });
-        await request(`/api/v1/sites/${selected.id}/aliases`, access, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ aliases: draft.aliases == null ? null : String(draft.aliases) }) });
-        await request(`/api/v1/site-planning-profiles/${selected.id}`, access, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ defaultTemperatureC: temperatureValue, region: String(draft.region || 'Other') }) });
+        await request(`/api/v2/sites/${selected.id}/aliases`, access, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ aliases: draft.aliases == null ? null : String(draft.aliases) }) });
+        await request(`/api/v2/site-planning-profiles/${selected.id}`, access, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ defaultTemperatureC: temperatureValue, region: String(draft.region || 'Other') }) });
       } else {
         try { await request(`${endpoint}/${selected.id}`, access, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(draft) }); }
-        catch { await request(`/api/v1/${tab}/${selected.id}`, access, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(draft) }); }
+        catch { await request(`/api/v2/${tab}/${selected.id}`, access, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(draft) }); }
       }
       setNotice(tab === 'sites' ? 'Site details, aliases and planning profile updated. Planner/customer aliases now resolve to this canonical Site and its linked geofence.' : `${current.entityType} updated in the Live TMS Master Database.`);
       setSelected(undefined); await load();
@@ -144,7 +144,7 @@ export function MasterDataOperational({ initialTab = 'drivers', showCategoryButt
   const syncSites = async () => {
     setSaving(true); setError(undefined); setNotice(undefined);
     try {
-      const result = await request<SiteSyncResult>('/api/v1/site-geofence-sync/sync-sites', await token(), { method: 'POST' });
+      const result = await request<SiteSyncResult>('/api/v2/site-geofence-sync/sync-sites', await token(), { method: 'POST' });
       setSiteSyncChecked(true);
       setNotice(`Sites synced: ${result.sitesCoded} code(s) set to SITE###, ${result.geofencesLinked} geofence link(s) added, ${result.geofencesUnlinked} stale/unsupported link(s) removed, ${result.sitesMissingGeofence} site(s) need geofence review.`);
       setSelected(undefined);
@@ -162,18 +162,19 @@ export function MasterDataOperational({ initialTab = 'drivers', showCategoryButt
     setSaving(true); setError(undefined); setNotice(undefined);
     try {
       const access = await token();
-      await request<SiteGeofenceStatus>(`/api/v1/site-geofence-sync/geofences/${geofence.id}/link`, access, {
+      await request<SiteGeofenceStatus>(`/api/v2/site-geofence-sync/geofences/${geofence.id}/link`, access, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ siteCode }),
       });
-      const statuses = await request<SiteGeofenceStatus[]>('/api/v1/site-geofence-sync/sites', access, { cache: 'no-store' });
+      const statuses = await request<SiteGeofenceStatus[]>('/api/v2/site-geofence-sync/sites', access, { cache: 'no-store' });
       const persisted = statuses.find(status => status.siteId === site.id);
       const selectedName = geofence.name.trim().toLowerCase();
       const confirmed = persisted?.geofenceLinked === true
         && persisted.linkedGeofences.some(name => name.trim().toLowerCase() === selectedName);
       if (!confirmed) throw new Error('The geofence link was accepted but could not be confirmed in Site Master. It has not been marked as linked.');
       setNotice(`${geofence.name} is linked to ${fmt(site.name)} and the saved Site Master link has been verified.`);
+      setSelected(current => current?.id === site.id ? { ...current, linkedGeofence: geofence.name, geofenceMissing: false, geofenceLinked: true } : current);
       await load();
     } catch (e) { setError(e instanceof Error ? e.message : 'The geofence link could not be saved.'); }
     finally { setSaving(false); }
@@ -184,7 +185,7 @@ export function MasterDataOperational({ initialTab = 'drivers', showCategoryButt
     setSaving(true); setError(undefined); setNotice(undefined);
     try {
       const access = await token();
-      try { await request(`/api/v1/master-data-cleanup/${tab}/${row.id}/${active ? 'restore' : 'archive'}`, access, { method: 'POST' }); }
+      try { await request(`/api/v2/master-data-cleanup/${tab}/${row.id}/${active ? 'restore' : 'archive'}`, access, { method: 'POST' }); }
       catch { await request(`${endpoint}/${row.id}/${active ? 'restore' : 'archive'}`, access, { method: 'POST' }); }
       setNotice(`${current.entityType} ${active ? 'restored' : 'archived'}.`);
       await load();
@@ -198,7 +199,7 @@ export function MasterDataOperational({ initialTab = 'drivers', showCategoryButt
     if (!window.confirm(`Permanently delete ${current.entityType.toLowerCase()} “${label}” from the TMS master?\n\nUse Delete only for a duplicate or incorrect master record. If it is referenced by operational history, the TMS will block deletion and keep it archived.`)) return;
     setSaving(true); setError(undefined); setNotice(undefined);
     try {
-      await request(`/api/v1/master-data-cleanup/${tab}/${row.id}`, await token(), { method: 'DELETE' });
+      await request(`/api/v2/master-data-cleanup/${tab}/${row.id}`, await token(), { method: 'DELETE' });
       setNotice(`${current.entityType} permanently deleted from the TMS master.`);
       if (selected?.id === row.id) setSelected(undefined);
       await load();
@@ -244,7 +245,7 @@ export function MasterDataOperational({ initialTab = 'drivers', showCategoryButt
         notFound: number;
         message?: string;
         blockedRows?: { label?: string; references?: { area?: string; count?: number }[] }[];
-      }>(`/api/v1/master-data-cleanup/${tab}/bulk-delete`, access, {
+      }>(`/api/v2/master-data-cleanup/${tab}/bulk-delete`, access, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ids, adminPassword: bulkDeletePassword, forceHistoryOverride: tab === 'sites' && forceSiteHistoryOverride }),
@@ -283,8 +284,9 @@ export function MasterDataOperational({ initialTab = 'drivers', showCategoryButt
             <h3>Site identity & geofence</h3>
             <p><strong>Canonical code:</strong> {fmt(selected.externalCode)}</p>
             <p><strong>Linked geofence:</strong> {fmt(selected.linkedGeofence)}</p>
+            <label>Linked Geofence<select aria-label="Linked Geofence" defaultValue="" disabled={saving || !siteGeofences.length} onChange={event => void linkSiteGeofence(selected, event.target.value)}><option value="">{selected.geofenceMissing ? 'No linked geofence — select one…' : 'Change linked geofence…'}</option>{siteGeofences.map(geofence => <option key={geofence.id} value={geofence.id}>{geofence.name}{geofence.siteNumber ? ` (${geofence.siteNumber})` : ''}</option>)}</select></label>
             <p><strong>Known aliases:</strong> {fmt(selected.aliases)}</p>
-            {selectedMissingGeofence && <p style={{ color: '#b42318', fontWeight: 800 }}>No name-confirmed geofence is linked to this Site. Run Sync Sites, then amend the matching geofence or its Site assignment.</p>}
+            {selectedMissingGeofence && <p style={{ color: '#b42318', fontWeight: 800 }}>No linked geofence.</p>}
           </section>}
           <section>
             <h3>Core information</h3>
@@ -308,7 +310,7 @@ export function MasterDataOperational({ initialTab = 'drivers', showCategoryButt
       <hr/><h3>Change history</h3>{audit.length ? <div style={{ overflowX: 'auto' }}><table><thead><tr><th>Date</th><th>Action</th><th>Changed by</th></tr></thead><tbody>{audit.map(item => <tr key={item.id}><td>{isoDate(item.changedAtUtc)}</td><td>{item.action}</td><td>{item.changedBy || '—'}</td></tr>)}</tbody></table></div> : <p className="hint">No recorded changes yet.</p>}
     </div>)}
 
-    <div className="panel"><div className="title-row"><div><h2>{current.title}</h2><small>{rows.length} record{rows.length === 1 ? '' : 's'} shown</small><p className="hint">{tab === 'sites' ? 'Aliases are operational identity: add every planner/customer variation to the canonical Site. Sync Sites validates physical geofence links; missing links are highlighted red after the check.' : tab === 'customers' ? 'Open CRM on a customer to maintain its SOPs, instructions and supporting Documents.' : 'For duplicates: Archive first. Turn on Include archived, then Delete the unused duplicate. Records with operational history are protected from permanent deletion.'}</p></div><div style={{ display: 'flex', gap: 12, alignItems: 'end', flexWrap: 'wrap' }}><label>Search<input value={query} onChange={e => setQuery(e.target.value)} placeholder={current.search}/></label><label style={{ display: 'flex', gap: 6, alignItems: 'center' }}><input type="checkbox" checked={includeInactive} onChange={e => setIncludeInactive(e.target.checked)}/> Include archived</label>{tab === 'sites' && <button className="primary" onClick={() => void syncSites()} disabled={saving || bulkDeleteMode}>{saving ? 'Syncing…' : 'Sync Sites'}</button>}{tab === 'sites' && <MasterDataExportButton section="sites" label="Sites" rows={rows as unknown as Record<string, unknown>[]} />} {bulkDeleteAvailable && (bulkDeleteMode ? <>{tab === 'sites' && <label style={{ display: 'flex', gap: 6, alignItems: 'center', maxWidth: 260 }}><input type="checkbox" checked={forceSiteHistoryOverride} onChange={event => setForceSiteHistoryOverride(event.target.checked)}/> Detach linked geofences and delete</label>}<button disabled={saving || bulkDeleteIds.size === 0} onClick={() => void bulkDeleteSelected()} style={{ borderColor: '#b42318', color: '#b42318', fontWeight: 800 }}>{forceSiteHistoryOverride && tab === 'sites' ? `Force delete selected (${bulkDeleteIds.size})` : `Delete selected (${bulkDeleteIds.size})`}</button><button disabled={saving} onClick={() => { setBulkDeleteMode(false); setBulkDeletePassword(''); setBulkDeleteIds(new Set()); setForceSiteHistoryOverride(false); }}>Exit delete</button></> : <button disabled={saving} onClick={startBulkDelete}>Mass delete</button>)}<button onClick={() => void load()} disabled={loading}>Refresh</button></div></div>
+    <div className="panel master-data-record-panel"><div className="title-row"><div><h2>{current.title}</h2><small>{rows.length} record{rows.length === 1 ? '' : 's'} shown</small>{tab !== 'sites' && <p className="hint">{tab === 'customers' ? 'Open CRM on a customer to maintain its SOPs, instructions and supporting Documents.' : 'For duplicates: Archive first. Turn on Include archived, then Delete the unused duplicate. Records with operational history are protected from permanent deletion.'}</p>}</div><div className="master-data-actions"><label>Search<input value={query} onChange={e => setQuery(e.target.value)} placeholder={current.search}/></label><label style={{ display: 'flex', gap: 6, alignItems: 'center' }}><input type="checkbox" checked={includeInactive} onChange={e => setIncludeInactive(e.target.checked)}/> Include archived</label>{tab === 'sites' && <button className="primary" onClick={() => void syncSites()} disabled={saving || bulkDeleteMode}>{saving ? 'Syncing…' : 'Sync Sites'}</button>}{tab === 'sites' && <MasterDataExportButton section="sites" label="Sites" rows={rows as unknown as Record<string, unknown>[]} />}{tab === 'sites' && siteDuplicateControls} {bulkDeleteAvailable && (bulkDeleteMode ? <>{tab === 'sites' && <label style={{ display: 'flex', gap: 6, alignItems: 'center', maxWidth: 260 }}><input type="checkbox" checked={forceSiteHistoryOverride} onChange={event => setForceSiteHistoryOverride(event.target.checked)}/> Detach linked geofences and delete</label>}<button disabled={saving || bulkDeleteIds.size === 0} onClick={() => void bulkDeleteSelected()} style={{ borderColor: '#b42318', color: '#b42318', fontWeight: 800 }}>{forceSiteHistoryOverride && tab === 'sites' ? `Force delete selected (${bulkDeleteIds.size})` : `Delete selected (${bulkDeleteIds.size})`}</button><button disabled={saving} onClick={() => { setBulkDeleteMode(false); setBulkDeletePassword(''); setBulkDeleteIds(new Set()); setForceSiteHistoryOverride(false); }}>Exit delete</button></> : <button disabled={saving} onClick={startBulkDelete}>Mass delete</button>)}<button onClick={() => void load()} disabled={loading}>Refresh</button></div></div>
       {error && <p className="notice" style={{ borderColor: '#b42318' }}>{error}</p>}{notice && <p className="notice">{notice}</p>}
       {loading ? <div className="state">Loading {current.title.toLowerCase()}…</div> : <div style={{ overflowX: 'auto' }}><table><thead><tr>{bulkDeleteMode && <th><input type="checkbox" aria-label="Select all visible rows" checked={rows.length > 0 && rows.every(row => bulkDeleteIds.has(row.id))} onChange={event => toggleBulkDeleteAll(event.target.checked)} /></th>}{current.columns.map(([,label]) => <th key={label}>{label}</th>)}<th>Status</th><th>Actions</th></tr></thead><tbody>{rows.map(row => {
         const needsGeofence = tab === 'sites' && siteSyncChecked && Boolean(row.geofenceMissing);

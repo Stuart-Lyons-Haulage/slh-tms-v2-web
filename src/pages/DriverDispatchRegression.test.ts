@@ -11,8 +11,20 @@ const filterSource = readFileSync(new URL("../components/dispatch/DispatchFilter
 const calculatedStartsSource = readFileSync(new URL("./DispatchCalculatedStarts.tsx", import.meta.url), "utf8");
 const authoritativeCss = readFileSync(new URL("../authoritative-dispatch.css", import.meta.url), "utf8");
 const loadPlanCss = readFileSync(new URL("../customer-load-plans.css", import.meta.url), "utf8");
+const appSource = readFileSync(new URL("../App.tsx", import.meta.url), "utf8");
+const resourceQuickAddSource = readFileSync(new URL("../components/dispatch/DispatchResourceQuickAdd.tsx", import.meta.url), "utf8");
 
 describe("Driver Dispatch UI contract", () => {
+  it("routes production Driver Dispatch to the authoritative surface", () => {
+    expect(appSource).toContain("DriverDispatchOperational");
+    expect(appSource).toContain('path="/driver-dispatch" element={<DriverDispatchOperational />}');
+  });
+
+  it("keeps agency date-range roster booking on the authoritative resource action", () => {
+    expect(resourceQuickAddSource).toContain("/api/v2/driver-dispatch/agency-roster");
+    expect(resourceQuickAddSource).toContain("startDate");
+    expect(resourceQuickAddSource).toContain("days");
+  });
   it("keeps status visible and puts the calculated Start column beside the driver", () => {
     expect(source).toContain("<th>Status</th>");
     expect(source).toContain("<th>Driver</th><th>Start</th><th>Type / skills</th>");

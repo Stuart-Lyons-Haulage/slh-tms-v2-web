@@ -122,7 +122,7 @@ export function PlannerPlanImport() {
     setResetBusy(true); setResetMessage(undefined); setError(undefined); setSummary(undefined); setReconcileMessage(undefined);
     try {
       const accessToken = await token();
-      const response = await fetch(`/tms-api/api/v1/planning-day/${date}?confirm=RESET-${date}`, {
+      const response = await fetch(`/tms-api/api/v2/planning-day/${date}?confirm=RESET-${date}`, {
         method: "DELETE",
         headers: { Accept: "application/json", ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) },
       });
@@ -144,7 +144,7 @@ export function PlannerPlanImport() {
       const importSummary = await importPlannerPlanInChunks(
         importPayload,
         async (batch) => {
-          const response = await fetch("/tms-api/api/v1/planning/import-plan", {
+          const response = await fetch("/tms-api/api/v2/planning/import-plan", {
             method: "POST",
             headers: { ...authHeaders, "Content-Type": "application/json" },
             body: JSON.stringify(batch),
@@ -158,8 +158,8 @@ export function PlannerPlanImport() {
 
       try {
         const [resourcesResponse, sitesResponse] = await Promise.all([
-          fetch(`/tms-api/api/v1/planning/reconcile-resources/${payload.planningDate}`, { method: "POST", headers: authHeaders }),
-          fetch(`/tms-api/api/v1/planning/reconcile-sites/${payload.planningDate}`, { method: "POST", headers: authHeaders }),
+          fetch(`/tms-api/api/v2/planning/reconcile-resources/${payload.planningDate}`, { method: "POST", headers: authHeaders }),
+          fetch(`/tms-api/api/v2/planning/reconcile-sites/${payload.planningDate}`, { method: "POST", headers: authHeaders }),
         ]);
         if (!resourcesResponse.ok) throw new Error(`Resource reconciliation: ${await readError(resourcesResponse)}`);
         if (!sitesResponse.ok) throw new Error(`Site reconciliation: ${await readError(sitesResponse)}`);

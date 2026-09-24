@@ -98,7 +98,7 @@ export function MasterDataAddPanel({ section, onAdded }: { section: AddableMaste
     setSaving(true); setError(undefined); setMessage(undefined);
     try {
       if (section === 'geofences') {
-        const result = await request<{ supplied: number; inserted: number; updated: number; siteMatched: number }>('/api/v1/geofences/import-slh-seed', await token(), { method: 'POST' });
+        const result = await request<{ supplied: number; inserted: number; updated: number; siteMatched: number }>('/api/v2/geofences/import-slh-seed', await token(), { method: 'POST' });
         setMessage(`${result.supplied} approved SLH geofences checked. ${result.updated} refreshed and ${result.siteMatched} linked to Sites.`);
         onAdded();
         return;
@@ -126,10 +126,10 @@ export function MasterDataAddPanel({ section, onAdded }: { section: AddableMaste
         void _temperature; void _region;
         const result = await apply('site', sitePayload);
         if (result.applied > 0) {
-          const sites = await request<Array<{ id: string; externalCode: string }>>('/api/v1/sites', await token());
+          const sites = await request<Array<{ id: string; externalCode: string }>>('/api/v2/sites', await token());
           const created = sites.find(site => site.externalCode.trim().toLowerCase() === externalCode.toLowerCase());
           if (created) {
-            await request(`/api/v1/site-planning-profiles/${created.id}`, await token(), {
+            await request(`/api/v2/site-planning-profiles/${created.id}`, await token(), {
               method: 'PUT',
               body: JSON.stringify({ defaultTemperatureC: temperature, region: text(form.region) || 'Other' }),
             });

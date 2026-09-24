@@ -55,9 +55,12 @@ describe("operations housekeeping contract", () => {
     expect(master).toContain("MasterDataCsvImport");
   });
 
-  it("uses SQL as the sole master-data write authority and keeps master controls usable", () => {
-    expect(master).toContain("SQL is the single operational master");
-    expect(master).toContain("SQL is authoritative");
+  it("keeps SQL authority internal while presenting compact master-data controls", () => {
+    expect(master).not.toContain("SQL is the single operational master");
+    expect(master).not.toContain("SQL is authoritative");
+    expect(master).toContain("Master Import");
+    expect(master).toContain("Geofences");
+    expect(master).toContain('siteDuplicateControls');
     expect(master).not.toContain("pointerEvents: 'none'");
     expect(master).not.toContain("Lists is the editable master-data authority");
   });

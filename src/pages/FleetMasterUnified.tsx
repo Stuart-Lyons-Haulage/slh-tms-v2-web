@@ -133,18 +133,18 @@ export function FleetMasterUnified({ kind }: { kind: Kind }) {
       const access = await token();
       let nextMasters: MasterRow[] = [];
       try {
-        nextMasters = await request<MasterRow[]>(`/api/v1/operational-master-data/${kind}/search?includeInactive=${includeInactive}`, access);
+        nextMasters = await request<MasterRow[]>(`/api/v2/operational-master-data/${kind}/search?includeInactive=${includeInactive}`, access);
       } catch {
-        const fallback = await request<MasterRow[]>(`/api/v1/${kind}`, access);
+        const fallback = await request<MasterRow[]>(`/api/v2/${kind}`, access);
         nextMasters = fallback.filter(row => includeInactive || row.active !== false);
       }
       setMasters(nextMasters);
 
       try {
-        setFleetio(await request<FleetioAssetStatus>("/api/v1/integrations/fleetio/asset-status-resilient", access, undefined, 60000));
+        setFleetio(await request<FleetioAssetStatus>("/api/v2/integrations/fleetio/asset-status-resilient", access, undefined, 60000));
       } catch (exception) {
         try {
-          setFleetio(await request<FleetioAssetStatus>("/api/v1/integrations/fleetio/asset-status", access, undefined, 60000));
+          setFleetio(await request<FleetioAssetStatus>("/api/v2/integrations/fleetio/asset-status", access, undefined, 60000));
         } catch {
           setFleetio(undefined);
           setFleetioError(exception instanceof Error ? exception.message : "Fleetio could not be loaded. The TMS master remains available.");
@@ -202,7 +202,7 @@ export function FleetMasterUnified({ kind }: { kind: Kind }) {
   async function syncFleetio() {
     setSyncing(true); setMessage(undefined); setError(undefined);
     try {
-      const result = await request<{ message?: string; mappingWarning?: string }>("/api/v1/integrations/fleetio/sync-assets-resilient", await token(), { method: "POST" }, 60000);
+      const result = await request<{ message?: string; mappingWarning?: string }>("/api/v2/integrations/fleetio/sync-assets-resilient", await token(), { method: "POST" }, 60000);
       setMessage(result.message || "Fleetio assets were synchronised into the TMS master.");
       await load();
     } catch (exception) {
@@ -220,7 +220,7 @@ export function FleetMasterUnified({ kind }: { kind: Kind }) {
     if (!selected) return;
     setSaving(true); setError(undefined); setMessage(undefined);
     try {
-      await request(`/api/v1/operational-master-data/${kind}/${selected.id}`, await token(), { method: "PUT", body: JSON.stringify(draft) });
+      await request(`/api/v2/operational-master-data/${kind}/${selected.id}`, await token(), { method: "PUT", body: JSON.stringify(draft) });
       setMessage(`${kind === "vehicles" ? "Vehicle" : "Trailer"} updated in the live TMS master. Fleetio information remains linked to the same row.`);
       setSelected(undefined); setDraft({}); await load();
     } catch (exception) {
@@ -232,7 +232,7 @@ export function FleetMasterUnified({ kind }: { kind: Kind }) {
     if (!window.confirm(`${active ? "Restore" : "Archive"} this ${kind === "vehicles" ? "vehicle" : "trailer"}? Historical planning records will be retained.`)) return;
     setSaving(true); setError(undefined);
     try {
-      await request(`/api/v1/operational-master-data/${kind}/${row.id}/${active ? "restore" : "archive"}`, await token(), { method: "POST" });
+      await request(`/api/v2/operational-master-data/${kind}/${row.id}/${active ? "restore" : "archive"}`, await token(), { method: "POST" });
       setMessage(`${kind === "vehicles" ? "Vehicle" : "Trailer"} ${active ? "restored" : "archived"}.`);
       await load();
     } catch (exception) {
@@ -243,7 +243,7 @@ export function FleetMasterUnified({ kind }: { kind: Kind }) {
   async function showMaintenance(asset: FleetioAsset, label: string) {
     setMaintenanceLoading(true); setMaintenance(undefined); setMaintenanceName(label); setMaintenanceError(undefined);
     try {
-      setMaintenance(await request<MaintenanceSnapshot>(`/api/v1/integrations/fleetio/asset-maintenance/${encodeURIComponent(asset.fleetioId)}`, await token(), undefined, 60000));
+      setMaintenance(await request<MaintenanceSnapshot>(`/api/v2/integrations/fleetio/asset-maintenance/${encodeURIComponent(asset.fleetioId)}`, await token(), undefined, 60000));
     } catch (exception) {
       setMaintenanceError(exception instanceof Error ? exception.message : "Fleetio maintenance detail could not be loaded.");
     } finally { setMaintenanceLoading(false); }

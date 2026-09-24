@@ -17,7 +17,7 @@ describe("system feed health", () => {
 
   it("uses the shared system-sync state instead of inventing different dashboard thresholds", async () => {
     mockedRequest.mockImplementation(async (url) => {
-      if (url === "/api/v1/system-sync/state") {
+      if (url === "/api/v2/system-sync/state") {
         return {
           status: "current",
           generatedAtUtc: new Date().toISOString(),
@@ -36,7 +36,7 @@ describe("system feed health", () => {
           ],
         } as never;
       }
-      if (url === "/api/v1/operations/confidence") {
+      if (url === "/api/v2/operations/confidence") {
         return {
           generatedAtUtc: new Date().toISOString(),
           sageHr: { lastSyncUtc: isoMinutesAgo(600) },
@@ -51,7 +51,7 @@ describe("system feed health", () => {
     const result = await intelligenceApi.freshness("token");
     const byName = new Map(result.sources.map((feed) => [feed.name, feed]));
 
-    expect(mockedRequest).toHaveBeenCalledWith("/api/v1/system-sync/state", "token");
+    expect(mockedRequest).toHaveBeenCalledWith("/api/v2/system-sync/state", "token");
     expect(byName.get("Tracking")?.state).toBe("green");
     expect(byName.get("TachoMaster")?.state).toBe("green");
     expect(byName.get("Sage HR")?.state).toBe("green");
@@ -61,7 +61,7 @@ describe("system feed health", () => {
 
   it("does not call an event-driven mailbox feed failed simply because no order email arrived in the last hour", async () => {
     mockedRequest.mockImplementation(async (url) => {
-      if (url === "/api/v1/system-sync/state") {
+      if (url === "/api/v2/system-sync/state") {
         return {
           status: "current",
           generatedAtUtc: new Date().toISOString(),
@@ -69,7 +69,7 @@ describe("system feed health", () => {
           providers: [],
         } as never;
       }
-      if (url === "/api/v1/operations/confidence") {
+      if (url === "/api/v2/operations/confidence") {
         return {
           generatedAtUtc: new Date().toISOString(),
           sageHr: {}, tachoMaster: {}, dotTracking: {},

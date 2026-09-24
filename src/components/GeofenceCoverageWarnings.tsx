@@ -42,8 +42,8 @@ export function useSiteGeofenceCoverage(labels: string[]) {
     if (!cleanLabels.length) return [] as SiteCoverage[];
     const access = await token();
     const [sites, statuses] = await Promise.all([
-      request<CoverageSite[]>("/api/v1/sites", access),
-      request<CoverageStatus[]>("/api/v1/site-geofence-sync/sites", access, { cache: "no-store" }),
+      request<CoverageSite[]>("/api/v2/sites", access),
+      request<CoverageStatus[]>("/api/v2/site-geofence-sync/sites", access, { cache: "no-store" }),
     ]);
     return cleanLabels.map(label => resolveSiteCoverage(label, sites, statuses));
   // key intentionally represents the complete label set so edits/additions rerun the check.
@@ -112,7 +112,7 @@ export function SiteCoverageWarningPanel({
 
 export function RunGeofenceWarningPanel({ planningDate }: { planningDate: string }) {
   const token = useAccessToken();
-  const check = useApi(useCallback(async () => request<RunLinkageResponse>(`/api/v1/planning/geofence-linkage?date=${encodeURIComponent(planningDate)}`, await token(), { cache: "no-store" }), [planningDate, token]));
+  const check = useApi(useCallback(async () => request<RunLinkageResponse>(`/api/v2/planning/geofence-linkage?date=${encodeURIComponent(planningDate)}`, await token(), { cache: "no-store" }), [planningDate, token]));
   const issues = check.data?.issues || [];
   if (!check.loading && !check.error && !issues.length) return null;
   if (check.error) return <div className="notice" style={{ borderColor: "#b42318" }}>⚠ Geofence coverage check could not be loaded. Runs remain available, but Site/geofence linkage has not been confirmed.</div>;

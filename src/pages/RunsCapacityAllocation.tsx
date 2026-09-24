@@ -102,7 +102,7 @@ function formatPostcode(value?: string) {
 }
 
 async function checkDispatchReadiness(loadId: string, routeDrivingMinutes: number, access?: string, acknowledgeUnverified = false): Promise<DispatchReadiness> {
-  const response = await fetch(`/tms-api/api/v1/loads/${encodeURIComponent(loadId)}/dispatch-readiness`, {
+  const response = await fetch(`/tms-api/api/v2/loads/${encodeURIComponent(loadId)}/dispatch-readiness`, {
     method: "POST",
     headers: { Accept: "application/json", "Content-Type": "application/json", ...(access ? { Authorization: `Bearer ${access}` } : {}) },
     body: JSON.stringify({ routeDrivingMinutes, acknowledgeUnverified }),
@@ -392,7 +392,7 @@ function RunAllocationCard({ load, vehicles, drivers, trailers, sites, onSaved }
       const withEta = routeStops.map((stop, index) => index === routeStops.length - 1 ? { ...stop, plannedArrivalUtc: finalEta } : stop);
       await updateRunStops(load.id, stopPayload(withEta), access);
       const driverText = buildDriverText(load, await getRunDispatch(load.id, access));
-      const response = await fetch(`/tms-api/api/v1/loads/${encodeURIComponent(load.id)}/driver-message/sms`, {
+      const response = await fetch(`/tms-api/api/v2/loads/${encodeURIComponent(load.id)}/driver-message/sms`, {
         method: "POST",
         headers: { Accept: "application/json", "Content-Type": "application/json", ...(access ? { Authorization: `Bearer ${access}` } : {}) },
         body: JSON.stringify({ message: driverText, dispatch: true, routeDrivingMinutes: minutes, acknowledgeUnverified: readiness.acknowledgedUnverified === true }),
@@ -435,7 +435,7 @@ function RunAllocationCard({ load, vehicles, drivers, trailers, sites, onSaved }
     setSaving(true); setMessage(undefined);
     try {
       const access = await token();
-      const response = await fetch(`/tms-api/api/v1/loads/${encodeURIComponent(load.id)}/driver-message/sms`, {
+      const response = await fetch(`/tms-api/api/v2/loads/${encodeURIComponent(load.id)}/driver-message/sms`, {
         method: "POST",
         headers: { Accept: "application/json", "Content-Type": "application/json", ...(access ? { Authorization: `Bearer ${access}` } : {}) },
         body: JSON.stringify({ message: text }),

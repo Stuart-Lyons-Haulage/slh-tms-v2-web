@@ -129,7 +129,7 @@ export function JobsOperational({ date }: { date: string }) {
       let added = 0;
       for (const [siteId, group] of grouped) {
         const combined = Array.from(new Set([...group.existing, ...group.labels].map(value => value.trim()).filter(Boolean)));
-        await request(`/api/v1/sites/${encodeURIComponent(siteId)}/aliases`, access, {
+        await request(`/api/v2/sites/${encodeURIComponent(siteId)}/aliases`, access, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ aliases: combined.join("; ") }),
@@ -166,7 +166,7 @@ export function JobsOperational({ date }: { date: string }) {
     setSaving(true);
     setMessage(undefined);
     try {
-      const result = await request<{ cancelled: number; removedStops: number; message: string }>("/api/v1/orders/open", await token(), { method: "DELETE" });
+      const result = await request<{ cancelled: number; removedStops: number; message: string }>("/api/v2/orders/open", await token(), { method: "DELETE" });
       setEditingId(undefined);
       setForm(undefined);
       await orders.refresh();

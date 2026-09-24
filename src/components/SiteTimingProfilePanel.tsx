@@ -79,7 +79,7 @@ export function SiteTimingProfilePanel({ siteId }: { siteId: string }) {
     setError(undefined);
     try {
       const access = await token();
-      setProfile(await request<SiteTimingProfile>(`/api/v1/sites/${siteId}/timing-profile`, access, { cache: 'no-store' }));
+      setProfile(await request<SiteTimingProfile>(`/api/v2/sites/${siteId}/timing-profile`, access, { cache: 'no-store' }));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load site timing profile.');
     } finally {

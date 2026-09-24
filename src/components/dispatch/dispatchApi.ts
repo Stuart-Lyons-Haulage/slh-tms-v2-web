@@ -23,14 +23,14 @@ export type DispatchReadiness = {
 
 export async function getDispatchVisibility(planningDate: string, token: string): Promise<DispatchVisibilitySnapshot> {
   return request<DispatchVisibilitySnapshot>(
-    `/api/dispatch/driver-visibility?date=${encodeURIComponent(planningDate)}`,
+    `/api/v2/dispatch/driver-visibility?date=${encodeURIComponent(planningDate)}`,
     token
   );
 }
 
 export async function getDispatchHistory(planningDate: string, token: string): Promise<DispatchHistoryItem[]> {
   return request<DispatchHistoryItem[]>(
-    `/api/dispatch/history?date=${encodeURIComponent(planningDate)}`,
+    `/api/v2/dispatch/history?date=${encodeURIComponent(planningDate)}`,
     token
   );
 }
@@ -73,10 +73,10 @@ export async function getSmartDispatch(
 }> {
   const encoded = encodeURIComponent(planningDate);
   const [drivers, runs, equipment, statusResponse, visibility, history] = await Promise.all([
-    request<DispatchDriverDto[]>(`/api/dispatch/drivers?date=${encoded}`, token),
-    request<DispatchRunDto[]>(`/api/dispatch/runs?date=${encoded}`, token),
-    request<DispatchEquipmentWorkbench>(`/api/v1/driver-dispatch?date=${encoded}`, token),
-    request<{ drivers: DispatchDriverStatusDto[] }>(`/api/v1/driver-dispatch-status?date=${encoded}`, token),
+    request<DispatchDriverDto[]>(`/api/v2/dispatch/drivers?date=${encoded}`, token),
+    request<DispatchRunDto[]>(`/api/v2/dispatch/runs?date=${encoded}`, token),
+    request<DispatchEquipmentWorkbench>(`/api/v2/driver-dispatch?date=${encoded}`, token),
+    request<{ drivers: DispatchDriverStatusDto[] }>(`/api/v2/driver-dispatch-status?date=${encoded}`, token),
     getDispatchVisibility(planningDate, token),
     getDispatchHistory(planningDate, token).catch(() => [] as DispatchHistoryItem[])
   ]);
@@ -119,7 +119,7 @@ export async function getSmartDispatch(
 }
 
 export async function syncDispatchDrivers(token: string): Promise<void> {
-  await request("/api/v1/driver-master/tachomaster/sync", token, { method: "POST" }, 180000);
+  await request("/api/v2/driver-master/tachomaster/sync", token, { method: "POST" }, 180000);
 }
 
 export async function getAvailableTimes(
@@ -128,7 +128,7 @@ export async function getAvailableTimes(
   token: string,
   reducedRestDriverIds: string[] = []
 ): Promise<DispatchAvailableTimeDto[]> {
-  return request<DispatchAvailableTimeDto[]>("/api/dispatch/available-times", token, {
+  return request<DispatchAvailableTimeDto[]>("/api/v2/dispatch/available-times", token, {
     method: "POST",
     body: JSON.stringify({ planningDate, driverIds, reducedRestDriverIds })
   });
@@ -140,7 +140,7 @@ export async function checkDispatchReadiness(
   acknowledgeUnverified: boolean,
   token: string
 ): Promise<DispatchReadiness> {
-  return request<DispatchReadiness>(`/api/v1/loads/${encodeURIComponent(runId)}/dispatch-readiness`, token, {
+  return request<DispatchReadiness>(`/api/v2/loads/${encodeURIComponent(runId)}/dispatch-readiness`, token, {
     method: "POST",
     body: JSON.stringify({ routeDrivingMinutes, acknowledgeUnverified })
   }, 90000);
@@ -154,14 +154,14 @@ export async function sendDriverMessage(
   acknowledgeUnverified: boolean,
   token: string
 ): Promise<void> {
-  await request(`/api/v1/loads/${encodeURIComponent(runId)}/driver-message/sms`, token, {
+  await request(`/api/v2/loads/${encodeURIComponent(runId)}/driver-message/sms`, token, {
     method: "POST",
     body: JSON.stringify({ message, dispatch, routeDrivingMinutes, acknowledgeUnverified })
   }, 90000);
 }
 
 export async function unassignDispatchRun(runId: string, token: string): Promise<void> {
-  await request(`/api/v1/runs/${encodeURIComponent(runId)}/allocation`, token, {
+  await request(`/api/v2/runs/${encodeURIComponent(runId)}/allocation`, token, {
     method: "PUT",
     body: JSON.stringify({ driverId: null, vehicleId: null, trailerId: null })
   }, 90000);
@@ -173,7 +173,7 @@ export async function allocateDispatchRun(
   selection: DispatchAllocationSelection,
   token: string
 ): Promise<void> {
-  await request(`/api/v1/runs/${encodeURIComponent(runId)}/allocation`, token, {
+  await request(`/api/v2/runs/${encodeURIComponent(runId)}/allocation`, token, {
     method: "PUT",
     body: JSON.stringify({
       driverId,
@@ -189,7 +189,7 @@ export async function lockDispatchPlan(
   selections: Array<{ driverId: string; selection: DispatchAllocationSelection }>,
   token: string
 ): Promise<DispatchLockResponse> {
-  const response = await fetch(`${apiBaseUrl}/api/dispatch/lock`, {
+  const response = await fetch(`${apiBaseUrl}/api/v2/dispatch/lock`, {
     method: "POST",
     headers: {
       Accept: "application/json",

@@ -118,7 +118,7 @@ export function DriversMasterCompact() {
   const token = useAccessToken();
   const drivers = useApi(useCallback(async () => api.drivers(await token()), [token]));
   const quality = useApi(useCallback(async () => request<TachoDriverMasterQuality>(
-    '/api/v1/driver-master/tachomaster/quality', await token(),
+    '/api/v2/driver-master/tachomaster/quality', await token(),
   ), [token]));
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<Driver>();
@@ -149,8 +149,8 @@ export function DriversMasterCompact() {
     setMessage(undefined);
     const access = await token();
     const [auditResult, profileResult] = await Promise.allSettled([
-      request<Audit[]>(`/api/v1/operational-master-data/audit/Driver/${driver.id}`, access),
-      request<TachoProfile>(`/api/v1/driver-master/${driver.id}/tachomaster-profile`, access),
+      request<Audit[]>(`/api/v2/operational-master-data/audit/Driver/${driver.id}`, access),
+      request<TachoProfile>(`/api/v2/driver-master/${driver.id}/tachomaster-profile`, access),
     ]);
     setAudit(auditResult.status === 'fulfilled' ? auditResult.value : []);
     setTachoProfile(profileResult.status === 'fulfilled' ? profileResult.value : null);
@@ -207,7 +207,7 @@ export function DriversMasterCompact() {
     try {
       const access = await token();
       let job = await request<TachoCanonicalSyncJob>(
-        '/api/v1/driver-master/tachomaster/sync',
+        '/api/v2/driver-master/tachomaster/sync',
         access,
         { method: 'POST' },
         15000,
@@ -218,7 +218,7 @@ export function DriversMasterCompact() {
       while ((job.status === 'queued' || job.status === 'running') && Date.now() < pollDeadline) {
         await wait(2000);
         job = await request<TachoCanonicalSyncJob>(
-          `/api/v1/driver-master/tachomaster/sync/${job.jobId}`,
+          `/api/v2/driver-master/tachomaster/sync/${job.jobId}`,
           access,
           undefined,
           15000,

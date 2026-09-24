@@ -159,7 +159,7 @@ export function DriversUnified() {
     setMessage(undefined);
     try {
       const result = await request<TachoRefreshResult>(
-        "/api/v1/system-sync/force/tacho",
+        "/api/v2/system-sync/force/tacho",
         await token(),
         { method: "POST" },
         60000,
@@ -202,7 +202,7 @@ export function DriversUnified() {
     setMessage(undefined);
     try {
       const result = await request<{ deleted: number; blocked: number; notFound: number; message?: string }>(
-        "/api/v1/master-data-cleanup/drivers/bulk-delete",
+        "/api/v2/master-data-cleanup/drivers/bulk-delete",
         await token(),
         {
           method: "POST",
@@ -226,7 +226,7 @@ export function DriversUnified() {
     setHistory(undefined);
     try {
       const result = await request<TachoHistory>(
-        `/api/v1/tachomaster/drivers/${driver.id}/history`,
+        `/api/v2/tachomaster/drivers/${driver.id}/history`,
         await token(),
         undefined,
         60000,

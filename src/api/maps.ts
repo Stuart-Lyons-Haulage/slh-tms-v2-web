@@ -17,7 +17,7 @@ function fallbackQuery(value: string) {
 }
 
 export async function geocode(address: string, token?: string): Promise<z.output<typeof unknownObjectSchema>> {
-  const execute = (query: string) => apiRequest(`/api/v1/maps/geocode?address=${encodeURIComponent(query)}`, unknownObjectSchema, token);
+  const execute = (query: string) => apiRequest(`/api/v2/maps/geocode?address=${encodeURIComponent(query)}`, unknownObjectSchema, token);
   let first: z.output<typeof unknownObjectSchema> | undefined;
   try {
     first = await execute(address);

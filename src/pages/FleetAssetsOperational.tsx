@@ -69,7 +69,7 @@ function vehicleDescription(asset: FleetioAsset) {
 
 export function FleetAssetsOperational() {
   const token = useAccessToken();
-  const status = useApi(useCallback(async () => request<FleetioAssetStatus>("/api/v1/integrations/fleetio/asset-status", await token()), [token]));
+  const status = useApi(useCallback(async () => request<FleetioAssetStatus>("/api/v2/integrations/fleetio/asset-status", await token()), [token]));
   const [syncing, setSyncing] = useState(false);
   const [message, setMessage] = useState<string>();
   const [maintenance, setMaintenance] = useState<MaintenanceSnapshot>();
@@ -81,7 +81,7 @@ export function FleetAssetsOperational() {
     setSyncing(true);
     setMessage(undefined);
     try {
-      const result = await request<{ message?: string }>("/api/v1/integrations/fleetio/sync-assets", await token(), { method: "POST" }, 60000);
+      const result = await request<{ message?: string }>("/api/v2/integrations/fleetio/sync-assets", await token(), { method: "POST" }, 60000);
       setMessage(result.message || "Fleetio asset sync completed.");
       await status.refresh();
     } catch (error) {
@@ -97,7 +97,7 @@ export function FleetAssetsOperational() {
     setMaintenanceName(name);
     setMaintenanceError(undefined);
     try {
-      setMaintenance(await request<MaintenanceSnapshot>(`/api/v1/integrations/fleetio/asset-maintenance/${encodeURIComponent(fleetioId)}`, await token(), {}, 60000));
+      setMaintenance(await request<MaintenanceSnapshot>(`/api/v2/integrations/fleetio/asset-maintenance/${encodeURIComponent(fleetioId)}`, await token(), {}, 60000));
     } catch (error) {
       setMaintenanceError(error instanceof Error ? error.message : "Fleetio maintenance detail could not be loaded.");
     } finally {

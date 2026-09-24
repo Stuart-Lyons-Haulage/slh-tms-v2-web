@@ -8,19 +8,6 @@ type DriverRecord = Driver & {
   medicalExpiry?: string;
 };
 
-type DriverMasterHealth = {
-  status: 'healthy' | 'review' | 'attention';
-  activeDrivers: number;
-  activeWithMember: number;
-  activeWithCard: number;
-  reviewRequiredDrivers: number;
-  cardWarningDrivers: number;
-  duplicateMemberGroups: number;
-  duplicateCardGroups: number;
-  latestCanonicalSyncUtc?: string;
-  message?: string;
-};
-
 type TachoState = 'Linked' | 'Review' | 'No Card' | 'Stale';
 
 type EditState = {
@@ -130,7 +117,6 @@ function includes(value: unknown, filter: string) {
 export function DriversMasterOperational() {
   const token = useAccessToken();
   const [drivers, setDrivers] = useState<DriverRecord[]>([]);
-  const [health, setHealth] = useState<DriverMasterHealth>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
   const [filters, setFilters] = useState<FilterState>(emptyFilters);
@@ -145,12 +131,8 @@ export function DriversMasterOperational() {
     setError(undefined);
     try {
       const access = await token();
-      const [rows, status] = await Promise.all([
-        api.drivers(access),
-        request<DriverMasterHealth>('/api/v1/health/driver-master', access),
-      ]);
+      const rows = await api.drivers(access);
       setDrivers(rows as DriverRecord[]);
-      setHealth(status);
     } catch (exception) {
       setError(exception instanceof Error ? exception.message : 'Driver Master could not be loaded.');
     } finally {
@@ -216,7 +198,7 @@ export function DriversMasterOperational() {
         licenceStatus: nullable(form.licenceStatus),
         active: form.active,
       };
-      await request(`/api/v1/driver-master/${editing.id}/manual-details`, await token(), {
+      await request(`/api/v2/driver-master/${editing.id}/manual-details`, await token(), {
         method: 'PUT',
         body: JSON.stringify(payload),
       });
@@ -235,7 +217,7 @@ export function DriversMasterOperational() {
     setSyncing(true);
     setNotice(undefined);
     try {
-      const result = await request<{ message?: string }>('/api/v1/driver-master/tachomaster/sync', await token(), { method: 'POST' }, 15000);
+      const result = await request<{ message?: string }>('/api/v2/driver-master/tachomaster/sync', await token(), { method: 'POST' }, 15000);
       setNotice(result.message || 'TachoMaster refresh queued. Driver identity, card, duty and hours evidence will be refreshed.');
       window.setTimeout(() => void refresh(), 2500);
     } catch (exception) {
@@ -245,36 +227,15 @@ export function DriversMasterOperational() {
     }
   }
 
-  const reviewCount = drivers.filter(driver => tachoState(driver) !== 'Linked').length;
   const anyFilter = Object.values(filters).some(value => value.trim());
 
   return <div>
-    <div className="panel" style={{ marginBottom: 16 }}>
-      <div className="title-row">
-        <div>
-          <p className="eyebrow">Driver Master</p>
-          <h2>Employment + Tacho identity</h2>
-          <p className="hint" style={{ maxWidth: 850 }}>
-            Driver Master remains the operational record. Sage HR owns employment information and TachoMaster enriches member, card, duty and hours evidence. Missing Tacho evidence never removes a valid Driver Master record.
-          </p>
-        </div>
-        <div className="actions">
-          <button onClick={() => void refresh()} disabled={loading}>Refresh</button>
-          <button className="primary" onClick={() => void syncTacho()} disabled={syncing}>{syncing ? 'Syncing…' : 'Sync TachoMaster'}</button>
-        </div>
-      </div>
-
-      <div className="stats" style={{ marginTop: 14 }}>
-        <div><strong>{health?.activeDrivers ?? drivers.filter(driver => driver.active).length}</strong><span>Active drivers</span></div>
-        <div><strong>{health?.activeWithMember ?? drivers.filter(driver => driver.tachoMasterDriverId).length}</strong><span>Tacho linked</span></div>
-        <div><strong>{reviewCount}</strong><span>Need review / evidence</span></div>
-        <div><strong>{health?.duplicateMemberGroups ?? 0}</strong><span>Duplicate member IDs</span></div>
-      </div>
-
-      {health?.message && <div className="notice inline-notice" style={{ marginTop: 12 }}>{health.message}</div>}
-      {notice && <div className="notice inline-notice" style={{ marginTop: 12 }}>{notice}</div>}
-      {error && <div className="notice error" style={{ marginTop: 12 }}>{error}</div>}
+    <div className="title-row" style={{ marginBottom: 14 }}>
+      <h2>Drivers</h2>
+      <button className="primary" onClick={() => void syncTacho()} disabled={syncing}>{syncing ? 'Syncing…' : 'Sync TachoMaster'}</button>
     </div>
+    {notice && <div className="notice inline-notice" style={{ marginBottom: 12 }}>{notice}</div>}
+    {error && <div className="notice error" style={{ marginBottom: 12 }}>{error}</div>}
 
     <div className="panel">
       <div className="title-row" style={{ marginBottom: 10 }}>

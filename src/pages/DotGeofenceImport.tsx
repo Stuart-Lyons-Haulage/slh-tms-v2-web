@@ -77,7 +77,7 @@ export function DotGeofenceImport({ onImported }: { onImported: () => void }) {
       catch { throw new Error('This file is not valid JSON. Export the geofence category from DOT Tracking and try again.'); }
       const accessToken = await token();
       const [nextPreview, nextSites] = await Promise.all([
-        request<Preview>('/api/v1/geofences/import-falcon/preview', accessToken, { method: 'POST', body: JSON.stringify(parsed) }),
+        request<Preview>('/api/v2/geofences/import-falcon/preview', accessToken, { method: 'POST', body: JSON.stringify(parsed) }),
         api.sites(accessToken),
       ]);
       const initialDecisions = Object.fromEntries(nextPreview.rows.map(row => [row.clientKey, {
@@ -142,7 +142,7 @@ export function DotGeofenceImport({ onImported }: { onImported: () => void }) {
     if (!preview || sourceExport === undefined || !importRowsReady(preview.rows, decisions)) return;
     setSaving(true); setError(undefined); setMessage(undefined);
     try {
-      const result = await request<ImportResult>('/api/v1/geofences/import-falcon/commit', await token(), {
+      const result = await request<ImportResult>('/api/v2/geofences/import-falcon/commit', await token(), {
         method: 'POST',
         body: JSON.stringify({
           sourceFileName: fileName,

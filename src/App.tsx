@@ -5,13 +5,15 @@ import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation } from 're
 const PlannerEnhanced = lazy(() => import('./pages/PlannerEnhanced').then(module => ({ default: module.PlannerEnhanced })));
 const PalletPlanningControl = lazy(() => import('./pages/PalletPlanningControl').then(module => ({ default: module.PalletPlanningControl })));
 const MasterDataHub = lazy(() => import('./pages/MasterDataHub').then(module => ({ default: module.MasterDataHub })));
-const RoadrunnerSiteReview = lazy(() => import('./pages/RoadrunnerSiteReview').then(module => ({ default: module.RoadrunnerSiteReview })));
 const DashboardOperational = lazy(() => import('./pages/DashboardOperational').then(module => ({ default: module.DashboardOperational })));
 const DailyCompliance = lazy(() => import('./pages/DailyCompliance').then(module => ({ default: module.DailyCompliance })));
 const NightOutReport = lazy(() => import('./pages/NightOutReport').then(module => ({ default: module.NightOutReport })));
 const DriverAssignments = lazy(() => import('./pages/Pages').then(module => ({ default: module.DriverAssignments })));
+const Orders = lazy(() => import('./pages/Pages').then(module => ({ default: module.Orders })));
+const StagingQueue = lazy(() => import('./pages/Pages').then(module => ({ default: module.StagingQueue })));
+const DriverDispatchOperational = lazy(() => import('./pages/DriverDispatchOperational').then(module => ({ default: module.DriverDispatchOperational })));
 
-import { apiScope, useAccessToken } from './lib/auth';
+import { apiScope, canUseMicrosoftAuthentication, isApplicationAuthenticated, localTestAuthEnabled, localTestUserName, useAccessToken } from './lib/auth';
 import { connectPlanningEventStream } from './lib/planningEvents';
 import { isDesktopApp } from './lib/desktop';
 import { HeaderIntelligence } from './components/HeaderIntelligence';
@@ -21,8 +23,10 @@ type NavItem = [string, string];
 
 const coreNavigation: NavItem[] = [
   ['/dashboard', 'Dashboard'],
+  ['/orders', 'Order Entry'],
   ['/', 'Planner Builder'],
   ['/pallet-control', 'Pallet Order'],
+  ['/driver-dispatch', 'Driver Dispatch'],
   ['/master-data', 'Master Data'],
 ];
 
@@ -47,13 +51,14 @@ function ComplianceNav({ current }: { current: string }) {
 }
 
 function Shell() {
-  const authenticated = useIsAuthenticated();
+  const authenticated = isApplicationAuthenticated(useIsAuthenticated());
   const { instance, accounts } = useMsal();
   const accessToken = useAccessToken();
   const [open, setOpen] = useState(false);
   const location = useLocation();
 
   const signIn = async () => {
+    if (!canUseMicrosoftAuthentication()) return;
     const request = { scopes: apiScope ? [apiScope] : [] };
     if (!isDesktopApp()) {
       await instance.loginRedirect(request);
@@ -64,6 +69,7 @@ function Shell() {
   };
 
   const signOut = async () => {
+    if (!canUseMicrosoftAuthentication()) return;
     if (!isDesktopApp()) {
       await instance.logoutRedirect({ account: accounts[0] });
       return;
@@ -92,7 +98,7 @@ function Shell() {
       <div className="header-context"><b>Daily transport control</b></div>
       <div className="header-actions">
         {authenticated
-          ? <><span className="user">{accounts[0]?.name}</span><button onClick={() => void signOut()}>Sign out</button></>
+          ? <><span className="user">{localTestAuthEnabled ? localTestUserName : accounts[0]?.name}</span>{!localTestAuthEnabled && <button onClick={() => void signOut()}>Sign out</button>}</>
           : <button className="primary" onClick={() => void signIn()} disabled={!apiScope}>Sign in with Microsoft</button>}
       </div>
     </header>
@@ -108,16 +114,17 @@ function Shell() {
       {authenticated ? <Suspense fallback={loadingContent}><RouteErrorBoundary key={location.pathname}><Routes>
         <Route path="/" element={<PlannerEnhanced />} />
         <Route path="/dashboard" element={<DashboardOperational />} />
+        <Route path="/orders" element={<Orders />} />
+        <Route path="/staging" element={<StagingQueue />} />
         <Route path="/pallet-control" element={<PalletPlanningControl />} />
+        <Route path="/driver-dispatch" element={<DriverDispatchOperational />} />
         <Route path="/master-data" element={<MasterDataHub />} />
-        <Route path="/master-data/roadrunner-review" element={<RoadrunnerSiteReview />} />
         <Route path="/drivers" element={<MasterDataHub initialSection="drivers" />} />
         <Route path="/fleet-assets" element={<MasterDataHub initialSection="vehicles" />} />
         <Route path="/fuel-cards" element={<MasterDataHub initialSection="fuel-cards" />} />
         <Route path="/customers" element={<MasterDataHub initialSection="customers" />} />
         <Route path="/sites" element={<MasterDataHub initialSection="sites" />} />
         <Route path="/markets" element={<MasterDataHub initialSection="markets" />} />
-        <Route path="/fuel" element={<MasterDataHub initialSection="fuel-prices" />} />
         <Route path="/compliance" element={<DailyCompliance />} />
         <Route path="/night-outs" element={<NightOutReport />} />
         <Route path="/driver-assignments" element={<DriverAssignments />} />

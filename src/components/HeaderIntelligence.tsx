@@ -23,7 +23,7 @@ export function HeaderIntelligence() {
     let alive = true;
     const refresh = async () => {
       try {
-        const state = await request<SystemState>('/api/v1/system-sync/state', await token());
+        const state = await request<SystemState>('/api/v2/system-sync/state', await token());
         if (alive) setSystem(state);
       } catch {
         // Keep the operational navigation available if the status feed is temporarily unavailable.
