@@ -14,6 +14,7 @@ const DriverAssignments = lazy(() => import('./pages/Pages').then(module => ({ d
 const Orders = lazy(() => import('./pages/Pages').then(module => ({ default: module.Orders })));
 const StagingQueue = lazy(() => import('./pages/Pages').then(module => ({ default: module.StagingQueue })));
 const DriverDispatchOperational = lazy(() => import('./pages/DriverDispatchOperational').then(module => ({ default: module.DriverDispatchOperational })));
+const DriverTimesheets = lazy(() => import('./pages/DriverTimesheets').then(module => ({ default: module.DriverTimesheets })));
 const UserManagement = lazy(() => import('./pages/UserManagement').then(module => ({ default: module.UserManagement })));
 const AdminIntegrationSyncControls = lazy(() => import('./components/AdminIntegrationSyncControls').then(module => ({ default: module.AdminIntegrationSyncControls })));
 
@@ -40,6 +41,7 @@ const coreNavigation: NavItem[] = [
 const complianceNavigation: NavItem[] = [
   ['/compliance', 'Compliance'],
   ['/driver-assignments', 'Driver History'],
+  ['/driver-timesheets', 'Timesheets'],
 ];
 
 const adminNavigation: NavItem[] = [
@@ -226,6 +228,7 @@ function Shell() {
         <Route path="/compliance" element={<DailyCompliance />} />
         <Route path="/night-outs" element={<JobInvoiceHistory />} />
         <Route path="/driver-assignments" element={<DriverAssignments />} />
+        <Route path="/driver-timesheets" element={<DriverTimesheets />} />
         <Route path="/admin/staging" element={isAdmin ? <StagingQueue /> : <Navigate to="/dashboard" replace />} />
         <Route path="/admin/integrations" element={isAdmin ? <AdminIntegrationSyncControls /> : <Navigate to="/dashboard" replace />} />
         <Route path="/admin/users" element={isAdmin ? <UserManagement /> : <Navigate to="/dashboard" replace />} />
