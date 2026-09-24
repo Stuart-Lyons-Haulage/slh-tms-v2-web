@@ -77,6 +77,14 @@ services:
       Integrations__Fleetio__BaseUrl: "${FLEETIO_BASE_URL:-https://secure.fleetio.com/api/v1}"
       Integrations__Fleetio__ApiKey: "${FLEETIO_API_KEY:-}"
       Integrations__Fleetio__AccountToken: "${FLEETIO_ACCOUNT_TOKEN:-}"
+      Integrations__InfoMailboxGraph__Enabled: "${INFO_MAILBOX_GRAPH_ENABLED:-false}"
+      Integrations__InfoMailboxGraph__TenantId: "${INFO_MAILBOX_TENANT_ID:-}"
+      Integrations__InfoMailboxGraph__ClientId: "${INFO_MAILBOX_CLIENT_ID:-}"
+      Integrations__InfoMailboxGraph__ClientSecret: "${INFO_MAILBOX_CLIENT_SECRET:-}"
+      Integrations__InfoMailboxGraph__Mailbox: "${INFO_MAILBOX_ADDRESS:-info@lyonshaulage.com}"
+      Integrations__InfoMailboxGraph__PollIntervalSeconds: "${INFO_MAILBOX_POLL_SECONDS:-60}"
+      Integrations__InfoMailboxGraph__InitialLookbackHours: "${INFO_MAILBOX_INITIAL_LOOKBACK_HOURS:-48}"
+      Integrations__InfoMailboxGraph__OverlapMinutes: "${INFO_MAILBOX_OVERLAP_MINUTES:-30}"
     volumes:
       - type: bind
         source: "${ARCHIVE_HOST_PATH:-../../archive}"
