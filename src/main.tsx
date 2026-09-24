@@ -3,7 +3,6 @@ import { createRoot } from 'react-dom/client';
 import { MsalProvider } from '@azure/msal-react';
 import { PublicClientApplication } from '@azure/msal-browser';
 import { App } from './App';
-import { localAuthEnabled } from './lib/auth';
 import { E2eHarness } from './E2eHarness';
 import { DataIntegrityBoundary } from './components/DataIntegrityBoundary';
 import { DispatchCalculatedStartsPortal } from './pages/DispatchCalculatedStartsPortal';
@@ -36,8 +35,6 @@ import './driver-timesheets.css';
 installPollingPolicy();
 installPerformanceTelemetry();
 
-// Azure Maps styles are needed only by map-capable routes. Keep them out of the
-// login/dashboard critical path while still loading them before a map mounts.
 if (window.location.pathname === '/' || window.location.pathname === '/tracking' || window.location.pathname === '/planner') {
   void import('azure-maps-control/dist/atlas.min.css');
 }
@@ -99,7 +96,6 @@ async function start() {
   try {
     if (localTestMode) { renderApp(); return; }
     if (e2eAuth) { renderApp(); return; }
-    if (localAuthEnabled) { await msal.initialize(); renderApp(); return; }
     if (isTvRoutePath && (window as Window & { __SLH_TV_COMPATIBILITY__?: boolean }).__SLH_TV_COMPATIBILITY__) return;
     if (isTvRoutePath) (window as Window & { __SLH_TV_REACT_STARTED__?: boolean }).__SLH_TV_REACT_STARTED__ = true;
     if (publicTvLink) { renderApp(); void msal.initialize().catch(error => console.warn('MSAL unavailable in keyed TV mode; continuing with TV-key access.', error)); return; }
