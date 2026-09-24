@@ -9,6 +9,7 @@ const RoadrunnerSiteReview = lazy(() => import('./pages/RoadrunnerSiteReview').t
 const DashboardOperational = lazy(() => import('./pages/DashboardOperational').then(module => ({ default: module.DashboardOperational })));
 const DailyCompliance = lazy(() => import('./pages/DailyCompliance').then(module => ({ default: module.DailyCompliance })));
 const NightOutReport = lazy(() => import('./pages/NightOutReport').then(module => ({ default: module.NightOutReport })));
+const JobInvoiceHistory = lazy(() => import('./pages/JobInvoiceHistory').then(module => ({ default: module.JobInvoiceHistory })));
 const DriverAssignments = lazy(() => import('./pages/Pages').then(module => ({ default: module.DriverAssignments })));
 const Orders = lazy(() => import('./pages/Pages').then(module => ({ default: module.Orders })));
 const StagingQueue = lazy(() => import('./pages/Pages').then(module => ({ default: module.StagingQueue })));
@@ -160,7 +161,7 @@ function Shell() {
         <Route path="/markets" element={<MasterDataHub initialSection="markets" />} />
         <Route path="/fuel" element={<MasterDataHub initialSection="fuel-prices" />} />
         <Route path="/compliance" element={<DailyCompliance />} />
-        <Route path="/night-outs" element={<NightOutReport />} />
+        <Route path="/night-outs" element={<JobInvoiceHistory />} />
         <Route path="/driver-assignments" element={<DriverAssignments />} />
         <Route path="/admin/users" element={localAuthEnabled && localSession?.role === 'TMS.Admin' ? <UserManagement /> : <Navigate to="/dashboard" replace />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
