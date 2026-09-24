@@ -11,6 +11,21 @@ import type {
   DispatchVisibilitySnapshot
 } from "./types";
 
+export type SamsaraDispatchResult = {
+  success: boolean;
+  runId: string;
+  reference: string;
+  routeId?: string;
+  externalId: string;
+  created: boolean;
+  updated: boolean;
+  assignment: "driver" | "vehicle";
+  samsaraDriverId?: string;
+  samsaraVehicleId?: string;
+  stopCount: number;
+  message: string;
+};
+
 export type DispatchReadiness = {
   canDispatch: boolean;
   explanation?: string;
@@ -158,6 +173,15 @@ export async function sendDriverMessage(
     method: "POST",
     body: JSON.stringify({ message, dispatch, routeDrivingMinutes, acknowledgeUnverified })
   }, 90000);
+}
+
+export async function sendRunToSamsara(runId: string, token: string): Promise<SamsaraDispatchResult> {
+  return request<SamsaraDispatchResult>(
+    `/api/v1/integrations/samsara/dispatch/${encodeURIComponent(runId)}`,
+    token,
+    { method: "POST" },
+    90000
+  );
 }
 
 export async function unassignDispatchRun(runId: string, token: string): Promise<void> {
