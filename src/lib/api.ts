@@ -196,7 +196,7 @@ export async function request<T = unknown>(path: string, token?: string, init?: 
   const response = await fetch(`${baseUrl}${path}`, { ...init, headers: { Accept: 'application/json', ...(init?.body ? { 'Content-Type': 'application/json' } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}), ...init?.headers } });
   if (!response.ok) {
     const errorPayload: unknown = await response.json().catch(() => null);
-    const message = response.status === 403 ? 'Microsoft sign-in worked, but your account has not been granted TMS API access yet.' : errorMessage(errorPayload) || `Request failed (${response.status}).`;
+    const message = response.status === 403 ? 'Your account does not have permission to perform this TMS action.' : errorMessage(errorPayload) || `Request failed (${response.status}).`;
     throw new ApiError(response.status, message);
   }
   if (response.status === 204) return undefined as T;

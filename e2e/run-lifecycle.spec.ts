@@ -110,6 +110,21 @@ async function installApi(page: Page, state: State) {
     }
 
     if (path === '/api/v1/drivers' && method === 'GET') return json(route, [{ id: driverId, employeeNumber: 'D001', displayName: 'Test Driver', active: true }]);
+    if (path === '/api/v1/tracking/dot/fleet-status' && method === 'GET') return json(route, {
+      vehicleCount: 1,
+      readyCount: state.driverAssigned ? 1 : 0,
+      attentionCount: 0,
+      vehicles: [{
+        vehicleId,
+        registration: 'AB12 CDE',
+        loadId: state.runCreated ? runId : undefined,
+        condition: state.geofenceStage === 2 ? 'Moving' : state.geofenceStage > 0 ? 'Stationary' : 'Started',
+        speedKph: state.geofenceStage === 2 ? 30 : 0,
+        lastEventTimeUtc: new Date().toISOString(),
+        driverName: state.driverAssigned ? 'Test Driver' : undefined,
+        driverSource: state.driverAssigned ? 'TachoMaster' : undefined
+      }]
+    });
     if (path === '/api/v1/vehicles' && method === 'GET') return json(route, [{ id: vehicleId, registration: 'AB12 CDE', active: true }]);
     if (path === '/api/v1/trailers' && method === 'GET') return json(route, [{ id: trailerId, trailerNumber: 'TRL-101', active: true }]);
     // Driver Dispatch also enriches its workbench from the governed master-data
@@ -157,9 +172,9 @@ async function installApi(page: Page, state: State) {
       const completedStops = state.geofenceStage < 2 ? 0 : state.geofenceStage < 4 ? 1 : 2;
       const runState = state.geofenceStage >= 4 ? 'Completed' : state.geofenceStage === 1 || state.geofenceStage === 3 ? 'OnSiteConfirmed' : state.geofenceStage > 1 ? 'InProgress' : 'Planned';
       const currentVisit = state.geofenceStage === 1
-        ? { geofenceName: 'Hall Hunter', loadStopId: collectionStopId, enteredAtUtc: atOffset(25), siteArrivalUtc: atOffset(25), dwellMinutes: 5, isDelayed: false, status: 'OnSite' }
+        ? { geofenceName: 'Hall Hunter', loadStopId: collectionStopId, enteredAtUtc: atOffset(25), siteArrivalUtc: atOffset(25), confirmedAtUtc: atOffset(25), dwellMinutes: 5, isDelayed: false, status: 'OnSite' }
         : state.geofenceStage === 3
-          ? { geofenceName: 'Leyland', loadStopId: deliveryStopId, enteredAtUtc: atOffset(75), siteArrivalUtc: atOffset(75), dwellMinutes: 5, isDelayed: false, status: 'OnSite' }
+          ? { geofenceName: 'Leyland', loadStopId: deliveryStopId, enteredAtUtc: atOffset(75), siteArrivalUtc: atOffset(75), confirmedAtUtc: atOffset(75), dwellMinutes: 5, isDelayed: false, status: 'OnSite' }
           : undefined;
       return json(route, {
         planningDate: state.planningDate,
@@ -251,7 +266,7 @@ test('planner → dispatch → geofence arrival/departure → completion stays c
   expect(state.driverAssigned && state.vehicleAssigned && state.trailerAssigned).toBe(true);
 
   await page.getByRole('link', { name: 'Operations Wallboard' }).click();
-  await expect(page.getByRole('heading', { name: 'Arrivals & Departures' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Live Runs' })).toBeVisible();
   await expect(page.getByText(/AB12 CDE/).first()).toBeVisible();
 
   state.geofenceStage = 1;
@@ -261,17 +276,16 @@ test('planner → dispatch → geofence arrival/departure → completion stays c
 
   state.geofenceStage = 2;
   await page.reload();
-  await expect(page.getByText(/1 of 2 geofences exited/i)).toBeVisible();
+  await expect(page.getByLabel('1 of 2 stops completed')).toBeVisible();
 
   state.geofenceStage = 3;
   await page.reload();
-  await expect(page.getByText(/Final destination arrived/i).first()).toBeVisible();
+  await expect(page.getByText('ON SITE').first()).toBeVisible();
+  await expect(page.getByText(/Leyland/).first()).toBeVisible();
 
   state.geofenceStage = 4;
   await page.reload();
-  console.log('LIFECYCLE_STAGE4_URL', page.url());
-  console.log('LIFECYCLE_STAGE4_ROWS', await page.locator('.ops-board-row').count());
-  console.log('LIFECYCLE_STAGE4_BODY_START\n' + await page.locator('body').innerText() + '\nLIFECYCLE_STAGE4_BODY_END');
-  await expect(page.getByText(/Final destination arrived/i).first()).toBeVisible();
-  await expect(page.getByText('AVAILABLE').first()).toBeVisible();
+  await expect(page.getByText('COMPLETED').first()).toBeVisible();
+  await expect(page.getByText('All geofence-confirmed stops completed').first()).toBeVisible();
+  await expect(page.getByLabel('2 of 2 stops completed')).toBeVisible();
 });

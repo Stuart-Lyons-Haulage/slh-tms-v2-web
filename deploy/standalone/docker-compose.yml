@@ -1,0 +1,99 @@
+services:
+  sql:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    restart: unless-stopped
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: "Express"
+      MSSQL_SA_PASSWORD: "${SQL_SA_PASSWORD}"
+    volumes:
+      - sql-data:/var/opt/mssql
+      - type: bind
+        source: "${SQL_BACKUP_HOST_PATH:-./backup}"
+        target: /var/opt/mssql/backup
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q 'SELECT 1' >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  db-init:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    depends_on:
+      sql:
+        condition: service_healthy
+    environment:
+      SQL_SA_PASSWORD: "${SQL_SA_PASSWORD}"
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - >
+        /opt/mssql-tools18/bin/sqlcmd -S sql -U sa -P "$$SQL_SA_PASSWORD" -C
+        -Q "IF DB_ID(N'SLH_TMS_V2') IS NULL CREATE DATABASE [SLH_TMS_V2];"
+    restart: "no"
+
+  api:
+    build:
+      context: ../../../slh-tms-v2-api
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__TmsDb: "Server=sql,1433;Database=SLH_TMS_V2;User Id=sa;Password=${SQL_SA_PASSWORD};Encrypt=True;TrustServerCertificate=True"
+      Database__ApplySchemaChangesOnStartup: "true"
+      Database__ExpectedDatabaseName: "SLH_TMS_V2"
+      Auth__Mode: Local
+      Auth__Local__Issuer: slh-tms-v2
+      Auth__Local__Audience: slh-tms-v2
+      Auth__Local__SigningKey: "${TMS_JWT_SIGNING_KEY}"
+      Auth__Local__BootstrapUsername: "${TMS_BOOTSTRAP_USERNAME}"
+      Auth__Local__BootstrapPassword: "${TMS_BOOTSTRAP_PASSWORD}"
+      Auth__Local__BootstrapDisplayName: "${TMS_BOOTSTRAP_DISPLAY_NAME:-SLH Administrator}"
+      Archive__Enabled: "${ARCHIVE_ENABLED:-false}"
+      Archive__RootPath: /archive
+      Archive__AuditOutboxRetentionDays: "${ARCHIVE_OUTBOX_DAYS:-7}"
+      Archive__TelemetryRetentionDays: "${ARCHIVE_TELEMETRY_DAYS:-90}"
+      Archive__GeofenceRetentionDays: "${ARCHIVE_GEOFENCE_DAYS:-180}"
+      Archive__EtaRetentionDays: "${ARCHIVE_ETA_DAYS:-90}"
+      Archive__SyncReceiptRetentionDays: "${ARCHIVE_SYNC_DAYS:-30}"
+      Tracking__Dot__Enabled: "${ROADTECH_ENABLED:-false}"
+      Tracking__Dot__BaseUrl: "${ROADTECH_BASE_URL:-}"
+      Tracking__Dot__ApiKey: "${ROADTECH_API_KEY:-}"
+      Tracking__Dot__Username: "${ROADTECH_USERNAME:-}"
+      Tracking__Dot__Password: "${ROADTECH_PASSWORD:-}"
+      Tracking__Dot__CompanyCode: "${ROADTECH_COMPANY_CODE:-}"
+      Integrations__TachoMaster__Enabled: "${TACHOMASTER_ENABLED:-false}"
+      Integrations__TachoMaster__BaseUrl: "${TACHOMASTER_BASE_URL:-}"
+      Integrations__TachoMaster__ApiKey: "${TACHOMASTER_API_KEY:-}"
+      Integrations__TachoMaster__Username: "${TACHOMASTER_USERNAME:-}"
+      Integrations__TachoMaster__Password: "${TACHOMASTER_PASSWORD:-}"
+      Integrations__SageHr__Enabled: "${SAGEHR_ENABLED:-false}"
+      Integrations__SageHr__BaseUrl: "${SAGEHR_BASE_URL:-}"
+      Integrations__SageHr__ApiKey: "${SAGEHR_API_KEY:-}"
+      Integrations__Fleetio__Enabled: "${FLEETIO_ENABLED:-false}"
+      Integrations__Fleetio__BaseUrl: "${FLEETIO_BASE_URL:-https://secure.fleetio.com/api/v1}"
+      Integrations__Fleetio__ApiKey: "${FLEETIO_API_KEY:-}"
+      Integrations__Fleetio__AccountToken: "${FLEETIO_ACCOUNT_TOKEN:-}"
+    volumes:
+      - type: bind
+        source: "${ARCHIVE_HOST_PATH:-./archive}"
+        target: /archive
+
+  web:
+    build:
+      context: ../..
+      dockerfile: Dockerfile.standalone
+      args:
+        VITE_API_BASE_URL: /tms-api
+        VITE_AUTH_MODE: local
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "${TMS_HTTP_PORT:-8080}:80"
+
+volumes:
+  sql-data:

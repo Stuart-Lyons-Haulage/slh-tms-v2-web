@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: portal-ci-${{ github.ref }}
+  group: portal-ci-${{ github.event.pull_request.head.ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
@@ -50,7 +50,7 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Run workflow E2E test
-        run: pnpm test:e2e
+        run: timeout --signal=TERM --kill-after=15s 180s pnpm test:e2e
 
       - name: Enforce no new runtime patch debt
         shell: bash
