@@ -27,6 +27,26 @@ docker compose --env-file .env.standalone -f deploy/standalone/docker-compose.ym
 
 The portal is exposed on `TMS_HTTP_PORT` (default 8080).
 
+## First-time server setup
+
+From the existing V2 Web repository on the SLH server, run the setup script once.
+
+**Windows / PowerShell**
+
+```powershell
+.\deploy\standalone\setup-server.ps1
+```
+
+**Linux**
+
+```bash
+bash deploy/standalone/setup-server.sh
+```
+
+This creates `.env.standalone` locally on the server, generates strong SQL/JWT/admin secrets, and prints the initial TMS Admin password once. External provider credentials are left blank and disabled. Do not commit this file.
+
+After setup, use the start/update script below.
+
 ## Server start/update
 
 Run the script that matches the SLH server operating system from the existing V2 Web repository:
