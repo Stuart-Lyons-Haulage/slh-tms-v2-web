@@ -1,0 +1,54 @@
+name: One-off Entra V2 Redirect Fix
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - ".github/workflows/fix-v2-entra-redirect.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          client-id: 5f07805f-dbc2-4068-8d2f-06569635fc0c
+          tenant-id: 5aec48a1-c3c7-4cfd-a073-b38ae50041b1
+          subscription-id: 29d5b52a-5b9f-4b5a-9495-892f1c2a30f3
+
+      - name: Add V2 SPA redirect URI
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_ID="b4d086ae-6e9d-4578-8861-e61410127359"
+          NEW_URI="https://slh-tms-v2-portal-prod.gentlepond-08dba66b.uksouth.azurecontainerapps.io"
+
+          OBJ_ID="$(az ad app show --id "$APP_ID" --query id -o tsv)"
+          echo "Resolved Entra application object."
+
+          CURRENT="$(az rest --method GET             --uri "https://graph.microsoft.com/v1.0/applications/$OBJ_ID"             --query 'spa.redirectUris' -o json)"
+
+          python - "$CURRENT" "$NEW_URI" >/tmp/spa.json <<'PY'
+import json, sys
+current=json.loads(sys.argv[1] or "[]")
+new=sys.argv[2]
+uris=[]
+for u in current:
+    if u and u not in uris:
+        uris.append(u)
+if new not in uris:
+    uris.append(new)
+print(json.dumps({"spa":{"redirectUris":uris}}, separators=(",",":")))
+PY
+
+          az rest --method PATCH             --uri "https://graph.microsoft.com/v1.0/applications/$OBJ_ID"             --headers "Content-Type=application/json"             --body @/tmp/spa.json             --output none
+
+          FINAL="$(az rest --method GET             --uri "https://graph.microsoft.com/v1.0/applications/$OBJ_ID"             --query 'spa.redirectUris' -o json)"
+          echo "$FINAL" | jq -e --arg uri "$NEW_URI" 'index($uri) != null' >/dev/null
+          echo "Verified V2 redirect URI is registered."
