@@ -42,3 +42,12 @@ Create that marker only on the real SLH server archive share after the host moun
 ## Clean database rule
 
 Never restore the old SLH TMS production database into this runtime. The database is built from the V2 schema migrations only. Reconciled master data should be imported explicitly after the fresh database is healthy.
+
+
+## Local user administration
+
+When `VITE_AUTH_MODE=local`, the portal uses individual TMS accounts instead of Microsoft sign-in. The initial administrator is created from runtime bootstrap secrets only when the user table is empty.
+
+A local `TMS.Admin` user gets a **Users** navigation item where accounts can be created, roles assigned, passwords reset and leavers disabled. `TMS.ReadOnly` accounts cannot call write/approval endpoints; approval is limited to Admin, Management, Planner and Transport roles.
+
+Do not commit `.env.standalone` or any provider/API credentials.
