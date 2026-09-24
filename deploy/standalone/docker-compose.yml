@@ -34,7 +34,7 @@ services:
 
   api:
     build:
-      context: ../../../slh-tms-v2-api
+      context: "${API_BUILD_CONTEXT:-../../../API}"
       dockerfile: Dockerfile
     restart: unless-stopped
     depends_on:
