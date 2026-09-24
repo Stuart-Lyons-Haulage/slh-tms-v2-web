@@ -26,6 +26,19 @@ export type SamsaraDispatchResult = {
   message: string;
 };
 
+export type SamsaraDispatchState = {
+  runId: string;
+  reference?: string;
+  routeId: string;
+  exportedAtUtc: string;
+};
+
+type SamsaraDispatchStatusResponse = {
+  planningDate: string;
+  configured: boolean;
+  runs: SamsaraDispatchState[];
+};
+
 export type DispatchReadiness = {
   canDispatch: boolean;
   explanation?: string;
@@ -85,15 +98,19 @@ export async function getSmartDispatch(
   equipment: DispatchEquipmentWorkbench;
   statuses: Record<string, DispatchDriverStatusDto>;
   visibility: DispatchVisibilitySnapshot;
+  samsaraConfigured: boolean;
+  samsaraDispatch: Record<string, SamsaraDispatchState>;
 }> {
   const encoded = encodeURIComponent(planningDate);
-  const [drivers, runs, equipment, statusResponse, visibility, history] = await Promise.all([
+  const [drivers, runs, equipment, statusResponse, visibility, history, samsaraStatus] = await Promise.all([
     request<DispatchDriverDto[]>(`/api/dispatch/drivers?date=${encoded}`, token),
     request<DispatchRunDto[]>(`/api/dispatch/runs?date=${encoded}`, token),
     request<DispatchEquipmentWorkbench>(`/api/v1/driver-dispatch?date=${encoded}`, token),
     request<{ drivers: DispatchDriverStatusDto[] }>(`/api/v1/driver-dispatch-status?date=${encoded}`, token),
     getDispatchVisibility(planningDate, token),
-    getDispatchHistory(planningDate, token).catch(() => [] as DispatchHistoryItem[])
+    getDispatchHistory(planningDate, token).catch(() => [] as DispatchHistoryItem[]),
+    request<SamsaraDispatchStatusResponse>(`/api/v1/integrations/samsara/dispatch/status?date=${encoded}`, token)
+      .catch(() => ({ planningDate, configured: false, runs: [] } as SamsaraDispatchStatusResponse))
   ]);
   const visibilityByDriver = new Map(visibility.drivers.map(item => [item.driverId, item]));
   const historyByDriver = new Map(history.map(item => [item.driverId, item]));
@@ -129,7 +146,9 @@ export async function getSmartDispatch(
     runs: runs.map(run => runDetail(run, equipment)),
     equipment,
     statuses: Object.fromEntries(statusResponse.drivers.map(status => [status.driverId, status])),
-    visibility
+    visibility,
+    samsaraConfigured: samsaraStatus.configured,
+    samsaraDispatch: Object.fromEntries(samsaraStatus.runs.map(item => [item.runId, item]))
   };
 }
 
