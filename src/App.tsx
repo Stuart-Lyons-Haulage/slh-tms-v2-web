@@ -10,6 +10,7 @@ const DashboardOperational = lazy(() => import('./pages/DashboardOperational').t
 const DailyCompliance = lazy(() => import('./pages/DailyCompliance').then(module => ({ default: module.DailyCompliance })));
 const NightOutReport = lazy(() => import('./pages/NightOutReport').then(module => ({ default: module.NightOutReport })));
 const DriverAssignments = lazy(() => import('./pages/Pages').then(module => ({ default: module.DriverAssignments })));
+const UserManagement = lazy(() => import('./pages/UserManagement').then(module => ({ default: module.UserManagement })));
 
 import { apiScope, getLocalAuthSession, localAuthEnabled, localLogin, localLogout, useAccessToken, type LocalAuthSession } from './lib/auth';
 import { connectPlanningEventStream } from './lib/planningEvents';
@@ -127,6 +128,7 @@ function Shell() {
     {authenticated && <nav className={`top-navigation ${open ? 'mobile-open' : ''}`} aria-label="Primary TMS navigation">
       {coreNavigation.map(([path, label]) => <NavLink key={path} className="top-nav-direct" to={path} end={path === '/'}>{label}</NavLink>)}
       <ComplianceNav current={location.pathname} />
+      {localAuthEnabled && localSession?.role === 'TMS.Admin' && <NavLink className="top-nav-direct" to="/admin/users">Users</NavLink>}
     </nav>}
 
     {authenticated && <div className="system-strip"><HeaderIntelligence /></div>}
@@ -148,6 +150,7 @@ function Shell() {
         <Route path="/compliance" element={<DailyCompliance />} />
         <Route path="/night-outs" element={<NightOutReport />} />
         <Route path="/driver-assignments" element={<DriverAssignments />} />
+        <Route path="/admin/users" element={localAuthEnabled && localSession?.role === 'TMS.Admin' ? <UserManagement /> : <Navigate to="/dashboard" replace />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes></RouteErrorBoundary></Suspense> : <section className="sign-in-panel">
         <p className="eyebrow">Secure operations portal</p>
