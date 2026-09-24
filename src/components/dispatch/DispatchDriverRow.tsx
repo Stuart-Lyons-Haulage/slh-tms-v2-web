@@ -28,6 +28,7 @@ type Props = {
   onDispatch: (driver: DispatchDriverDto, selection: DispatchAllocationSelection) => void;
   onAmend: (driver: DispatchDriverDto, selection: DispatchAllocationSelection) => void;
   onUpdate: (driver: DispatchDriverDto, selection: DispatchAllocationSelection) => void;
+  onSamsara: (driver: DispatchDriverDto, selection: DispatchAllocationSelection) => void;
   onUnassign: (driver: DispatchDriverDto, selection: DispatchAllocationSelection) => void;
 };
 
@@ -69,6 +70,7 @@ export function DispatchDriverRow({
   onDispatch,
   onAmend,
   onUpdate,
+  onSamsara,
   onUnassign
 }: Props) {
   const heldSkills = parseSkillFlags(driver.skills);
@@ -228,6 +230,7 @@ export function DispatchDriverRow({
         <button className="smart-action secondary" type="button" disabled={busy} onClick={() => onAmend(driver, selection)}>{busy ? "Working…" : "Amendment"}</button>
         <button className="smart-action ghost dark" type="button" disabled={busy} onClick={() => onUpdate(driver, selection)}>Update text</button>
       </>}
+      {lockedToDriver && selection.runId && <button className="smart-action ghost dark" type="button" disabled={busy} onClick={() => onSamsara(driver, selection)}>{busy ? "Working…" : "Send to Samsara"}</button>}
       {canUnassign && <button className="smart-unassign" type="button" disabled={busy} onClick={() => onUnassign(driver, selection)}>Unassign</button>}
     </td>
   </tr>;
