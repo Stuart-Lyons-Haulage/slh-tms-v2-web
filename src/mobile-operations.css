@@ -1,0 +1,36 @@
+.slh-mobile{max-width:1100px;margin:0 auto;padding:18px 16px 100px;display:grid;gap:16px}
+.slh-mobile-hero{display:flex;justify-content:space-between;gap:20px;align-items:end;background:linear-gradient(135deg,#063b5c,#0a527d);color:white;border-radius:20px;padding:24px}
+.slh-mobile-hero h1{margin:4px 0 6px;font-size:clamp(1.7rem,6vw,2.6rem)}
+.slh-mobile-hero p{margin:0;max-width:620px}
+.slh-mobile-date{display:grid;gap:6px;font-weight:700;min-width:180px}
+.slh-mobile-date input,.slh-mobile select,.slh-mobile input{min-height:44px;border:1px solid #c8d2dc;border-radius:10px;padding:0 12px;background:white;color:#172033}
+.slh-mobile-kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.slh-mobile-kpis div{background:white;border:1px solid #dbe2e8;border-radius:16px;padding:16px;display:grid;gap:3px}
+.slh-mobile-kpis strong{font-size:1.7rem;color:#063b5c}.slh-mobile-kpis span{font-size:.82rem;color:#667585}
+.slh-mobile-card{background:white;border:1px solid #dbe2e8;border-radius:18px;padding:18px;box-shadow:0 4px 18px rgba(6,59,92,.06)}
+.slh-mobile-card-head{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:14px}
+.slh-mobile-card-head h2{margin:2px 0 0}.slh-mobile-card-head .eyebrow{margin:0}
+.slh-mobile-card button,.slh-mobile-sheet button{min-height:40px;border:1px solid #bcc9d5;background:white;border-radius:10px;padding:0 14px;font-weight:700;color:#17384d}
+.slh-mobile-card button.primary,.slh-mobile-sheet button.primary{background:#0b6b45;color:white;border-color:#0b6b45}
+.slh-mobile-search{width:100%;margin-bottom:14px}
+.slh-mobile-lookup-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.slh-mobile-lookup-grid h3{margin:0 0 8px}
+.slh-mobile-result{border:1px solid #e2e8ed;border-radius:12px;padding:12px;margin-bottom:8px;display:grid;gap:8px}
+.slh-mobile-result>div{display:flex;justify-content:space-between;gap:10px}.slh-mobile-result small,.slh-mobile-muted{color:#6c7884}
+.slh-mobile-result button{text-align:left;height:auto;padding:10px}.slh-mobile-result a{font-weight:700;color:#0a5a83}
+.slh-mobile-runs{display:grid;gap:10px}.slh-mobile-run{border:1px solid #dce5eb;border-left:5px solid #0b6b45;border-radius:14px;padding:14px}.slh-mobile-run.needs-attention{border-left-color:#c68400}
+.slh-mobile-run-top{display:flex;justify-content:space-between;align-items:center}.slh-mobile-run-top>div{display:flex;gap:10px;align-items:center}.slh-mobile-run-top span{font-size:.78rem;background:#edf3f6;padding:4px 8px;border-radius:999px}
+.slh-mobile-run dl{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:12px 0}.slh-mobile-run dl div{display:grid}.slh-mobile-run dt{font-size:.72rem;color:#71808d}.slh-mobile-run dd{margin:2px 0 0;font-weight:700}
+.slh-mobile-route{margin:8px 0;font-weight:700}.slh-mobile-route span{color:#0b6b45;padding:0 4px}
+.slh-mobile-run-actions{display:flex;justify-content:space-between;gap:10px;color:#657481;font-size:.86rem}.slh-mobile-run-actions a{color:#0a5a83;font-weight:800}
+.slh-mobile-inline{display:flex;gap:10px}.slh-mobile-inline select{flex:1}.slh-mobile-fuel-reveal{margin-top:14px;padding:16px;background:#f3f8f5;border:1px solid #b9d9c8;border-radius:14px;display:grid;gap:4px}.slh-mobile-fuel-reveal b{font-size:2rem;letter-spacing:.08em;color:#063b5c}
+.slh-mobile-alert{padding:12px 14px;border-radius:12px;background:#fff2f0;border:1px solid #f1c0ba;color:#852b20;font-weight:700}
+.slh-mobile-sheet-backdrop{position:fixed;inset:0;background:rgba(11,24,34,.55);z-index:3000;display:flex;align-items:flex-end;justify-content:center;padding:12px}
+.slh-mobile-sheet{width:min(620px,100%);background:white;border-radius:20px 20px 14px 14px;padding:20px;display:grid;gap:14px;box-shadow:0 -10px 40px rgba(0,0,0,.2)}
+.slh-mobile-sheet label{display:grid;gap:6px;font-weight:800}.slh-mobile-save{width:100%}
+@media(max-width:720px){
+ .slh-mobile{padding:10px 10px 90px;gap:10px}.slh-mobile-hero{display:grid;padding:18px;border-radius:16px}.slh-mobile-date{min-width:0}
+ .slh-mobile-kpis{grid-template-columns:repeat(3,1fr)}.slh-mobile-kpis div{padding:12px}.slh-mobile-kpis strong{font-size:1.4rem}.slh-mobile-kpis span{font-size:.72rem}
+ .slh-mobile-card{padding:14px;border-radius:14px}.slh-mobile-lookup-grid{grid-template-columns:1fr}
+ .slh-mobile-run dl{grid-template-columns:1fr 1fr}.slh-mobile-inline{display:grid}
+ .slh-mobile-run-actions{align-items:center}.slh-mobile-result>div{display:grid}
+}
