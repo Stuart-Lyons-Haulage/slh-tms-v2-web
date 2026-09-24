@@ -230,3 +230,18 @@ main { margin-top: 72px; margin-left: 248px; padding: 30px 34px; max-width: 1700
 .forecast-panel { margin: 18px 0; }.forecast-table { min-width: 1100px; }.forecast-table td small { display: block; margin-top: 3px; color: #637985; }.forecast-table tr.forecast-risk { background: #fff9ed; }.forecast-table tr.forecast-risk td:first-child { border-left: 4px solid #dc8d1f; }
 .report-toolbar select { margin-left: 8px; padding: .45rem; border: 1px solid #c8d5da; border-radius: 6px; font: inherit; }
 @media (max-width: 850px) { .resource-columns, .commercial-fields { grid-template-columns: 1fr; }.resource-board-heading { align-items: flex-start; flex-direction: column; } }
+
+
+/* Keep staging review information dense enough for planner use without hiding evidence. */
+.review-panel { margin-top: 12px; padding: 10px 12px; gap: 8px; align-items: start; }
+.review-panel h2 { margin-top: 2px; }
+.review-panel > button { align-self: start; }
+.review-panel dl { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 6px; align-items: start; }
+.review-panel dl div { padding: 6px 8px; min-height: 0; align-self: start; }
+.review-panel dt { font-size: .64rem; line-height: 1.15; font-weight: 750; letter-spacing: .02em; }
+.review-panel dd { margin-top: 2px; font-size: .82rem; line-height: 1.2; max-height: 4.8em; overflow: auto; }
+.staging-review-table { min-width: 1180px; }
+.staging-review-table th:nth-child(5),
+.staging-review-table td:nth-child(5) { text-align: center; }
+.staging-review-table td:nth-child(3),
+.staging-review-table td:nth-child(4) { color: #17344a; font-weight: 700; }
