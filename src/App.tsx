@@ -15,7 +15,6 @@ const Orders = lazy(() => import('./pages/Pages').then(module => ({ default: mod
 const StagingQueue = lazy(() => import('./pages/Pages').then(module => ({ default: module.StagingQueue })));
 const DriverDispatchOperational = lazy(() => import('./pages/DriverDispatchOperational').then(module => ({ default: module.DriverDispatchOperational })));
 const DriverTimesheets = lazy(() => import('./pages/DriverTimesheets').then(module => ({ default: module.DriverTimesheets })));
-const UserManagement = lazy(() => import('./pages/UserManagement').then(module => ({ default: module.UserManagement })));
 const AdminIntegrationSyncControls = lazy(() => import('./components/AdminIntegrationSyncControls').then(module => ({ default: module.AdminIntegrationSyncControls })));
 const MobileOperations = lazy(() => import('./pages/MobileOperations').then(module => ({ default: module.MobileOperations })));
 
@@ -49,7 +48,6 @@ const adminNavigation: NavItem[] = [
   ['/admin/integrations', 'Integrations'],
   ['/admin/staging', 'Import Reviews'],
   ['/master-data/roadrunner-review', 'RoadRunner Review'],
-  ['/admin/users', 'Users'],
 ];
 
 function pathActive(current: string, path: string) {
@@ -212,7 +210,6 @@ function Shell() {
         <Route path="/driver-timesheets" element={<DriverTimesheets />} />
         <Route path="/admin/staging" element={isAdmin ? <StagingQueue /> : <Navigate to="/dashboard" replace />} />
         <Route path="/admin/integrations" element={isAdmin ? <AdminIntegrationSyncControls /> : <Navigate to="/dashboard" replace />} />
-        <Route path="/admin/users" element={isAdmin ? <UserManagement /> : <Navigate to="/dashboard" replace />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes></RouteErrorBoundary></Suspense> : <section className="sign-in-panel">
         <p className="eyebrow">Secure operations portal</p>
