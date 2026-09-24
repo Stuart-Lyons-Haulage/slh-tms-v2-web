@@ -7,7 +7,7 @@ describe("API authorisation errors", () => {
     vi.unstubAllGlobals();
   });
 
-  it("surfaces API 403 responses as Microsoft sign-in succeeded but TMS access denied", async () => {
+  it("surfaces API 403 responses as TMS permission denied", async () => {
     vi.stubGlobal("window", {
       setTimeout: globalThis.setTimeout,
       clearTimeout: globalThis.clearTimeout,
@@ -22,7 +22,7 @@ describe("API authorisation errors", () => {
     await expect(request("/api/v1/customers", "token")).rejects.toMatchObject({
       status: 403,
       message:
-        "Microsoft sign-in worked, but your account has not been granted TMS API access yet.",
+        "Your account does not have permission to perform this TMS action.",
     } satisfies Partial<ApiError>);
   });
 });
