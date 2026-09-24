@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { MsalProvider } from '@azure/msal-react';
 import { PublicClientApplication } from '@azure/msal-browser';
 import { App } from './App';
+import { localAuthEnabled } from './lib/auth';
 import { E2eHarness } from './E2eHarness';
 import { DataIntegrityBoundary } from './components/DataIntegrityBoundary';
 import { DispatchCalculatedStartsPortal } from './pages/DispatchCalculatedStartsPortal';
@@ -97,6 +98,7 @@ async function start() {
   try {
     if (localTestMode) { renderApp(); return; }
     if (e2eAuth) { renderApp(); return; }
+    if (localAuthEnabled) { await msal.initialize(); renderApp(); return; }
     if (isTvRoutePath && (window as Window & { __SLH_TV_COMPATIBILITY__?: boolean }).__SLH_TV_COMPATIBILITY__) return;
     if (isTvRoutePath) (window as Window & { __SLH_TV_REACT_STARTED__?: boolean }).__SLH_TV_REACT_STARTED__ = true;
     if (publicTvLink) { renderApp(); void msal.initialize().catch(error => console.warn('MSAL unavailable in keyed TV mode; continuing with TV-key access.', error)); return; }
