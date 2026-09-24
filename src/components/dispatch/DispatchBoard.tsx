@@ -481,6 +481,8 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
               availableTime={availableTimes[driver.driverId]}
               status={snapshot.statuses[driver.driverId]}
               lockedRunId={lockedRunId(driver.driverId)}
+              samsaraState={selections[driver.driverId]?.runId ? snapshot.samsaraDispatch[selections[driver.driverId].runId] : undefined}
+              samsaraConfigured={snapshot.samsaraConfigured}
               failures={rowFailures(failures, driver.driverId)}
               busy={busyDriverId === driver.driverId}
               onSelectionChange={changeSelection}
