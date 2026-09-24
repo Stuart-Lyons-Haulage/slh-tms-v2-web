@@ -45,6 +45,8 @@ bash deploy/standalone/setup-server.sh
 
 This creates `.env.standalone` locally on the server, generates strong SQL/JWT/admin secrets, and prints the initial TMS Admin password once. External provider credentials are left blank and disabled. Do not commit this file.
 
+For live integrations, populate only the providers being enabled. Samsara needs an API token with route write access plus vehicle/driver read access; Info mailbox polling needs an Entra application with Microsoft Graph Mail.Read application permission restricted to the Info shared mailbox. RoadTech/DOT/Falcon, TachoMaster, Fleetio and Sage HR continue to use the existing runtime-only variables.
+
 After setup, use the start/update script below.
 
 ## Server start/update
