@@ -2,7 +2,10 @@ $ErrorActionPreference = "Stop"
 
 $WebRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $Parent = Split-Path -Parent $WebRoot
-$ApiRoot = Join-Path $Parent "slh-tms-v2-api"
+$ApiRoot = Join-Path $Parent "API"
+if (-not (Test-Path $ApiRoot)) {
+    $ApiRoot = Join-Path $Parent "slh-tms-v2-api"
+}
 $EnvFile = Join-Path $WebRoot ".env.standalone"
 $ComposeFile = Join-Path $WebRoot "deploy\standalone\docker-compose.yml"
 
