@@ -18,6 +18,7 @@ const UserManagement = lazy(() => import('./pages/UserManagement').then(module =
 const AdminIntegrationSyncControls = lazy(() => import('./components/AdminIntegrationSyncControls').then(module => ({ default: module.AdminIntegrationSyncControls })));
 
 import { apiScope, getLocalAuthSession, localAuthEnabled, localLogin, localLogout, useAccessToken, type LocalAuthSession } from './lib/auth';
+import { api } from './lib/api';
 import { connectPlanningEventStream } from './lib/planningEvents';
 import { isDesktopApp } from './lib/desktop';
 import { HeaderIntelligence } from './components/HeaderIntelligence';
@@ -83,6 +84,7 @@ function Shell() {
   const [signInError, setSignInError] = useState<string>();
   const [signingIn, setSigningIn] = useState(false);
   const [open, setOpen] = useState(false);
+  const [pendingOrderReviews, setPendingOrderReviews] = useState(0);
   const location = useLocation();
   const isAdmin = localAuthEnabled && localSession?.role === 'TMS.Admin';
 
@@ -138,6 +140,34 @@ function Shell() {
     return disconnect;
   }, [accessToken, authenticated]);
 
+  useEffect(() => {
+    if (!authenticated) {
+      setPendingOrderReviews(0);
+      return;
+    }
+
+    let stopped = false;
+    const refreshPendingOrderReviews = async () => {
+      try {
+        const rows = await api.staging(await accessToken(), 'PendingReview', 'order', 200);
+        if (!stopped) setPendingOrderReviews(rows.length);
+      } catch (error) {
+        console.warn('Pending order review count could not be refreshed.', error);
+      }
+    };
+
+    void refreshPendingOrderReviews();
+    const interval = window.setInterval(() => void refreshPendingOrderReviews(), 20000);
+    const onFocus = () => void refreshPendingOrderReviews();
+    window.addEventListener('focus', onFocus);
+
+    return () => {
+      stopped = true;
+      window.clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [accessToken, authenticated, location.pathname]);
+
   const loadingContent = <section className="sign-in-panel" aria-live="polite"><p className="eyebrow">Loading</p><h1>Opening TMS screen…</h1></section>;
 
   return <div className={`app-shell ${authenticated ? 'with-system-strip top-navigation-shell' : ''}`}>
@@ -155,7 +185,21 @@ function Shell() {
     </header>
 
     {authenticated && <nav className={`top-navigation ${open ? 'mobile-open' : ''}`} aria-label="Primary TMS navigation">
-      {coreNavigation.map(([path, label]) => <NavLink key={path} className="top-nav-direct" to={path} end={path === '/'}>{label}</NavLink>)}
+      {coreNavigation.map(([path, label]) => {
+        const hasPendingOrders = path === '/staging' && pendingOrderReviews > 0;
+        const pendingLabel = pendingOrderReviews >= 200 ? '200+' : String(pendingOrderReviews);
+        return <NavLink
+          key={path}
+          className={`top-nav-direct${hasPendingOrders ? ' orders-attention' : ''}`}
+          to={path}
+          end={path === '/'}
+          aria-label={hasPendingOrders ? `${label}, ${pendingLabel} waiting for review` : label}
+          title={hasPendingOrders ? `${pendingLabel} order${pendingOrderReviews === 1 ? '' : 's'} waiting for review` : undefined}
+        >
+          <span>{label}</span>
+          {hasPendingOrders && <span className="nav-order-review-count" aria-hidden="true">{pendingLabel}</span>}
+        </NavLink>;
+      })}
       <ComplianceNav current={location.pathname} />
       {isAdmin && <AdminNav current={location.pathname} />}
     </nav>}
