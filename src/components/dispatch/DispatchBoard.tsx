@@ -6,7 +6,7 @@ import { ComplianceWarningBanner } from "./ComplianceWarningBanner";
 import { DispatchDriverRow } from "./DispatchDriverRow";
 import { DispatchFilters } from "./DispatchFilters";
 import { DispatchMessageDialog } from "./DispatchMessageDialog";
-import { allocateDispatchRun, checkDispatchReadiness, getAvailableTimes, getSmartDispatch, sendDriverMessage, syncDispatchDrivers, unassignDispatchRun } from "./dispatchApi";
+import { allocateDispatchRun, checkDispatchReadiness, getAvailableTimes, getSmartDispatch, sendDriverMessage, sendRunToSamsara, syncDispatchDrivers, unassignDispatchRun } from "./dispatchApi";
 import {
   applyAvailableTimes,
   availableTimesByDriver,
@@ -339,6 +339,27 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
     setMessage({ runId: selection.runId, reference, text: buildUpdateText(reference), mode: "update", routeMinutes: 0, acknowledgeUnverified: false });
   }
 
+  async function handleSamsara(driver: DispatchDriverDto, selection: DispatchAllocationSelection) {
+    if (!selection.runId) return;
+    setBusyDriverId(driver.driverId);
+    setNotice(undefined);
+    setError(undefined);
+    setFailures(current => current.filter(failure => failure.driverId !== driver.driverId));
+    try {
+      const result = await sendRunToSamsara(selection.runId, await token());
+      setNotice(result.message);
+    } catch (exception) {
+      const reason = exception instanceof Error ? exception.message : "Run could not be sent to Samsara.";
+      setFailures(current => [...current.filter(failure => failure.driverId !== driver.driverId), {
+        driverId: driver.driverId,
+        runId: selection.runId,
+        reason
+      }]);
+    } finally {
+      setBusyDriverId(undefined);
+    }
+  }
+
   async function handleUnassign(driver: DispatchDriverDto, selection: DispatchAllocationSelection) {
     if (!selection.runId || lockedRunId(driver.driverId) !== selection.runId) return;
     const reference = snapshot?.runs.find(run => run.runId === selection.runId)?.reference || "this run";
@@ -403,7 +424,7 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
       <div>
         <span className="smart-eyebrow">Authoritative planning & dispatch</span>
         <h2>Driver Dispatch</h2>
-        <p>One screen for Tacho/live driver selection, allocation, compliance, SMS dispatch and confirmation.</p>
+        <p>One screen for Tacho/live driver selection, allocation, compliance, driver messaging and Samsara route dispatch.</p>
       </div>
       <div className="smart-dispatch-actions">
         {onPlanningDateChange && <label className="smart-date-control">Planning date<input type="date" value={planningDate} onChange={event => onPlanningDateChange(event.target.value)} /></label>}
@@ -466,6 +487,7 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
               onDispatch={(row, selection) => void prepareDispatch(row, selection)}
               onAmend={(row, selection) => void prepareAmendment(row, selection)}
               onUpdate={prepareUpdate}
+              onSamsara={(row, selection) => void handleSamsara(row, selection)}
               onUnassign={(row, selection) => void handleUnassign(row, selection)}
             />)}
           </tbody>
@@ -474,7 +496,7 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
       </div>
     </div>
 
-     <p className="smart-dispatch-footnote">Select work and press Dispatch on the row to validate and allocate it, then open the editable SMS preview. The Planner owns the built-run Lock Plan step. Regular 11h daily rest is the default; choose Reduced rest (9h) only when the planner intends to use that concession. Trailer continuity follows the driver's last-used trailer unless the selected run contains a planner trailer-swap instruction. Amendments, free-form updates and Unassign stay on the same row and are audited after the plan is locked.</p>
+     <p className="smart-dispatch-footnote">Select work and press Dispatch on the row to validate and allocate it, then open the editable SMS preview. The Planner owns the built-run Lock Plan step. Regular 11h daily rest is the default; choose Reduced rest (9h) only when the planner intends to use that concession. Trailer continuity follows the driver's last-used trailer unless the selected run contains a planner trailer-swap instruction. Send to Samsara updates the same external run rather than creating duplicates. Amendments, free-form updates and Unassign stay on the same row and are audited after the plan is locked.</p>
 
     {message && <DispatchMessageDialog
       reference={message.reference}
