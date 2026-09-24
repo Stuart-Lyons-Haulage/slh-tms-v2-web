@@ -269,7 +269,6 @@ export function OrdersOperational() {
           <h1>Customer orders</h1>
           <p className="intro">Keep the customer, collection site, depot, delivery address and references intact from intake through planning.</p>
         </div>
-        <Link className="button-like" to="/staging">Open Order Review</Link>
       </div>
 
       <div className="order-intake-grid">

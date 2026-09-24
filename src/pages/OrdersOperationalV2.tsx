@@ -302,7 +302,6 @@ export function OrdersOperationalV2() {
   return <section className="orders-operational">
     <div className="title-row">
       <div><p className="eyebrow">Order intake</p><h1>Customer orders</h1><p className="intro">Enter a single order or import the customer file, then submit it into Order Review for approval.</p></div>
-      <Link className="button-like" to="/staging">Open Order Review</Link>
     </div>
 
     <article className="panel structured-import" style={{ marginBottom: 16 }}>

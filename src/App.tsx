@@ -26,6 +26,7 @@ type NavItem = [string, string];
 const coreNavigation: NavItem[] = [
   ['/dashboard', 'Dashboard'],
   ['/orders', 'Order Entry'],
+  ['/staging', 'Staging Review'],
   ['/', 'Planner Builder'],
   ['/pallet-control', 'Pallet Order'],
   ['/driver-dispatch', 'Driver Dispatch'],
