@@ -126,6 +126,7 @@ export type DriverTimesheetDriver = {
   driverId: string;
   driverName: string;
   employeeNumber: string;
+  sageMatched: boolean;
   employmentType: 'Employed' | 'Agency';
   agencyName?: string;
   daysWorked: number;
@@ -145,7 +146,7 @@ export type DriverTimesheetReport = {
   weekStarts: string;
   weekEnds: string;
   generatedAtUtc: string;
-  sourceStatus: { tachoMaster: string; roadTech: string };
+  sourceStatus: { tachoMaster: string; roadTech: string; sageHr: string };
   summary: { drivers: number; employedDrivers: number; agencyDrivers: number; reviewDrivers: number; unmatchedTachoDuties: number };
   drivers: DriverTimesheetDriver[];
 };
