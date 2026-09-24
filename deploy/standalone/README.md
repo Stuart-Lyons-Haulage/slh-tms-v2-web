@@ -27,6 +27,26 @@ docker compose --env-file .env.standalone -f deploy/standalone/docker-compose.ym
 
 The portal is exposed on `TMS_HTTP_PORT` (default 8080).
 
+## Server start/update
+
+Run the script that matches the SLH server operating system from the existing V2 Web repository:
+
+**Windows / PowerShell**
+
+```powershell
+.\deploy\standalone\start-server.ps1
+```
+
+**Linux**
+
+```bash
+bash deploy/standalone/start-server.sh
+```
+
+The script updates both sibling repositories from canonical `main`, validates the Docker Compose configuration, builds the stack, starts it, and waits for the anonymous V2 API health endpoint before reporting success.
+
+On the first run, if `.env.standalone` does not yet exist, the script creates it from `.env.standalone.example` and stops. Populate the runtime values directly on the server, then run the same script again.
+
 ## Archive safety
 
 The API will not purge a single database row merely because `ARCHIVE_ENABLED=true`.
