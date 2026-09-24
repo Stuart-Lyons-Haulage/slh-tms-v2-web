@@ -9,7 +9,7 @@ services:
     volumes:
       - sql-data:/var/opt/mssql
       - type: bind
-        source: "${SQL_BACKUP_HOST_PATH:-./backup}"
+        source: "${SQL_BACKUP_HOST_PATH:-../../backup}"
         target: /var/opt/mssql/backup
     healthcheck:
       test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q 'SELECT 1' >/dev/null 2>&1"]
@@ -79,7 +79,7 @@ services:
       Integrations__Fleetio__AccountToken: "${FLEETIO_ACCOUNT_TOKEN:-}"
     volumes:
       - type: bind
-        source: "${ARCHIVE_HOST_PATH:-./archive}"
+        source: "${ARCHIVE_HOST_PATH:-../../archive}"
         target: /archive
 
   web:
