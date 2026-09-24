@@ -11,7 +11,7 @@ const DailyCompliance = lazy(() => import('./pages/DailyCompliance').then(module
 const NightOutReport = lazy(() => import('./pages/NightOutReport').then(module => ({ default: module.NightOutReport })));
 const DriverAssignments = lazy(() => import('./pages/Pages').then(module => ({ default: module.DriverAssignments })));
 
-import { apiScope, useAccessToken } from './lib/auth';
+import { apiScope, getLocalAuthSession, localAuthEnabled, localLogin, localLogout, useAccessToken, type LocalAuthSession } from './lib/auth';
 import { connectPlanningEventStream } from './lib/planningEvents';
 import { isDesktopApp } from './lib/desktop';
 import { HeaderIntelligence } from './components/HeaderIntelligence';
@@ -47,13 +47,33 @@ function ComplianceNav({ current }: { current: string }) {
 }
 
 function Shell() {
-  const authenticated = useIsAuthenticated();
+  const entraAuthenticated = useIsAuthenticated();
   const { instance, accounts } = useMsal();
   const accessToken = useAccessToken();
+  const [localSession, setLocalSession] = useState<LocalAuthSession | null>(() => getLocalAuthSession());
+  const authenticated = localAuthEnabled ? localSession !== null : entraAuthenticated;
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [signInError, setSignInError] = useState<string>();
+  const [signingIn, setSigningIn] = useState(false);
   const [open, setOpen] = useState(false);
   const location = useLocation();
 
   const signIn = async () => {
+    if (localAuthEnabled) {
+      setSigningIn(true);
+      setSignInError(undefined);
+      try {
+        const session = await localLogin(username, password);
+        setLocalSession(session);
+        setPassword('');
+      } catch (error) {
+        setSignInError(error instanceof Error ? error.message : 'Sign in failed.');
+      } finally {
+        setSigningIn(false);
+      }
+      return;
+    }
     const request = { scopes: apiScope ? [apiScope] : [] };
     if (!isDesktopApp()) {
       await instance.loginRedirect(request);
@@ -64,6 +84,11 @@ function Shell() {
   };
 
   const signOut = async () => {
+    if (localAuthEnabled) {
+      localLogout();
+      setLocalSession(null);
+      return;
+    }
     if (!isDesktopApp()) {
       await instance.logoutRedirect({ account: accounts[0] });
       return;
@@ -92,8 +117,10 @@ function Shell() {
       <div className="header-context"><b>Daily transport control</b></div>
       <div className="header-actions">
         {authenticated
-          ? <><span className="user">{accounts[0]?.name}</span><button onClick={() => void signOut()}>Sign out</button></>
-          : <button className="primary" onClick={() => void signIn()} disabled={!apiScope}>Sign in with Microsoft</button>}
+          ? <><span className="user">{localAuthEnabled ? localSession?.displayName : accounts[0]?.name}</span><button onClick={() => void signOut()}>Sign out</button></>
+          : localAuthEnabled
+            ? null
+            : <button className="primary" onClick={() => void signIn()} disabled={!apiScope}>Sign in with Microsoft</button>}
       </div>
     </header>
 
@@ -125,8 +152,22 @@ function Shell() {
       </Routes></RouteErrorBoundary></Suspense> : <section className="sign-in-panel">
         <p className="eyebrow">Secure operations portal</p>
         <h1>Sign in to Stuart Lyons Haulage TMS</h1>
-        <p>Use your Lyons Microsoft account to open planning, master data and compliance.</p>
-        <button className="primary" onClick={() => void signIn()} disabled={!apiScope}>Sign in with Microsoft</button>
+        {localAuthEnabled ? <>
+          <p>Use your individual TMS account.</p>
+          <form onSubmit={event => { event.preventDefault(); void signIn(); }} style={{ width: '100%', maxWidth: 420, display: 'grid', gap: 12 }}>
+            <label style={{ textAlign: 'left' }}>Username
+              <input autoComplete="username" value={username} onChange={event => setUsername(event.target.value)} required />
+            </label>
+            <label style={{ textAlign: 'left' }}>Password
+              <input type="password" autoComplete="current-password" value={password} onChange={event => setPassword(event.target.value)} required />
+            </label>
+            {signInError && <p role="alert">{signInError}</p>}
+            <button className="primary" type="submit" disabled={signingIn || !username || !password}>{signingIn ? 'Signing in…' : 'Sign in'}</button>
+          </form>
+        </> : <>
+          <p>Use your Lyons Microsoft account to open planning, master data and compliance.</p>
+          <button className="primary" onClick={() => void signIn()} disabled={!apiScope}>Sign in with Microsoft</button>
+        </>}
       </section>}
     </main>
 
