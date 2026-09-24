@@ -5,6 +5,7 @@ import { useAccessToken } from "../lib/auth";
 import { signalPlanningChange, subscribePlanningChanges } from "../lib/planningEvents";
 import { useApi } from "../lib/useApi";
 import { startVisiblePolling } from "../lib/visiblePolling";
+import { planningDeliveryLocation } from "../lib/planningLocations";
 
 type Allocation = { loadId: string; loadReference?: string; pallets: number; updatedAtUtc: string; updatedBy?: string };
 type SourceLine = { sourceLineId: string; sourcePalletType?: string; palletType?: string; loadUnitType?: string; palletColourKey?: string; orderedPallets: number; plannedPallets: number; outstandingPallets: number };
@@ -44,12 +45,46 @@ export function PalletPlanningControl() {
   }, [refreshControl, refreshRegions]);
 
   const data = control.data;
-  const orderById = useMemo(() => new Map((data?.orders || []).map(order => [order.id, order])), [data?.orders]);
-  const orderedDestinations = useMemo(() => { if (!data) return []; const live = new Set(data.destinations); const ranked = (regions.data?.destinations || []).filter(destination => live.has(destination)); return [...ranked, ...data.destinations.filter(destination => !ranked.includes(destination))]; }, [data, regions.data]);
+  const orders = useMemo(() => data?.orders || [], [data?.orders]);
+  const orderById = useMemo(() => new Map(orders.map(order => [order.id, order])), [orders]);
+  const planningGroups = useMemo(() => [...new Set(orders.map(order => order.collection.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [orders]);
+  const liveDestinations = useMemo(() => [...new Set(orders.map(order => planningDeliveryLocation(order)).filter(Boolean))], [orders]);
+  const orderedDestinations = useMemo(() => {
+    const live = new Set(liveDestinations);
+    const ranked = (regions.data?.destinations || []).filter(destination => live.has(destination));
+    return [...ranked, ...liveDestinations.filter(destination => !ranked.includes(destination)).sort((a, b) => a.localeCompare(b))];
+  }, [liveDestinations, regions.data]);
   const destinationLabel = useCallback((destination: string) => regions.data?.destinationLabels?.[destination] || destination, [regions.data]);
   const regionGroups = useMemo(() => { const groups: Array<{ region: string; destinations: string[] }> = []; for (const destination of orderedDestinations) { const region = regions.data?.destinationRegions?.[destination] || "Other"; const last = groups[groups.length - 1]; if (last?.region === region) last.destinations.push(destination); else groups.push({ region, destinations: [destination] }); } return groups; }, [orderedDestinations, regions.data]);
-  const cellMap = useMemo(() => new Map((data?.cells || []).map(cell => [`${cell.planningGroup}|||${cell.destination}`, cell])), [data?.cells]);
-  const selectedOrders = useMemo(() => !data || !selectedCell ? [] : data.orders.filter(order => order.planningGroup === selectedCell.group && order.destination === selectedCell.destination), [data, selectedCell]);
+  const cellMap = useMemo(() => {
+    const map = new Map<string, PlanningCell>();
+    for (const order of orders) {
+      const group = order.collection.trim();
+      const destination = planningDeliveryLocation(order);
+      if (!group || !destination) continue;
+      const key = `${group}|||${destination}`;
+      const existing = map.get(key);
+      if (existing) {
+        existing.ordered += order.orderedPallets;
+        existing.planned += order.plannedPallets;
+        existing.outstanding += order.outstandingPallets;
+        existing.overplanned += order.overplannedPallets;
+        existing.orderIds.push(order.id);
+      } else {
+        map.set(key, {
+          planningGroup: group,
+          destination,
+          ordered: order.orderedPallets,
+          planned: order.plannedPallets,
+          outstanding: order.outstandingPallets,
+          overplanned: order.overplannedPallets,
+          orderIds: [order.id],
+        });
+      }
+    }
+    return map;
+  }, [orders]);
+  const selectedOrders = useMemo(() => !selectedCell ? [] : orders.filter(order => order.collection === selectedCell.group && planningDeliveryLocation(order) === selectedCell.destination), [orders, selectedCell]);
   const groupedSelectedOrders = useMemo(() => {
     const groups = new Map<string, PlanningOrder[]>();
     for (const order of selectedOrders) {
@@ -87,8 +122,8 @@ export function PalletPlanningControl() {
     const eyebrow = mode === "toPlan" ? "Work remaining" : mode === "planned" ? "Allocated work" : "All ordered work";
     const boardClass = mode === "toPlan" ? "to-plan" : mode === "planned" ? "planned" : "summary";
     return <section className={`panel pallet-control-board ${boardClass}`}><div className="pallet-control-board-title"><div><p className="eyebrow">{eyebrow}</p><h2>{title}</h2></div><strong>{total}</strong></div><div className="pallet-control-matrix-wrap"><table className="pallet-control-matrix"><thead><tr><th className="pallet-row-label">Region</th>{regionGroups.map(group => <th key={group.region} colSpan={group.destinations.length}>{group.region}</th>)}<th className="pallet-total-col">Total</th></tr><tr><th className="pallet-row-label">Collection</th>{orderedDestinations.map(destination => { const label = destinationLabel(destination); const siteCode = regions.data?.destinationSiteCodes?.[destination]; return <th key={destination} className="pallet-destination-heading" title={label === destination ? destination : `${label} · ${destination}${siteCode ? ` · ${siteCode}` : ""}`}><span>{label}</span></th>; })}<th className="pallet-total-col">Total</th></tr></thead><tbody>
-      {data?.planningGroups.map(group => { const cells = orderedDestinations.map(destination => cellMap.get(`${group}|||${destination}`)); const rowTotal = cells.reduce((sum, cell) => sum + quantity(mode, cell), 0); if (rowTotal === 0 && !(mode === "toPlan" && cells.some(cell => (cell?.overplanned || 0) > 0))) return null; return <tr key={group}><td className="pallet-row-label" title={group}><strong>{group}</strong></td>{orderedDestinations.map((destination, index) => { const cell = cells[index]; const amount = quantity(mode, cell); const over = cell?.overplanned || 0; const tone = cellTone(mode, cell); return <td key={destination}>{amount > 0 || (mode === "toPlan" && over > 0) ? <button type="button" className="pallet-cell-button" style={{ background: toneBackground(tone), borderColor: toneBorder(tone) }} onClick={() => setSelectedCell({ group, destination })} title={`${group} → ${destinationLabel(destination)}: ${cell?.ordered || 0} ordered, ${cell?.planned || 0} planned, ${cell?.outstanding || 0} to plan`}><strong>{amount || "—"}</strong>{mode === "toPlan" && over > 0 ? <small>+{over}</small> : null}</button> : null}</td>; })}<td className="pallet-total-col"><strong>{rowTotal}</strong></td></tr>; })}
-      <tr className="destination-totals"><td className="pallet-row-label"><strong>Destination total</strong></td>{orderedDestinations.map(destination => { const totalForDestination = data?.planningGroups.reduce((sum, group) => sum + quantity(mode, cellMap.get(`${group}|||${destination}`)), 0) || 0; return <td key={destination}><strong>{totalForDestination || ""}</strong></td>; })}<td className="pallet-total-col"><strong>{total}</strong></td></tr>
+      {planningGroups.map(group => { const cells = orderedDestinations.map(destination => cellMap.get(`${group}|||${destination}`)); const rowTotal = cells.reduce((sum, cell) => sum + quantity(mode, cell), 0); if (rowTotal === 0 && !(mode === "toPlan" && cells.some(cell => (cell?.overplanned || 0) > 0))) return null; return <tr key={group}><td className="pallet-row-label" title={group}><strong>{group}</strong></td>{orderedDestinations.map((destination, index) => { const cell = cells[index]; const amount = quantity(mode, cell); const over = cell?.overplanned || 0; const tone = cellTone(mode, cell); return <td key={destination}>{amount > 0 || (mode === "toPlan" && over > 0) ? <button type="button" className="pallet-cell-button" style={{ background: toneBackground(tone), borderColor: toneBorder(tone) }} onClick={() => setSelectedCell({ group, destination })} title={`${group} → ${destinationLabel(destination)}: ${cell?.ordered || 0} ordered, ${cell?.planned || 0} planned, ${cell?.outstanding || 0} to plan`}><strong>{amount || "—"}</strong>{mode === "toPlan" && over > 0 ? <small>+{over}</small> : null}</button> : null}</td>; })}<td className="pallet-total-col"><strong>{rowTotal}</strong></td></tr>; })}
+      <tr className="destination-totals"><td className="pallet-row-label"><strong>Destination total</strong></td>{orderedDestinations.map(destination => { const totalForDestination = planningGroups.reduce((sum, group) => sum + quantity(mode, cellMap.get(`${group}|||${destination}`)), 0) || 0; return <td key={destination}><strong>{totalForDestination || ""}</strong></td>; })}<td className="pallet-total-col"><strong>{total}</strong></td></tr>
     </tbody></table></div></section>;
   }
 
@@ -97,6 +132,6 @@ export function PalletPlanningControl() {
     {message && <p className="notice inline-notice">{message}</p>}{control.error && <p className="notice inline-notice">{control.error}</p>}
     {data && <div className="pallet-control-mini-metrics"><article><span>To plan</span><strong>{data.summary.outstanding}</strong></article><article><span>Planned</span><strong>{data.summary.planned}</strong></article><article className={data.summary.overplanned ? "attention" : ""}><span>Over-planned</span><strong>{data.summary.overplanned}</strong></article><article><span>Late additions</span><strong>{data.summary.lateAdditions}</strong></article></div>}
     {data && data.summary.orders === 0 && <div className="state">No approved load-unit orders are available for {ukDate(date)}.</div>}{data && <div className="pallet-control-stack">{matrix("toPlan", "To Plan", data.summary.outstanding)}{matrix("planned", "Planned", data.summary.planned)}{matrix("summary", "Pallet Summary", data.summary.ordered)}</div>}
-    {selectedCell && data && <section className="panel pallet-control-detail"><div className="title-row"><div><p className="eyebrow">Orders to Plan</p><h2>Collect: {selectedCell.group} · Deliver: {destinationLabel(selectedCell.destination)}</h2><p className="hint">AM/PM appears below as an order grouping only. Partial and split allocations remain in To plan until the outstanding balance reaches zero.</p></div><button onClick={() => setSelectedCell(undefined)}>Close</button></div><div className="pallet-control-order-list">{groupedSelectedOrders.map(([section, orders]) => <div key={section} className="pallet-control-order-section"><h3>{section}</h3>{orders.map(order => { const draft = currentDraft(order); return <article key={order.id} className="pallet-control-order"><div><strong>{order.reference}</strong><small>Collect: {order.collection}</small><small>{order.outstandingPallets} {palletLabel(order)} to plan · ordered {order.orderedPallets} · planned {order.plannedPallets}</small><small>Deliver: {destinationLabel(order.destination)}</small><small>{order.customerCode} · {order.temperature || "No temp"}{order.runsOvernight ? " · Overnight" : ""}{order.lateAddition ? " · NEW AFTER PLANNING STARTED" : ""}</small></div><div className="pallet-control-order-quantities"><span><small>Collect</small><strong>{order.collection}</strong></span><span><small>Pallets</small><strong>{order.outstandingPallets}</strong></span><span><small>Deliver</small><strong>{destinationLabel(order.destination)}</strong></span></div><div className="pallet-control-allocation"><select value={draft.loadId} onChange={event => selectRun(order, event.target.value)}><option value="">Select run</option>{data.runs.map(run => <option key={run.id} value={run.id}>{run.reference} · {run.status}{run.capacityType ? ` · ${run.capacityType}` : ""}</option>)}</select><input aria-label="Allocated load units" type="number" min="0" step="1" value={draft.pallets} onChange={event => setAllocationDrafts(current => ({ ...current, [order.id]: { ...draft, pallets: event.target.value } }))} /><button type="button" className="primary" disabled={busyKey === order.id || !draft.loadId} onClick={() => void saveAllocation(order)}>{busyKey === order.id ? "Saving…" : "Save"}</button></div></article>; })}</div>)}</div></section>}
+    {selectedCell && data && <section className="panel pallet-control-detail"><div className="title-row"><div><p className="eyebrow">Orders to Plan</p><h2>Collect: {selectedCell.group} · Deliver: {destinationLabel(selectedCell.destination)}</h2><p className="hint">AM/PM appears below as an order grouping only. Partial and split allocations remain in To plan until the outstanding balance reaches zero.</p></div><button onClick={() => setSelectedCell(undefined)}>Close</button></div><div className="pallet-control-order-list">{groupedSelectedOrders.map(([section, orders]) => <div key={section} className="pallet-control-order-section"><h3>{section}</h3>{orders.map(order => { const draft = currentDraft(order); return <article key={order.id} className="pallet-control-order"><div><strong>{order.reference}</strong><small>Collect: {order.collection}</small><small>{order.outstandingPallets} {palletLabel(order)} to plan · ordered {order.orderedPallets} · planned {order.plannedPallets}</small><small>Deliver: {destinationLabel(planningDeliveryLocation(order))}</small><small>{order.customerCode} · {order.temperature || "No temp"}{order.runsOvernight ? " · Overnight" : ""}{order.lateAddition ? " · NEW AFTER PLANNING STARTED" : ""}</small></div><div className="pallet-control-order-quantities"><span><small>Collect</small><strong>{order.collection}</strong></span><span><small>Pallets</small><strong>{order.outstandingPallets}</strong></span><span><small>Deliver</small><strong>{destinationLabel(planningDeliveryLocation(order))}</strong></span></div><div className="pallet-control-allocation"><select value={draft.loadId} onChange={event => selectRun(order, event.target.value)}><option value="">Select run</option>{data.runs.map(run => <option key={run.id} value={run.id}>{run.reference} · {run.status}{run.capacityType ? ` · ${run.capacityType}` : ""}</option>)}</select><input aria-label="Allocated load units" type="number" min="0" step="1" value={draft.pallets} onChange={event => setAllocationDrafts(current => ({ ...current, [order.id]: { ...draft, pallets: event.target.value } }))} /><button type="button" className="primary" disabled={busyKey === order.id || !draft.loadId} onClick={() => void saveAllocation(order)}>{busyKey === order.id ? "Saving…" : "Save"}</button></div></article>; })}</div>)}</div></section>}
   </section>;
 }

@@ -6,6 +6,7 @@ import { startVisiblePolling } from "../lib/visiblePolling";
 import { RunJobSuggestions } from "../components/RunJobSuggestions";
 import "../simple-planner.css";
 import { createRun, listRuns, updateRunStops } from '../api/runs';
+import { planningDeliveryLocation } from "../lib/planningLocations";
 
 type Period = "" | "AM" | "PM";
 type PeriodFilter = "ALL" | "AM" | "PM";
@@ -19,6 +20,7 @@ type PlanningOrder = {
   outstandingPallets: number;
   collection: string;
   destination: string;
+  originalDestination?: string;
   source?: string;
   temperature?: string;
   palletType?: string;
@@ -98,6 +100,10 @@ const plannerTag = (notes: string | undefined, label: string, value: string) => 
   return value.trim() ? [`${label}: ${value.trim()}`, ...parts].join(" · ") : parts.join(" · ");
 };
 const plannerBoolean = (notes: string | undefined, label: string) => tagged(notes, label).toLowerCase() === "yes";
+const normalisePlanningControl = (data: PlanningControlData): PlanningControlData => ({
+  ...data,
+  orders: data.orders.map(order => ({ ...order, destination: planningDeliveryLocation(order) })),
+});
 const siteFor = (sites: Site[], value: string) => {
   const target = normalise(value);
   if (!target) return undefined;
@@ -284,7 +290,7 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
 
   const refreshAll = useCallback(async () => {
     const access = await token();
-    const nextControl = await request<PlanningControlData>(`/api/v1/planning-control/pallets?date=${encodeURIComponent(date)}`, access);
+    const nextControl = normalisePlanningControl(await request<PlanningControlData>(`/api/v1/planning-control/pallets?date=${encodeURIComponent(date)}`, access));
     const [loadsResult, sitesResult, marketsResult] = await Promise.allSettled([listRuns(date, access), api.sites(access), api.marketContacts(access)]);
     const safeLoads = loadsResult.status === "fulfilled" && Array.isArray(loadsResult.value) ? loadsResult.value : [];
     const safeSites = sitesResult.status === "fulfilled" && Array.isArray(sitesResult.value) ? sitesResult.value : [];
@@ -298,7 +304,7 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
   }, [date, hydrate, token]);
 
   const refreshControl = useCallback(async () => {
-    const nextControl = await request<PlanningControlData>(`/api/v1/planning-control/pallets?date=${encodeURIComponent(date)}`, await token());
+    const nextControl = normalisePlanningControl(await request<PlanningControlData>(`/api/v1/planning-control/pallets?date=${encodeURIComponent(date)}`, await token()));
     setControl(nextControl);
   }, [date, token]);
 

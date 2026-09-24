@@ -57,6 +57,20 @@ function feedAge(minutes?: number | null) {
   return `${Math.round(minutes / 60)}h ago`;
 }
 
+function feedStatus(feed: SystemSyncProvider) {
+  if (!feed.configured) return "Not configured";
+  if (feed.ageMinutes == null) return "Configured · awaiting first receipt";
+  return feedAge(feed.ageMinutes);
+}
+
+function feedBadge(feed: SystemSyncProvider) {
+  if (!feed.configured) return "Setup";
+  if (feed.ageMinutes == null) return "Waiting";
+  if (feed.state === "current") return "Current";
+  if (feed.state === "delayed") return "Delayed";
+  return "Stale";
+}
+
 function toMidnight(value?: string) {
   if (!value) return null;
   const date = new Date(`${value.substring(0, 10)}T00:00:00`);
@@ -184,8 +198,8 @@ export function DashboardOperational() {
           <div className="dashboard-feed-list compact-list">
             {syncState.data?.providers.map(feed => <div key={feed.name} className={`dashboard-feed-row feed-${feedClass(feed.state)}`} title={feed.detail || undefined}>
               <span aria-hidden="true" />
-              <div><strong>{feed.name}</strong><small>{feedAge(feed.ageMinutes)}{feed.cadence ? ` · ${feed.cadence}` : ""}</small></div>
-              <b>{feed.state === "current" ? "Current" : "Check"}</b>
+              <div><strong>{feed.name}</strong><small>{feedStatus(feed)}{feed.cadence ? ` · ${feed.cadence}` : ""}</small></div>
+              <b>{feedBadge(feed)}</b>
             </div>)}
           </div>
         </section>
