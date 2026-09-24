@@ -251,13 +251,7 @@ export function DriversMasterOperational() {
   return <div>
     <div className="panel" style={{ marginBottom: 16 }}>
       <div className="title-row">
-        <div>
-          <p className="eyebrow">Driver Master</p>
-          <h2>Employment + Tacho identity</h2>
-          <p className="hint" style={{ maxWidth: 850 }}>
-            Driver Master remains the operational record. Sage HR owns employment information and TachoMaster enriches member, card, duty and hours evidence. Missing Tacho evidence never removes a valid Driver Master record.
-          </p>
-        </div>
+        <div />
         <div className="actions">
           <button onClick={() => void refresh()} disabled={loading}>Refresh</button>
           <button className="primary" onClick={() => void syncTacho()} disabled={syncing}>{syncing ? 'Syncing…' : 'Sync TachoMaster'}</button>

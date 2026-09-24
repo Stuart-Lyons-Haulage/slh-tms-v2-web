@@ -13,15 +13,15 @@ import { NavLink } from 'react-router-dom';
 type MasterSection = MasterDataTab | 'fuel-cards' | 'markets' | 'fuel-prices';
 type DuplicateEntity = 'sites' | 'drivers' | 'vehicles' | 'trailers' | 'markets';
 
-const sections: Array<{ key: MasterSection; label: string; detail: string }> = [
-  { key: 'drivers', label: 'Drivers', detail: 'SQL Driver Master is operational authority. Sage HR maintains employed staff; TachoMaster enriches member, card, duty and hours evidence.' },
-  { key: 'vehicles', label: 'Vehicles', detail: 'SQL vehicle register linked to Fleetio operational data.' },
-  { key: 'trailers', label: 'Trailers', detail: 'SQL trailer register for identity, capacity and Fleetio links.' },
-  { key: 'fuel-cards', label: 'Fuel cards & PINs', detail: 'Restricted SQL fuel register for vehicle fuel-card details and PINs.' },
-  { key: 'sites', label: 'Sites', detail: 'SQL site register for aliases, addresses, planning data and linked execution geofences.' },
-  { key: 'customers', label: 'Customers', detail: 'SQL customer register for identity, trading name, account ownership, service notes and default site.' },
-  { key: 'markets', label: 'Markets', detail: 'SQL market and contact register used by order intake and planning.' },
-  { key: 'fuel-prices', label: 'Fuel prices', detail: 'SQL fuel pricing reference data.' },
+const sections: Array<{ key: MasterSection; label: string }> = [
+  { key: 'drivers', label: 'Drivers' },
+  { key: 'vehicles', label: 'Vehicles' },
+  { key: 'trailers', label: 'Trailers' },
+  { key: 'fuel-cards', label: 'Fuel cards & PINs' },
+  { key: 'sites', label: 'Sites' },
+  { key: 'customers', label: 'Customers' },
+  { key: 'markets', label: 'Markets' },
+  { key: 'fuel-prices', label: 'Fuel prices' },
 ];
 
 function canonicalSection(value: MasterSection): MasterSection {
@@ -37,27 +37,13 @@ export function MasterDataHub({ initialSection = 'drivers' }: { initialSection?:
   const [section, setSection] = useState<MasterSection>(() => canonicalSection(initialSection));
   useEffect(() => { setSection(canonicalSection(initialSection)); }, [initialSection]);
 
-  const active = sections.find(item => item.key === section) || sections[0];
   const duplicateReviewEntity = duplicateEntity(section);
 
   return <section>
-    <div className="title-row">
-      <div>
-        <p className="eyebrow">TMS master data · SQL authority</p>
-        <h1>Master data</h1>
-        <p className="intro">SQL is the single operational master for the TMS. Planning, compliance and integrations read the same controlled records.</p>
-      </div>
-      <div>
-        <span className="status approved">SQL is authoritative</span>
-        <p className="hint" style={{ maxWidth: 320, marginTop: 10 }}>Edit and reconcile records in the TMS. Sage HR, TachoMaster, Fleetio and RoadTech each provide only the employment, identity, vehicle and execution evidence they own.</p>
-      </div>
-    </div>
-
     <div className="panel master-section-panel" style={{ marginBottom: 18 }}>
       <div className="master-section-tabs horizontal-tabs" role="tablist" aria-label="Master data sections">
         {sections.map(item => <button key={item.key} role="tab" aria-selected={section === item.key} className={section === item.key ? 'primary' : ''} onClick={() => setSection(item.key)}>{item.label}</button>)}
       </div>
-      <p className="hint master-section-hint"><strong>{active.label}:</strong> {active.detail}</p>
     </div>
 
 

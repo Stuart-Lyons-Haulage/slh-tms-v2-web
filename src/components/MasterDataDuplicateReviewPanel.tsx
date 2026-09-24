@@ -25,6 +25,13 @@ type DuplicateCandidate = {
 
 type DuplicateEntityType = 'sites' | 'drivers' | 'vehicles' | 'trailers' | 'markets';
 type MergeResult = { merged: number; reviewed: number; messages: string[] };
+const entityLabels: Record<DuplicateEntityType, string> = {
+  sites: 'Sites',
+  drivers: 'Drivers',
+  vehicles: 'Vehicles',
+  trailers: 'Trailers',
+  markets: 'Markets',
+};
 
 function fieldValue(value: unknown) {
   if (value == null || value === '') return '—';
@@ -35,23 +42,34 @@ function fieldValue(value: unknown) {
 export function MasterDataDuplicateReviewPanel({ entityType = 'sites' }: { entityType?: DuplicateEntityType }) {
   const token = useAccessToken();
   const [candidates, setCandidates] = useState<DuplicateCandidate[]>([]);
+  const [hasScanned, setHasScanned] = useState(false);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string>();
   const [error, setError] = useState<string>();
 
   const load = useCallback(async () => {
+    setBusy(true);
     setError(undefined);
     try {
       const access = await token();
       const rows = await request<DuplicateCandidate[]>(`/api/v1/operational-master-data/duplicates?entityType=${encodeURIComponent(entityType)}`, access, { cache: 'no-store' });
       setCandidates(rows);
+      setHasScanned(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Duplicate check failed.');
+    } finally {
+      setBusy(false);
     }
   }, [entityType, token]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    setCandidates([]);
+    setHasScanned(false);
+    setOpen(false);
+    setNotice(undefined);
+    setError(undefined);
+  }, [entityType]);
 
   async function autoMerge() {
     setBusy(true); setError(undefined); setNotice(undefined);
@@ -93,16 +111,16 @@ export function MasterDataDuplicateReviewPanel({ entityType = 'sites' }: { entit
   }
 
   const highConfidence = candidates.filter(item => item.canAutoMerge).length;
+  const label = entityLabels[entityType];
 
   return <div className="panel" style={{ marginBottom: 18 }}>
     <div className="title-row">
       <div>
-        <p className="eyebrow">Master data duplicate control</p>
-        <h2>{candidates.length} possible duplicate{candidates.length === 1 ? '' : 's'} need review</h2>
-        <p className="hint">The sync now checks SQL master data for duplicate sites, drivers, vehicles, trailers and markets. High-confidence matches can merge automatically; uncertain matches open here for planner review. Existing address, map, geofence and routing fields are preserved.</p>
+        <p className="eyebrow">{label}</p>
+        <h2>{hasScanned ? `${candidates.length} possible duplicate${candidates.length === 1 ? '' : 's'}` : 'Duplicate check'}</h2>
       </div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-        <button onClick={() => void load()} disabled={busy}>Refresh duplicate scan</button>
+        <button onClick={() => void load()} disabled={busy}>{busy ? 'Checking…' : `Check ${label}`}</button>
         <button className="primary" onClick={() => setOpen(true)} disabled={!candidates.length || busy}>Review duplicates</button>
         <button onClick={() => void autoMerge()} disabled={!highConfidence || busy}>Auto-merge safe ({highConfidence})</button>
       </div>
@@ -114,7 +132,7 @@ export function MasterDataDuplicateReviewPanel({ entityType = 'sites' }: { entit
     {open && <div className="crm-modal-backdrop" role="dialog" aria-modal="true" aria-label="Review duplicate master data" onMouseDown={event => { if (event.target === event.currentTarget) setOpen(false); }}>
       <div className="crm-modal">
         <div className="crm-modal-header">
-          <div><p className="eyebrow">Duplicate review popup</p><h2>Review and merge duplicate master data</h2><p className="hint">Merging keeps the canonical SQL record, fills missing fields from the duplicate, relinks geofences/integration mappings where supported, archives the duplicate and writes an audit entry.</p></div>
+          <div><p className="eyebrow">{label}</p><h2>Review duplicates</h2></div>
           <button type="button" onClick={() => setOpen(false)}>Close</button>
         </div>
         <div className="crm-modal-body">

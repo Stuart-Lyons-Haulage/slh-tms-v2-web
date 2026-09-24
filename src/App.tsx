@@ -10,6 +10,9 @@ const DashboardOperational = lazy(() => import('./pages/DashboardOperational').t
 const DailyCompliance = lazy(() => import('./pages/DailyCompliance').then(module => ({ default: module.DailyCompliance })));
 const NightOutReport = lazy(() => import('./pages/NightOutReport').then(module => ({ default: module.NightOutReport })));
 const DriverAssignments = lazy(() => import('./pages/Pages').then(module => ({ default: module.DriverAssignments })));
+const Orders = lazy(() => import('./pages/Pages').then(module => ({ default: module.Orders })));
+const StagingQueue = lazy(() => import('./pages/Pages').then(module => ({ default: module.StagingQueue })));
+const DriverDispatchOperational = lazy(() => import('./pages/DriverDispatchOperational').then(module => ({ default: module.DriverDispatchOperational })));
 const UserManagement = lazy(() => import('./pages/UserManagement').then(module => ({ default: module.UserManagement })));
 
 import { apiScope, getLocalAuthSession, localAuthEnabled, localLogin, localLogout, useAccessToken, type LocalAuthSession } from './lib/auth';
@@ -22,14 +25,16 @@ type NavItem = [string, string];
 
 const coreNavigation: NavItem[] = [
   ['/dashboard', 'Dashboard'],
+  ['/orders', 'Order Entry'],
   ['/', 'Planner Builder'],
   ['/pallet-control', 'Pallet Order'],
+  ['/driver-dispatch', 'Driver Dispatch'],
   ['/master-data', 'Master Data'],
 ];
 
 const complianceNavigation: NavItem[] = [
   ['/compliance', 'Compliance'],
-  ['/night-outs', 'Driver Hours'],
+  ['/night-outs', 'Invoice History'],
   ['/driver-assignments', 'Driver History'],
 ];
 
@@ -140,7 +145,10 @@ function Shell() {
       {authenticated ? <Suspense fallback={loadingContent}><RouteErrorBoundary key={location.pathname}><Routes>
         <Route path="/" element={<PlannerEnhanced />} />
         <Route path="/dashboard" element={<DashboardOperational />} />
+        <Route path="/orders" element={<Orders />} />
+        <Route path="/staging" element={<StagingQueue />} />
         <Route path="/pallet-control" element={<PalletPlanningControl />} />
+        <Route path="/driver-dispatch" element={<DriverDispatchOperational />} />
         <Route path="/master-data" element={<MasterDataHub />} />
         <Route path="/master-data/roadrunner-review" element={<RoadrunnerSiteReview />} />
         <Route path="/drivers" element={<MasterDataHub initialSection="drivers" />} />
