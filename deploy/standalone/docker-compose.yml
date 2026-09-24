@@ -46,13 +46,11 @@ services:
       Database__ApplySchemaChangesOnStartup: "true"
       Database__ApplyDeferredSchemaMigrations: "${APPLY_DEFERRED_SCHEMA_MIGRATIONS:-false}"
       Database__ExpectedDatabaseName: "SLH_TMS_V2"
-      Auth__Mode: Local
-      Auth__Local__Issuer: slh-tms-v2
-      Auth__Local__Audience: slh-tms-v2
-      Auth__Local__SigningKey: "${TMS_JWT_SIGNING_KEY}"
-      Auth__Local__BootstrapUsername: "${TMS_BOOTSTRAP_USERNAME}"
-      Auth__Local__BootstrapPassword: "${TMS_BOOTSTRAP_PASSWORD}"
-      Auth__Local__BootstrapDisplayName: "${TMS_BOOTSTRAP_DISPLAY_NAME:-SLH Administrator}"
+      Auth__Mode: Entra
+      Entra__TenantId: "${ENTRA_TENANT_ID}"
+      Entra__Audience: "${ENTRA_API_AUDIENCE}"
+      Entra__AllowedDomains__0: "${ENTRA_ALLOWED_DOMAIN_0:-lyonshaulage.com}"
+      Entra__AllowedDomains__1: "${ENTRA_ALLOWED_DOMAIN_1:-stuartlyonshaulage.co.uk}"
       Archive__Enabled: "${ARCHIVE_ENABLED:-false}"
       Archive__RootPath: /archive
       Archive__AuditOutboxRetentionDays: "${ARCHIVE_OUTBOX_DAYS:-7}"
@@ -102,12 +100,28 @@ services:
       dockerfile: Dockerfile.standalone
       args:
         VITE_API_BASE_URL: /tms-api
-        VITE_AUTH_MODE: local
+        VITE_ENTRA_TENANT_ID: "${ENTRA_TENANT_ID}"
+        VITE_ENTRA_CLIENT_ID: "${ENTRA_WEB_CLIENT_ID}"
+        VITE_ENTRA_API_SCOPE: "${ENTRA_API_SCOPE}"
     restart: unless-stopped
     depends_on:
       - api
     ports:
-      - "${TMS_HTTP_PORT:-8080}:80"
+      - "${TMS_BIND_ADDRESS:-0.0.0.0}:${TMS_HTTP_PORT:-8080}:80"
+
+  # Optional zero-recurring-cost remote access. The tunnel makes an outbound-only
+  # connection to Cloudflare; no inbound router/firewall port is required.
+  # Configure the public hostname in Cloudflare to point to http://web:80 and put
+  # only the tunnel token in .env.standalone.
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    profiles: ["remote"]
+    restart: unless-stopped
+    depends_on:
+      - web
+    command: tunnel --no-autoupdate run --token "${CLOUDFLARE_TUNNEL_TOKEN}"
+    environment:
+      TUNNEL_TRANSPORT_PROTOCOL: http2
 
 volumes:
   sql-data:
