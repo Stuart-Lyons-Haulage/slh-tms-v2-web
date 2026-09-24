@@ -56,6 +56,10 @@ done
 
 if [[ "$ready" != "true" ]]; then
   docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" ps
+  echo
+  echo "Recent API logs:"
+  docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" logs api --tail=120 || true
+  echo
   echo "V2 containers started, but API health did not become ready at $HEALTH." >&2
   exit 1
 fi
