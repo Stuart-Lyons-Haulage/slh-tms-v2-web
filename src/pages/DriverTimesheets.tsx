@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { api, type DriverTimesheetDay, type DriverTimesheetDriver } from '../lib/api';
+import { api, type DriverTimesheetDriver } from '../lib/api';
 import { useAccessToken } from '../lib/auth';
 import { useApi } from '../lib/useApi';
 
