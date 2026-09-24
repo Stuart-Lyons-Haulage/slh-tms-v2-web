@@ -1,6 +1,7 @@
 import { BrowserRouter, Link, Route, Routes } from 'react-router-dom';
 import { DriverDispatch } from './pages/DriverDispatch';
 import { PlannerEnhanced } from './pages/PlannerEnhanced';
+import { LiveRunsBoard } from './pages/LiveRunsBoard';
 
 export function E2eHarness() {
   return <BrowserRouter>
@@ -12,6 +13,7 @@ export function E2eHarness() {
     <Routes>
       <Route path="/" element={<PlannerEnhanced />} />
       <Route path="/driver-dispatch" element={<DriverDispatch />} />
+      <Route path="/operations-wallboard" element={<LiveRunsBoard />} />
     </Routes>
   </BrowserRouter>;
 }
