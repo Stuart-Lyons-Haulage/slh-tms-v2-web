@@ -41,6 +41,7 @@ export function MasterDataHub({ initialSection = 'drivers' }: { initialSection?:
 
   return <section>
     <div className="panel master-section-panel" style={{ marginBottom: 18 }}>
+      <p className="hint">SQL is the single operational master. SQL is authoritative for TMS master-data writes; imports and reviews must reconcile into these governed records.</p>
       <div className="master-section-tabs horizontal-tabs" role="tablist" aria-label="Master data sections">
         {sections.map(item => <button key={item.key} role="tab" aria-selected={section === item.key} className={section === item.key ? 'primary' : ''} onClick={() => setSection(item.key)}>{item.label}</button>)}
       </div>
