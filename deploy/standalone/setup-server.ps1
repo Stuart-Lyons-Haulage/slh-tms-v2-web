@@ -5,7 +5,7 @@ $EnvFile = Join-Path $WebRoot ".env.standalone"
 $Example = Join-Path $WebRoot ".env.standalone.example"
 
 if (Test-Path $EnvFile) {
-    Write-Host "$EnvFile already exists. No secrets were changed."
+    Write-Host "$EnvFile already exists. No runtime values were changed."
     exit 0
 }
 
@@ -16,23 +16,14 @@ function New-RandomSecret([int]$Bytes = 36) {
 }
 
 $sqlPassword = "Slh!" + (New-RandomSecret 24)
-$jwtKey = New-RandomSecret 48
-$adminPassword = "Tms!" + (New-RandomSecret 18)
 
 $content = Get-Content $Example -Raw
 $content = $content.Replace("CHANGE_ME_STRONG_SQL_PASSWORD", $sqlPassword)
-$content = $content.Replace("CHANGE_ME_RANDOM_MINIMUM_32_CHARACTERS", $jwtKey)
-$content = $content.Replace("CHANGE_ME_STRONG_ADMIN_PASSWORD", $adminPassword)
-$content = $content.Replace("SQL_BACKUP_HOST_PATH=./backup", "SQL_BACKUP_HOST_PATH=../../backup")
-$content = $content.Replace("ARCHIVE_HOST_PATH=./archive", "ARCHIVE_HOST_PATH=../../archive")
-
 Set-Content -Path $EnvFile -Value $content -Encoding utf8NoBOM
 
 Write-Host ""
-Write-Host "Created $EnvFile with generated local runtime secrets."
-Write-Host ""
-Write-Host "Initial TMS admin username: admin"
-Write-Host "Initial TMS admin password: $adminPassword"
-Write-Host ""
-Write-Host "Record that password securely. Change it from the TMS Users screen after first sign-in."
+Write-Host "Created $EnvFile with a generated SQL password."
+Write-Host "There is no separate TMS username/password to create."
+Write-Host "Populate the ENTRA_* values from the Lyons Microsoft Entra app registrations."
+Write-Host "For remote access, add the Cloudflare tunnel token and public URL only after the hostname exists."
 Write-Host "External provider credentials remain blank/disabled until configured directly on the server."
