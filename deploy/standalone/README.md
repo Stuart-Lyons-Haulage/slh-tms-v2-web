@@ -1,35 +1,66 @@
 # SLH TMS V2 standalone runtime
 
-This is the clean deployment path for V2. It deliberately does not connect to the historic Azure SQL database.
+This is the clean local-server deployment path for V2. The live TMS, API and SQL database stay on the SLH server. Remote office access is provided without a VPN and without reopening the old Azure hosting stack.
 
-## Layout
+## Runtime layout
 
-- Web: blue-theme V2 React portal
-- API: clean V2 .NET API
-- SQL: fresh SQL Server database named `SLH_TMS_V2`
-- Authentication: individual TMS accounts using local JWT authentication
+```text
+Office Microsoft account
+        |
+ Microsoft Entra ID
+        |
+   HTTPS public URL
+        |
+ Cloudflare Tunnel
+ (outbound from SLH)
+        |
+   SLH Web / PWA
+        |
+     SLH API
+        |
+  Local SQL Server
+```
+
+- Web: V2 React portal and SLH Mobile PWA
+- API: V2 .NET API
+- SQL: local SQL Server database `SLH_TMS_V2`
+- Authentication: Microsoft Entra only for Lyons office accounts
+- Remote access: optional Cloudflare Tunnel using an outbound-only connection
 - Secrets: runtime environment variables only
 - Archive: optional mounted SLH server path
 
-Clone the canonical Web and API repositories as sibling directories:
+No individual TMS username/password is required or supported by the normal standalone deployment.
 
-```
+## Why the tunnel is used
+
+The tunnel publishes only the web entry point. It does **not** provide remote users with network or VPN access to the SLH LAN.
+
+The recommended production shape is:
+
+- no router port-forwarding;
+- no inbound firewall rule for the TMS;
+- SQL remains private inside Docker;
+- API remains private inside Docker and is reached through the web reverse proxy at `/tms-api`;
+- the public hostname terminates at the tunnel;
+- the application itself still requires a valid Lyons Microsoft Entra sign-in.
+
+The host HTTP port binds to `127.0.0.1` by default. Set `TMS_BIND_ADDRESS=0.0.0.0` only if direct LAN access is deliberately required.
+
+## Repository layout
+
+Clone the canonical repositories as siblings:
+
+```text
 parent/
   slh-tms-v2-web/
   slh-tms-v2-api/
 ```
 
-From `slh-tms-v2-web`, copy `.env.standalone.example` to `.env.standalone`, populate secrets, then run:
-
-```bash
-docker compose --env-file .env.standalone -f deploy/standalone/docker-compose.yml up -d --build
-```
-
-The portal is exposed on `TMS_HTTP_PORT` (default 8080).
+The start scripts accept either `API` or `slh-tms-v2-api` as the API sibling folder.
 
 ## First-time server setup
 
-From the existing V2 Web repository on the SLH server, run the setup script once.
+From the V2 Web repository on the SLH server:
 
 **Windows / PowerShell**
 
@@ -43,17 +74,50 @@ From the existing V2 Web repository on the SLH server, run the setup script once
 bash deploy/standalone/setup-server.sh
 ```
 
-This creates `.env.standalone` locally on the server, generates strong SQL/JWT/admin secrets, and prints the initial TMS Admin password once. External provider credentials are left blank and disabled. Do not commit this file.
+The setup creates `.env.standalone` and generates the SQL password. It does not create a TMS user.
 
-For live integrations, populate only the providers being enabled. Samsara needs an API token with **Read Routes**, **Write Routes**, **Read Drivers** and **Read Vehicles**; Info mailbox polling needs an Entra application with Microsoft Graph Mail.Read application permission restricted to the Info shared mailbox. RoadTech/DOT/Falcon, TachoMaster, Fleetio and Sage HR continue to use the existing runtime-only variables.
+Populate these Microsoft values before starting:
 
-After setup, use the start/update script below.
+```text
+ENTRA_TENANT_ID=
+ENTRA_WEB_CLIENT_ID=
+ENTRA_API_AUDIENCE=api://<api-client-id>
+ENTRA_API_SCOPE=api://<api-client-id>/Tms.Access
+```
 
-## Server start/update
+The Entra web app registration must contain the public SLH URL as a **Single-page application redirect URI**, for example:
 
-Run the script that matches the SLH server operating system from the existing V2 Web repository:
+```text
+https://tms.example-company-domain.co.uk/
+```
 
-**Windows / PowerShell**
+Because MSAL uses the current browser origin as the redirect URI, the registered value must exactly match the deployed HTTPS origin.
+
+## Secure remote access
+
+Create a named Cloudflare Tunnel and configure one public hostname to target:
+
+```text
+http://web:80
+```
+
+The hostname should be dedicated to the TMS, for example `tms.<company-domain>`.
+
+Put the generated tunnel token only in the server's `.env.standalone`:
+
+```text
+COMPOSE_PROFILES=remote
+CLOUDFLARE_TUNNEL_TOKEN=<secret token>
+TMS_PUBLIC_URL=https://tms.<company-domain>
+```
+
+Do not commit the token.
+
+The Docker `tunnel` service is disabled unless `COMPOSE_PROFILES=remote` is set.
+
+## Start/update
+
+**Windows**
 
 ```powershell
 .\deploy\standalone\start-server.ps1
@@ -65,31 +129,47 @@ Run the script that matches the SLH server operating system from the existing V2
 bash deploy/standalone/start-server.sh
 ```
 
-The script updates both sibling repositories from canonical `main`, validates the Docker Compose configuration, builds the stack, starts it, and waits for the anonymous V2 API health endpoint before reporting success.
+The start script:
 
-On the first run, if `.env.standalone` does not yet exist, the script creates it from `.env.standalone.example` and stops. Populate the runtime values directly on the server, then run the same script again.
+1. updates both canonical repositories from `main`;
+2. refuses to start if the required Entra values are missing;
+3. validates the tunnel token/public URL when the remote profile is enabled;
+4. validates Docker Compose;
+5. builds and starts the local stack;
+6. checks the API health endpoint;
+7. reports the local and public portal URLs.
+
+## Mobile use
+
+The installed PWA starts at:
+
+```text
+/mobile
+```
+
+Office users sign in with the same Microsoft account they use for Microsoft 365. The mobile interface provides driver/vehicle/run lookups, tracking, quick allocation changes and audited fuel PIN access.
+
+## Security boundaries
+
+- Do not expose SQL port 1433 externally.
+- Do not expose the API container directly to the internet.
+- Do not add router port forwarding for the TMS when the tunnel is enabled.
+- Keep `.env.standalone` outside Git.
+- Fuel PINs are requested through a restricted API call and are not included in the normal mobile snapshot.
+- All write actions remain subject to the API's Entra policies and existing allocation/compliance rules.
 
 ## Archive safety
 
-The API will not purge a single database row merely because `ARCHIVE_ENABLED=true`.
+The API will not purge database rows merely because `ARCHIVE_ENABLED=true`.
 
-The actual mounted archive root must contain:
+The mounted archive root must contain:
 
-```
+```text
 SLH_TMS_ARCHIVE_READY.txt
 ```
 
-Create that marker only on the real SLH server archive share after the host mount has been verified. Every archive batch is written as gzip JSONL, SHA-256 verified after rename, and only then is the corresponding SQL batch deleted.
+Create that marker only after the real archive mount has been verified. Each archive batch is written and verified before the corresponding SQL rows are removed.
 
 ## Clean database rule
 
-Never restore the old SLH TMS production database into this runtime. The database is built from the V2 schema migrations only. Reconciled master data should be imported explicitly after the fresh database is healthy.
-
-
-## Local user administration
-
-When `VITE_AUTH_MODE=local`, the portal uses individual TMS accounts instead of Microsoft sign-in. The initial administrator is created from runtime bootstrap secrets only when the user table is empty.
-
-A local `TMS.Admin` user gets a **Users** navigation item where accounts can be created, roles assigned, passwords reset and leavers disabled. `TMS.ReadOnly` accounts cannot call write/approval endpoints; approval is limited to Admin, Management, Planner and Transport roles.
-
-Do not commit `.env.standalone` or any provider/API credentials.
+Never restore the historic V1/Azure production database into this runtime. V2 should use the clean local database and explicitly reconciled/imported master data.
