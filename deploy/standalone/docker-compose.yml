@@ -41,6 +41,7 @@ services:
       ASPNETCORE_ENVIRONMENT: Production
       ConnectionStrings__TmsDb: "Server=sql,1433;Database=SLH_TMS_V2;User Id=sa;Password=${SQL_SA_PASSWORD};Encrypt=True;TrustServerCertificate=True"
       Database__ApplySchemaChangesOnStartup: "true"
+      Database__ExpectedDatabaseName: "SLH_TMS_V2"
       Auth__Mode: Local
       Auth__Local__Issuer: slh-tms-v2
       Auth__Local__Audience: slh-tms-v2
