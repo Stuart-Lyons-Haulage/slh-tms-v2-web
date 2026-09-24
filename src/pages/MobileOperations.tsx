@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { request } from '../lib/api';
 import { useAccessToken } from '../lib/auth';
 
@@ -107,7 +107,7 @@ export function MobileOperations() {
   const [fuelReveal, setFuelReveal] = useState<FuelReveal>();
   const [revealingFuel, setRevealingFuel] = useState(false);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     setError(undefined);
     try {
@@ -118,9 +118,9 @@ export function MobileOperations() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [accessToken, date]);
 
-  useEffect(() => { void load(); }, [date]);
+  useEffect(() => { void load(); }, [load]);
 
   const selectedRun = snapshot?.runs.find(run => run.id === selectedRunId);
 
