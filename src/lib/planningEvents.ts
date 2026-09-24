@@ -54,7 +54,7 @@ export type PlanningEventStreamOptions = {
 export function connectPlanningEventStream(getAccessToken: () => Promise<string>, options: PlanningEventStreamOptions = {}) {
   const controller = new AbortController();
   let stopped = false;
-  let retryTimer: number | undefined;
+  let retryTimer: ReturnType<typeof setTimeout> | undefined;
 
   const connect = async () => {
     if (stopped) return;
@@ -94,11 +94,11 @@ export function connectPlanningEventStream(getAccessToken: () => Promise<string>
           boundary = buffer.indexOf('\n\n');
         }
       }
-      if (!stopped) retryTimer = window.setTimeout(() => void connect(), 3000 + Math.random() * 2000);
+      if (!stopped) retryTimer = setTimeout(() => void connect(), 3000 + Math.random() * 2000);
     } catch (error) {
       if (stopped || controller.signal.aborted) return;
       console.warn('Planning real-time stream unavailable; 30-second reconciliation remains active.', error);
-      retryTimer = window.setTimeout(() => void connect(), 5000 + Math.random() * 3000);
+      retryTimer = setTimeout(() => void connect(), 5000 + Math.random() * 3000);
     }
   };
 
@@ -106,6 +106,6 @@ export function connectPlanningEventStream(getAccessToken: () => Promise<string>
   return () => {
     stopped = true;
     controller.abort();
-    if (retryTimer) window.clearTimeout(retryTimer);
+    if (retryTimer) clearTimeout(retryTimer);
   };
 }
