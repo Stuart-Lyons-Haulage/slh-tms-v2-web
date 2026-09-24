@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-WEB_ROOT="$(cd "$(dirname "\${BASH_SOURCE[0]}")/../.." && pwd)"
+WEB_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ENV_FILE="$WEB_ROOT/.env.standalone"
 EXAMPLE="$WEB_ROOT/.env.standalone.example"
 
