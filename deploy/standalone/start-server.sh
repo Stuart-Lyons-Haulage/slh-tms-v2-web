@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-WEB_ROOT="$(cd "$(dirname "\${BASH_SOURCE[0]}")/../.." && pwd)"
+WEB_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PARENT="$(dirname "$WEB_ROOT")"
 API_ROOT="$PARENT/API"
 [[ -d "$API_ROOT" ]] || API_ROOT="$PARENT/slh-tms-v2-api"
@@ -46,7 +46,7 @@ echo "Building and starting SLH TMS V2..."
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --build
 
 PORT="$(env_value TMS_HTTP_PORT)"
-PORT="\${PORT:-8080}"
+PORT="${PORT:-8080}"
 HEALTH="http://127.0.0.1:$PORT/tms-api/api/v1/health"
 echo "Waiting for API health..."
 ready=false
