@@ -3,7 +3,10 @@ set -euo pipefail
 
 WEB_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PARENT="$(dirname "$WEB_ROOT")"
-API_ROOT="$PARENT/slh-tms-v2-api"
+API_ROOT="$PARENT/API"
+if [[ ! -d "$API_ROOT" ]]; then
+  API_ROOT="$PARENT/slh-tms-v2-api"
+fi
 ENV_FILE="$WEB_ROOT/.env.standalone"
 COMPOSE_FILE="$WEB_ROOT/deploy/standalone/docker-compose.yml"
 
