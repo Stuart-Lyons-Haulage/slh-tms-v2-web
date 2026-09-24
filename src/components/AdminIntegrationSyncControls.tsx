@@ -23,6 +23,28 @@ type RoadTechStatus = {
   message: string;
 };
 
+type SamsaraStatus = {
+  configured: boolean;
+  connected: boolean;
+  vehicleCount: number;
+  driverCount: number;
+  missingSettings: string[];
+  message: string;
+};
+
+type IntegrationRuntimeStatus = {
+  infoMailboxGraph?: {
+    enabled: boolean;
+    configured: boolean;
+    mailbox?: string;
+    lastAttemptUtc?: string;
+    lastSuccessUtc?: string;
+    lastError?: string;
+    lastMessagesSeen?: number;
+    lastMessagesIngested?: number;
+  };
+};
+
 function roadTechState(status: RoadTechStatus) {
   if (!status.configured) return { label: 'Setup incomplete', className: 'integration-state pending' };
   if (!status.connected && status.recordCount === 0) return { label: 'Configured · no live records', className: 'integration-state pending' };
@@ -42,18 +64,24 @@ export function AdminIntegrationSyncControls() {
   const [state, setState] = useState<SystemState>();
   const [roadTech, setRoadTech] = useState<RoadTechStatus>();
   const [roadTechError, setRoadTechError] = useState<string>();
+  const [samsara, setSamsara] = useState<SamsaraStatus>();
+  const [runtimeStatus, setRuntimeStatus] = useState<IntegrationRuntimeStatus>();
   const feedHealth = useApi(useCallback(async () => intelligenceApi.freshness(await token()), [token]));
 
   const loadState = async () => {
     setRoadTechError(undefined);
     try {
       const accessToken = await token();
-      const [system, tracking] = await Promise.all([
+      const [system, tracking, samsaraStatus, runtime] = await Promise.all([
         request<SystemState>('/api/v1/system-sync/state', accessToken),
         request<RoadTechStatus>('/api/v1/integrations/roadtech/status', accessToken),
+        request<SamsaraStatus>('/api/v1/integrations/samsara/status', accessToken),
+        request<IntegrationRuntimeStatus>('/api/v1/integrations/status', accessToken),
       ]);
       setState(system);
       setRoadTech(tracking);
+      setSamsara(samsaraStatus);
+      setRuntimeStatus(runtime);
     } catch (error) {
       setRoadTechError(error instanceof Error ? error.message : 'RoadTech diagnostic check failed.');
     }
@@ -150,6 +178,47 @@ export function AdminIntegrationSyncControls() {
         {roadTech.connected && <p className="hint"><strong>{roadTech.recordCount}</strong> live RoadTech vehicle record{roadTech.recordCount === 1 ? '' : 's'} returned{roadTech.latestEventUtc ? ` · latest event ${new Date(roadTech.latestEventUtc).toLocaleString('en-GB')}` : ''}.</p>}
       </>}
       {roadTechError && <p className="notice inline-notice"><strong>Diagnostic request failed:</strong> {roadTechError}</p>}
+    </div>
+
+
+    <div className="admin-grid" style={{ marginBottom: 14 }}>
+      <article className="admin-card">
+        <div className="title-row" style={{ marginBottom: 8 }}>
+          <div>
+            <p className="eyebrow">Samsara</p>
+            <h3>Routes / Dispatch</h3>
+          </div>
+          <span className={samsara?.connected ? 'integration-state ready' : 'integration-state pending'}>
+            {samsara?.connected ? 'Connected' : samsara?.configured ? 'Configured · check link' : 'Setup incomplete'}
+          </span>
+        </div>
+        <p>{samsara?.message || 'Checking Samsara API token and route access…'}</p>
+        {samsara && !samsara.configured && samsara.missingSettings.length > 0 &&
+          <div className="notice inline-notice"><strong>Specific settings to amend:</strong> {samsara.missingSettings.join(' · ')}</div>}
+        {samsara?.connected &&
+          <small>{samsara.vehicleCount} vehicles · {samsara.driverCount} drivers visible to the token</small>}
+      </article>
+
+      <article className="admin-card">
+        <div className="title-row" style={{ marginBottom: 8 }}>
+          <div>
+            <p className="eyebrow">Microsoft Graph</p>
+            <h3>Info mailbox intake</h3>
+          </div>
+          <span className={runtimeStatus?.infoMailboxGraph?.lastSuccessUtc ? 'integration-state ready' : 'integration-state pending'}>
+            {runtimeStatus?.infoMailboxGraph?.lastSuccessUtc
+              ? 'Polling'
+              : runtimeStatus?.infoMailboxGraph?.configured
+                ? 'Configured · awaiting poll'
+                : 'Setup incomplete'}
+          </span>
+        </div>
+        <p>{runtimeStatus?.infoMailboxGraph?.mailbox || 'Info mailbox'} · direct outbound Graph polling from the local API.</p>
+        {runtimeStatus?.infoMailboxGraph?.lastSuccessUtc &&
+          <small>Last success: {lastReceipt(runtimeStatus.infoMailboxGraph.lastSuccessUtc)} · {runtimeStatus.infoMailboxGraph.lastMessagesSeen ?? 0} seen · {runtimeStatus.infoMailboxGraph.lastMessagesIngested ?? 0} ingested</small>}
+        {runtimeStatus?.infoMailboxGraph?.lastError &&
+          <div className="notice inline-notice"><strong>Last Graph error:</strong> {runtimeStatus.infoMailboxGraph.lastError}</div>}
+      </article>
     </div>
 
     <div className="actions" style={{ flexWrap: 'wrap' }}>

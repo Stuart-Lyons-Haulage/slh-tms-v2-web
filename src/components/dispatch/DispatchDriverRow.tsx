@@ -10,6 +10,7 @@ import type {
   DispatchLockFailure,
   DispatchRunDto
 } from "./types";
+import type { SamsaraDispatchState } from "./dispatchApi";
 
 type Props = {
   driver: DispatchDriverDto;
@@ -22,12 +23,15 @@ type Props = {
   availableTime?: DispatchAvailableTimeDto;
   status?: DispatchDriverStatusDto;
   lockedRunId?: string;
+  samsaraState?: SamsaraDispatchState;
+  samsaraConfigured: boolean;
   failures: DispatchLockFailure[];
   busy: boolean;
   onSelectionChange: (driverId: string, patch: Partial<DispatchAllocationSelection>) => void;
   onDispatch: (driver: DispatchDriverDto, selection: DispatchAllocationSelection) => void;
   onAmend: (driver: DispatchDriverDto, selection: DispatchAllocationSelection) => void;
   onUpdate: (driver: DispatchDriverDto, selection: DispatchAllocationSelection) => void;
+  onSamsara: (driver: DispatchDriverDto, selection: DispatchAllocationSelection) => void;
   onUnassign: (driver: DispatchDriverDto, selection: DispatchAllocationSelection) => void;
 };
 
@@ -63,12 +67,15 @@ export function DispatchDriverRow({
   availableTime,
   status,
   lockedRunId,
+  samsaraState,
+  samsaraConfigured,
   failures,
   busy,
   onSelectionChange,
   onDispatch,
   onAmend,
   onUpdate,
+  onSamsara,
   onUnassign
 }: Props) {
   const heldSkills = parseSkillFlags(driver.skills);
@@ -228,6 +235,9 @@ export function DispatchDriverRow({
         <button className="smart-action secondary" type="button" disabled={busy} onClick={() => onAmend(driver, selection)}>{busy ? "Working…" : "Amendment"}</button>
         <button className="smart-action ghost dark" type="button" disabled={busy} onClick={() => onUpdate(driver, selection)}>Update text</button>
       </>}
+      {lockedToDriver && selection.runId && <button className="smart-action ghost dark" type="button" disabled={busy || !samsaraConfigured} onClick={() => onSamsara(driver, selection)}>{busy ? "Working…" : samsaraState ? "Update Samsara" : "Send to Samsara"}</button>}
+      {lockedToDriver && !samsaraConfigured && <small>Samsara not configured</small>}
+      {samsaraState && <small title={samsaraState.routeId}>Samsara sent · {new Date(samsaraState.exportedAtUtc).toLocaleString("en-GB")}</small>}
       {canUnassign && <button className="smart-unassign" type="button" disabled={busy} onClick={() => onUnassign(driver, selection)}>Unassign</button>}
     </td>
   </tr>;
