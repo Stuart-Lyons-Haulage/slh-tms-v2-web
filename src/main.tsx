@@ -22,6 +22,7 @@ import './mobile.css';
 import './ops-cleanup.css';
 import './mobile-v2.css';
 import './mobile-planner.css';
+import './mobile-operations.css';
 import './master-fleet.css';
 import './live-vehicle-popup.css';
 import './operations-housekeeping.css';
