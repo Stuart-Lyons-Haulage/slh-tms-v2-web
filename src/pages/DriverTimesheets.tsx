@@ -226,7 +226,7 @@ export function DriverTimesheets() {
       <div>
         <p className="eyebrow">Driver history · timesheets</p>
         <h1>Driver timesheets</h1>
-        <p className="hint">TachoMaster duty evidence reconciled to RoadTech vehicle movement. A route allocation is not required for a timesheet.</p>
+        <p className="hint">TachoMaster duty evidence reconciled to RoadTech historical vehicle movement. Employed drivers must match the active Sage HR roster; everyone else is kept out of the employed payroll section.</p>
       </div>
       <div className="timesheet-export-actions">
         <button onClick={summaryExport} disabled={!drivers.length}>Export summary CSV</button>
@@ -245,7 +245,7 @@ export function DriverTimesheets() {
 
     <div className="timesheet-section-tabs" role="tablist" aria-label="Timesheet driver type">
       <button className={section === 'Employed' ? 'active' : ''} onClick={() => setSection('Employed')}>
-        Employed drivers <span>{report.data?.summary.employedDrivers ?? 0}</span>
+        Employed drivers · Sage HR <span>{report.data?.summary.employedDrivers ?? 0}</span>
       </button>
       <button className={section === 'Agency' ? 'active' : ''} onClick={() => setSection('Agency')}>
         Agency drivers <span>{report.data?.summary.agencyDrivers ?? 0}</span>
@@ -259,6 +259,7 @@ export function DriverTimesheets() {
     {report.data && <div className="timesheet-source-strip">
       <span><strong>TachoMaster:</strong> {report.data.sourceStatus.tachoMaster}</span>
       <span><strong>RoadTech:</strong> {report.data.sourceStatus.roadTech}</span>
+      <span><strong>Sage HR:</strong> {report.data.sourceStatus.sageHr}</span>
       <span><strong>Range:</strong> {formatDate(report.data.from)} – {formatDate(report.data.to)}</span>
     </div>}
 
