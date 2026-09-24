@@ -1,0 +1,40 @@
+.driver-timesheets-page{width:100%;max-width:none}
+.driver-history-subnav{display:flex;gap:6px;margin-bottom:8px}
+.driver-history-subnav a{display:inline-flex;align-items:center;padding:6px 10px;border:1px solid #d7dde5;border-radius:7px;background:#fff;color:#17324d;text-decoration:none;font-weight:750;font-size:12px}
+.driver-history-subnav a.active{background:#0d3b66;color:#fff;border-color:#0d3b66}
+.timesheet-export-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.timesheet-toolbar{display:flex;align-items:end;gap:7px;flex-wrap:wrap;padding:8px 9px;margin-bottom:8px;background:#fff;border:1px solid #d7dde5;border-radius:8px}
+.timesheet-toolbar label{display:flex;flex-direction:column;gap:3px;font-weight:700;font-size:11px;color:#425466}
+.timesheet-toolbar input{min-width:138px}
+.timesheet-section-tabs{display:flex;gap:6px;margin:0 0 8px}
+.timesheet-section-tabs button{display:inline-flex;align-items:center;gap:7px;padding:7px 12px;background:#eef2f6;color:#17324d;border:1px solid #d7dde5}
+.timesheet-section-tabs button.active{background:#0d3b66;color:#fff;border-color:#0d3b66}
+.timesheet-section-tabs button span{display:inline-flex;min-width:22px;height:20px;align-items:center;justify-content:center;padding:0 6px;border-radius:999px;background:rgba(255,255,255,.18);font-size:11px;font-weight:900}
+.timesheet-source-strip{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:8px;padding:7px 9px;border:1px solid #d7dde5;border-radius:8px;background:#f8fafc;font-size:11px;color:#425466}
+.timesheet-filter-row{display:flex;align-items:center;gap:12px;margin-bottom:8px}
+.timesheet-filter-row>input{width:min(360px,100%)}
+.timesheet-review-check{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:#425466}
+.timesheet-review-check input{width:auto}
+.timesheet-metrics{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:7px;margin-bottom:8px}
+.timesheet-metrics article{padding:8px 10px;border:1px solid #d7dde5;border-radius:8px;background:#fff}
+.timesheet-metrics article.attention{border-color:#e0a800;background:#fff8df}
+.timesheet-metrics span{display:block;font-size:10px;color:#667085;text-transform:uppercase;letter-spacing:.04em;font-weight:800}
+.timesheet-metrics strong{display:block;margin-top:3px;font-size:1.25rem;color:#17324d}
+.timesheet-agency-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:7px;margin-bottom:8px}
+.timesheet-agency-summary article{display:grid;gap:2px;padding:8px 10px;border:1px solid #d7dde5;border-radius:8px;background:#fff}
+.timesheet-agency-summary article strong{color:#17324d}
+.timesheet-agency-summary article span{font-size:11px;color:#667085}
+.timesheet-agency-summary .review-text{color:#9a6700;font-weight:800}
+.timesheet-table-wrap{overflow:auto;border:1px solid #d7dde5;border-radius:8px;background:#fff}
+.timesheet-table{width:100%;min-width:1500px;border-collapse:collapse}
+.timesheet-table th{position:sticky;top:94px;z-index:2;background:#f3f6f9;color:#425466;text-align:left;white-space:nowrap}
+.timesheet-table td{vertical-align:top}
+.timesheet-table td small{display:block;margin-top:2px;color:#667085;max-width:190px}
+.timesheet-no-route{color:#667085;font-style:italic}
+.timesheet-status{display:inline-flex;align-items:center;padding:3px 7px;border-radius:999px;font-size:10px;font-weight:900;white-space:nowrap}
+.timesheet-status.confirmed{background:#e7f6ed;color:#087443}
+.timesheet-status.review{background:#fff0cc;color:#8a5a00}
+.timesheet-status.open{background:#eaf2ff;color:#1d4f91}
+.timesheet-status.partial{background:#eef1f5;color:#475467}
+.timesheet-note{font-size:10px!important;line-height:1.2;max-width:220px!important}
+@media(max-width:900px){.timesheet-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.timesheet-toolbar{align-items:stretch}.timesheet-toolbar label{width:100%}.timesheet-toolbar input{width:100%;box-sizing:border-box}.timesheet-export-actions{justify-content:flex-start}.timesheet-filter-row{align-items:stretch;flex-direction:column}.timesheet-section-tabs{overflow-x:auto}.timesheet-source-strip{display:grid;gap:4px}}
