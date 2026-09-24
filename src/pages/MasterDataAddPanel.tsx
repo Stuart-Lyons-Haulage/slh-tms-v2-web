@@ -37,7 +37,7 @@ function initial(section: AddableMasterSection): FormState {
     case 'trailers': return { trailerNumber: '', type: '', standardCapacity: '', euroCapacity: '', notes: '', active: true };
     case 'fuel-cards': return { vehicleId: '', cabMobile: '', fuelProvider: '', fuelPin: '', shellCard: '', bpRedCard: '', bpPlainCard: '', notes: '' };
     case 'customers': return { code: '', name: '', active: true };
-    case 'sites': return { externalCode: '', name: '', driverTextName: '', aliases: '', collectionAddress: '', collectionInstructions: '', mapLink: '', defaultTemperatureC: '', region: 'Other', active: true };
+    case 'sites': return { externalCode: '', customerCode: '', name: '', driverTextName: '', aliases: '', collectionAddress: '', collectionInstructions: '', mapLink: '', defaultTemperatureC: '', region: 'Other', active: true };
     case 'markets': return { market: '', name: '', standOrLocation: '', salesman: '', sender: '', active: true };
     case 'fuel-prices': return { weekCommencing: new Date().toISOString().slice(0, 10), provider: '', pricePencePerLitre: '', isPricingMaximum: false, source: 'Manual TMS entry', notes: '' };
     case 'geofences': return {};
@@ -240,6 +240,7 @@ export function MasterDataAddPanel({ section, onAdded }: { section: AddableMaste
 
       {section === 'sites' && <div className="form-grid">
         <label>Site code<input value={text(form.externalCode)} onChange={e => set('externalCode', e.target.value)} /></label>
+        <label>Customer code<input value={text(form.customerCode)} onChange={e => set('customerCode', e.target.value.toUpperCase())} placeholder="e.g. NWF, GHS, LANGMEADS" /></label>
         <label>Site name<input value={text(form.name)} onChange={e => set('name', e.target.value)} /></label>
         <label>Driver text name<input value={text(form.driverTextName)} onChange={e => set('driverTextName', e.target.value)} /></label>
         <label>Aliases<input value={text(form.aliases)} onChange={e => set('aliases', e.target.value)} /></label>
