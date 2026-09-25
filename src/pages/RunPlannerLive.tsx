@@ -492,8 +492,15 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
 
     {message && <p className="notice inline-notice simple-planner-notice">{message}</p>}
     <datalist id="planner-site-options">
-      {[...sites].filter(site => site.active !== false).sort((left, right) => left.name.localeCompare(right.name)).map(site =>
-        <option key={site.id} value={site.name}>{[site.externalCode, site.driverTextName, site.collectionAddress].filter(Boolean).join(" · ")}</option>)}
+      {[...sites]
+        .filter(site => site.active !== false)
+        .sort((left, right) => left.name.localeCompare(right.name))
+        .flatMap(site => {
+          const aliases = (site.aliases || "").split(/[,;|]/).map(value => value.trim()).filter(Boolean);
+          const searchValues = [...new Set([site.name, site.driverTextName, site.externalCode, ...aliases].filter((value): value is string => Boolean(value?.trim())))];
+          return searchValues.map((value, index) =>
+            <option key={`${site.id}-${index}`} value={value}>{[site.name, site.externalCode, site.collectionAddress].filter(Boolean).join(" · ")}</option>);
+        })}
     </datalist>
 
     <div className="simple-planner-layout">
