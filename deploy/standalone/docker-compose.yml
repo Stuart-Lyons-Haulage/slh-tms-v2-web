@@ -112,19 +112,5 @@ services:
     ports:
       - "${TMS_BIND_ADDRESS:-127.0.0.1}:${TMS_HTTP_PORT:-8080}:80"
 
-  # Optional zero-recurring-cost remote access. The tunnel makes an outbound-only
-  # connection to Cloudflare; no inbound router/firewall port is required.
-  # Configure the public hostname in Cloudflare to point to http://web:80 and put
-  # only the tunnel token in .env.standalone.
-  tunnel:
-    image: cloudflare/cloudflared:latest
-    profiles: ["remote"]
-    restart: unless-stopped
-    depends_on:
-      - web
-    command: tunnel --no-autoupdate run --token "${CLOUDFLARE_TUNNEL_TOKEN}"
-    environment:
-      TUNNEL_TRANSPORT_PROTOCOL: http2
-
 volumes:
   sql-data:
