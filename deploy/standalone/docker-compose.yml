@@ -121,7 +121,7 @@ services:
 
   web:
     build:
-      context: ../..
+      context: "${WEB_BUILD_CONTEXT:-../..}"
       dockerfile: Dockerfile.standalone
       args:
         VITE_API_BASE_URL: /tms-api
