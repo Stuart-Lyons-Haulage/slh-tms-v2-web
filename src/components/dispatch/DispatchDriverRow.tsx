@@ -238,6 +238,13 @@ export function DispatchDriverRow({
       {lockedToDriver && selection.runId && <button className="smart-action ghost dark" type="button" disabled={busy || !samsaraConfigured} onClick={() => onSamsara(driver, selection)}>{busy ? "Working…" : samsaraState ? "Update Samsara" : "Send to Samsara"}</button>}
       {lockedToDriver && !samsaraConfigured && <small>Samsara not configured</small>}
       {samsaraState && <small title={samsaraState.routeId}>Samsara sent · {new Date(samsaraState.exportedAtUtc).toLocaleString("en-GB")}</small>}
+      {samsaraState?.executionState && <small className="smart-inline-status">
+        Samsara live · {samsaraState.lastStopName ? `${samsaraState.lastStopName} · ` : ""}{samsaraState.executionState}
+        {samsaraState.executionUpdatedAtUtc ? ` · ${new Date(samsaraState.executionUpdatedAtUtc).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" })}` : ""}
+      </small>}
+      {!samsaraState?.executionState && samsaraState?.executionOperation && <small className="smart-inline-status">
+        Samsara · {samsaraState.executionOperation}
+      </small>}
       {canUnassign && <button className="smart-unassign" type="button" disabled={busy} onClick={() => onUnassign(driver, selection)}>Unassign</button>}
     </td>
   </tr>;
