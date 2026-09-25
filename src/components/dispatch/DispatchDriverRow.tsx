@@ -40,6 +40,7 @@ function employmentLabel(value: string): string {
   if (value === "AgencyDay") return "Agency Day";
   if (value === "AgencyLong") return "Agency Long";
   if (value === "Subcontractor") return "Subbie";
+  if (value === "Unmatched") return "Sage unmatched";
   return value;
 }
 

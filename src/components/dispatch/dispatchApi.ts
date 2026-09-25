@@ -119,6 +119,7 @@ export async function getSmartDispatch(
   const visibilityByDriver = new Map(visibility.drivers.map(item => [item.driverId, item]));
   const historyByDriver = new Map(history.map(item => [item.driverId, item]));
   const enrichedDrivers = drivers.map(driver => {
+    const visibilityDriver = visibilityByDriver.get(driver.driverId);
     const historical = historyByDriver.get(driver.driverId);
     const hasAuthoritativePosition = Boolean(driver.trackingData.lastKnownPosition);
     const fallbackPosition = historical?.previousFinalLatitude != null && historical?.previousFinalLongitude != null
@@ -126,9 +127,12 @@ export async function getSmartDispatch(
       : undefined;
     return {
       ...driver,
-      employmentType: visibilityByDriver.get(driver.driverId)?.employmentType ?? driver.employmentType,
-      skills: visibilityByDriver.get(driver.driverId)?.skills ?? driver.skills,
-      driverCode: visibilityByDriver.get(driver.driverId)?.coding?.trim() || driver.driverCode,
+      // Sage HR is the only authority allowed to label a driver Employed. If the
+      // visibility snapshot is unavailable, preserve known non-employed categories
+      // but never promote the local Driver Master default to Employed.
+      employmentType: visibilityDriver?.employmentType ?? (/agency|casual|subcontractor/i.test(driver.employmentType) ? driver.employmentType : "Unmatched"),
+      skills: visibilityDriver?.skills ?? driver.skills,
+      driverCode: visibilityDriver?.coding?.trim() || driver.driverCode,
       trackingData: {
         ...driver.trackingData,
         lastKnownPosition: driver.trackingData.lastKnownPosition || fallbackPosition,

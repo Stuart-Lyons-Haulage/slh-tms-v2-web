@@ -90,7 +90,8 @@ function employmentBucket(value: string): Exclude<DispatchEmploymentFilter, "all
   if (token.includes("subcontract") || token.includes("subbie")) return "subcontractor";
   if (token.includes("agency")) return "agency";
   if (token.includes("casual") || token.includes("zerohour")) return "casual";
-  return "employed";
+  if (token.includes("employ")) return "employed";
+  return "unmatched";
 }
 
 export function filterDriversByEmploymentType(

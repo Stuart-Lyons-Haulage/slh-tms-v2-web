@@ -8,7 +8,7 @@ export type DispatchSkillName =
   | "ManualHandling";
 
 export type DispatchFilter = "all" | "unallocated" | "backloads" | "warnings" | "skills-mismatch";
-export type DispatchEmploymentFilter = "all" | "employed" | "agency" | "casual" | "subcontractor";
+export type DispatchEmploymentFilter = "all" | "employed" | "agency" | "casual" | "subcontractor" | "unmatched";
 
 export interface DispatchGeoPointDto {
   latitude: number;

@@ -24,7 +24,8 @@ const employmentFilters: Array<{ value: DispatchEmploymentFilter; label: string 
   { value: "employed", label: "Employed" },
   { value: "agency", label: "Agency" },
   { value: "casual", label: "Casual" },
-  { value: "subcontractor", label: "Subbies" }
+  { value: "subcontractor", label: "Subbies" },
+  { value: "unmatched", label: "Sage unmatched" }
 ];
 
 export function DispatchFilters({
