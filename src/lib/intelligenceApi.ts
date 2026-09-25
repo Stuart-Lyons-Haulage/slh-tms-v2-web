@@ -23,8 +23,22 @@ type SystemSyncState = {
   status: string;
   generatedAtUtc: string;
   lastPlatformUpdateUtc?: string;
-  schedules: { dot: string; tachoMaster: string; sageHr: string; fleetio: string };
+  schedules: { roadTech?: string; dot?: string; dotLive?: string; trackingHistory?: string; tachoMaster?: string; sageHr: string; fleetio: string };
   providers: Array<{ name: string; configured: boolean; state: string; lastUpdatedUtc?: string; ageMinutes?: number }>;
+};
+
+type IntakePipelineHealth = {
+  graph?: {
+    enabled: boolean;
+    configured: boolean;
+    mailbox: string;
+    lastAttemptUtc?: string;
+    lastSuccessUtc?: string;
+    lastError?: string;
+    lastMessagesSeen: number;
+    lastMessagesIngested: number;
+    stale: boolean;
+  };
 };
 
 function colourForProviderState(state: string): FreshnessSource['state'] {
@@ -34,19 +48,45 @@ function colourForProviderState(state: string): FreshnessSource['state'] {
 }
 
 function providerDisplayName(name: string) {
-  return name === 'DOT / Falcon' ? 'Tracking' : name;
+  return name === 'DOT / Falcon' ? 'RoadTech' : name;
 }
 
 function providerCadence(name: string, schedules: SystemSyncState['schedules']) {
-  if (name === 'DOT / Falcon') return schedules.dot;
+  if (name === 'RoadTech') return schedules.roadTech ?? schedules.dotLive ?? schedules.dot;
+  if (name === 'DOT / Falcon') return schedules.roadTech ?? schedules.dotLive ?? schedules.dot;
   if (name === 'TachoMaster') return schedules.tachoMaster;
   if (name === 'Sage HR') return schedules.sageHr;
   if (name === 'Fleetio') return schedules.fleetio;
   return undefined;
 }
 
-function mailboxSource(lastReceivedUtc: string | undefined, now: number): FreshnessSource {
+function mailboxSource(lastReceivedUtc: string | undefined, now: number, graph?: IntakePipelineHealth['graph']): FreshnessSource {
   const ageMinutes = lastReceivedUtc ? Math.max(0, (now - new Date(lastReceivedUtc).getTime()) / 60000) : undefined;
+  if (graph) {
+    const graphAgeMinutes = graph.lastSuccessUtc
+      ? Math.max(0, (now - new Date(graph.lastSuccessUtc).getTime()) / 60000)
+      : undefined;
+    const state: FreshnessSource['state'] = !graph.enabled || !graph.configured || graph.stale || Boolean(graph.lastError)
+      ? 'red'
+      : graphAgeMinutes == null ? 'amber' : 'green';
+    const detail = !graph.enabled
+      ? 'Microsoft Graph mailbox polling is disabled.'
+      : !graph.configured
+        ? 'Microsoft Graph polling is enabled but its application credentials are incomplete.'
+        : graph.lastError
+          ? `Microsoft Graph poll failed: ${graph.lastError}`
+          : graph.lastSuccessUtc
+            ? `Microsoft Graph is polling ${graph.mailbox}; ${graph.lastMessagesIngested} new message${graph.lastMessagesIngested === 1 ? '' : 's'} staged on the last poll.`
+            : 'Microsoft Graph is configured but has not completed a successful poll yet.';
+    return {
+      name: 'Info mailbox · Microsoft Graph',
+      lastUpdatedUtc: graph.lastSuccessUtc,
+      ageMinutes: graphAgeMinutes == null ? undefined : Math.round(graphAgeMinutes * 10) / 10,
+      state,
+      cadence: 'Graph polling',
+      detail,
+    };
+  }
   return {
     name: 'Info mailbox',
     lastUpdatedUtc: lastReceivedUtc,
@@ -60,9 +100,10 @@ function mailboxSource(lastReceivedUtc: string | undefined, now: number): Freshn
 }
 
 async function freshness(token?: string): Promise<FreshnessResponse> {
-  const [systemState, confidence] = await Promise.all([
+  const [systemState, confidence, intake] = await Promise.all([
     request<SystemSyncState>('/api/v1/system-sync/state', token),
     request<ConfidenceResponse>('/api/v1/operations/confidence', token).catch(() => null),
+    request<IntakePipelineHealth>('/api/v1/health/intake', token).catch(() => null),
   ]);
   const now = Date.now();
   const providers = systemState.providers.map<FreshnessSource>((provider) => {
@@ -84,8 +125,10 @@ async function freshness(token?: string): Promise<FreshnessResponse> {
   });
 
   const mailbox = confidence
-    ? mailboxSource(confidence.emailIntake.lastReceivedUtc, now)
-    : { name: 'Info mailbox', state: 'red' as const, cadence: 'event-driven', detail: 'Mailbox receipt evidence could not be checked.' };
+    ? mailboxSource(confidence.emailIntake.lastReceivedUtc, now, intake?.graph)
+    : intake?.graph
+      ? mailboxSource(undefined, now, intake.graph)
+      : { name: 'Info mailbox', state: 'red' as const, cadence: 'event-driven', detail: 'Mailbox receipt evidence could not be checked.' };
 
   return {
     generatedAtUtc: systemState.generatedAtUtc,
