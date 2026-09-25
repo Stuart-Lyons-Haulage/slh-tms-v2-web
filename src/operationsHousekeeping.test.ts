@@ -3,6 +3,8 @@ import app from "./App.tsx?raw";
 import optimiser from "./components/OptimiserProposalReview.tsx?raw";
 import dashboard from "./pages/DashboardOperational.tsx?raw";
 import master from "./pages/MasterDataHub.tsx?raw";
+import pages from "./pages/Pages.tsx?raw";
+import integrations from "./components/AdminIntegrationSyncControls.tsx?raw";
 import review from "./pages/OrderReviewBulk.tsx?raw";
 import palletControl from "./pages/PalletPlanningControl.tsx?raw";
 import planner from "./pages/PlannerEnhanced.tsx?raw";
@@ -49,17 +51,39 @@ describe("operations housekeeping contract", () => {
     expect(palletControl).not.toContain("Current orders");
   });
 
-  it("removes destructive master uploads and keeps one governed Master Data import", () => {
+  it("moves governed master imports into Admin Imports and keeps Master Data maintenance-only", () => {
     expect(master).not.toContain("MasterDataResetImportPanel");
     expect(master).not.toContain("MasterDataUploadSmall");
-    expect(master).toContain("MasterDataCsvImport");
+    expect(master).not.toContain("MasterDataCsvImport");
+    expect(pages).toContain("MasterData Imports & Staging");
+    expect(pages).toContain("<MasterDataCsvImport");
+    expect(pages).toContain("Transport orders never appear in this queue");
   });
 
   it("uses SQL as the sole master-data write authority and keeps master controls usable", () => {
     expect(master).toContain("SQL is the single operational master");
-    expect(master).toContain("SQL is authoritative");
+    expect(master).toContain("Admin → Imports");
     expect(master).not.toContain("pointerEvents: 'none'");
     expect(master).not.toContain("Lists is the editable master-data authority");
+  });
+
+  it("keeps Admin focused on API feeds, order intake rules and master imports only", () => {
+    expect(app).not.toContain("Admin Home");
+    expect(app).not.toContain("RoadRunner Review");
+    expect(app).toContain("['/admin/integrations', 'API Feeds']");
+    expect(app).toContain("['/admin/imports', 'Imports']");
+    expect(app).toContain('path="/admin" element={<Navigate to="/admin/integrations" replace />}');
+    expect(integrations).toContain("API Feeds & Integrations");
+    expect(integrations).toContain("single TMS source for external API/feed health");
+  });
+
+  it("keeps Planner Builder full-width and leaves order selection to Pallet Order", () => {
+    expect(runBuilder).not.toContain('className="simple-order-pool"');
+    expect(runBuilder).toContain('datalist id="planner-site-options"');
+    expect(runBuilder).toContain('list="planner-site-options"');
+    expect(runBuilder).toContain("Use Pallet Order on the second screen to allocate work");
+    expect(runBuilder).toContain("orderLineNote(order)");
+    expect(runBuilder).toContain("mergedOrderLineNote");
   });
 
 
