@@ -41,7 +41,7 @@ const MASTER_IMPORT_CHUNK_SIZE = 25;
 const MASTER_ACCEPT = ".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel";
 
 const identityFields: Record<MasterEntity, string[]> = {
-  driver: ["employeeNumber", "displayName"],
+  driver: ["employeeNumber", "tachoMasterDriverId", "tachoCardNumber", "displayName"],
   vehicle: ["registration"],
   trailer: ["trailerNumber"],
   site: ["externalCode", "name"],
@@ -49,10 +49,10 @@ const identityFields: Record<MasterEntity, string[]> = {
 
 const aliases: Record<string, string> = {
   employeenumber:"employeeNumber", drivernumber:"employeeNumber", driverno:"employeeNumber", payrollnumber:"employeeNumber", payrollno:"employeeNumber",
-  displayname:"displayName", drivername:"displayName", name:"name",
+  displayname:"displayName", drivername:"displayName", workername:"displayName", name:"name",
   drivinglicencenumber:"drivingLicenceNumber", licencenumber:"drivingLicenceNumber", licensenumber:"drivingLicenceNumber",
   licenceexpiry:"licenceExpiry", licenseexpiry:"licenceExpiry", cpcexpiry:"cpcExpiry", digitaltachocardexpiry:"digitalTachoCardExpiry", medicalexpiry:"medicalExpiry",
-  tachoname:"tachoName", tachomasterdriverid:"tachoMasterDriverId", membercode:"tachoMasterDriverId", tachocardnumber:"tachoCardNumber",
+  tachoname:"tachoName", tachomasterdriverid:"tachoMasterDriverId", membercode:"tachoMasterDriverId", tachocardnumber:"tachoCardNumber", drivercardno:"tachoCardNumber", drivercardnumber:"tachoCardNumber", drivercardexp:"digitalTachoCardExpiry", drivercardexpiry:"digitalTachoCardExpiry",
   mobilenumber:"mobileNumber", mobile:"mobileNumber", email:"email", drivergroup:"driverGroup", drivertype:"driverType", skills:"skills", coding:"coding", agency:"agencyName",
   registration:"registration", reg:"registration", vin:"vin", ownertype:"ownerType", vehiclesite:"vehicleSite", fleetnumber:"fleetNumber", fleetno:"fleetNumber",
   abbreviation:"abbreviation", transmission:"transmission", dvs:"dvsCompliant", dvscompliant:"dvsCompliant", fuelprovider:"fuelProvider", cabmobile:"cabMobile",
@@ -108,7 +108,10 @@ function typedValue(field: string, raw: string): string | number | boolean {
 export function parseMasterDataCsv(text: string, entity: MasterEntity, fileName: string): ParsedMasterCsv {
   const rows = parseCsvRows(text);
   if (rows.length < 2) throw new Error("The CSV needs a header row and at least one data row.");
-  const headers = rows[0].map(fieldName);
+  const headers = rows[0].map(header => {
+    const mapped = fieldName(header);
+    return entity === "driver" && mapped === "type" ? "driverType" : mapped;
+  });
   const warnings: string[] = [], preview: FlatPayload[] = [], requests: StageBatchRequest[] = [];
   rows.slice(1).forEach((cells,index) => {
     const payload: FlatPayload = {};
@@ -129,7 +132,7 @@ export function parseMasterDataCsv(text: string, entity: MasterEntity, fileName:
 
 export function detectMasterEntity(headers: string[]): MasterEntity | undefined {
   const normal = new Set(headers.map(fieldName));
-  if (normal.has("employeeNumber") || normal.has("drivingLicenceNumber") || normal.has("tachoName")) return "driver";
+  if (normal.has("employeeNumber") || normal.has("tachoMasterDriverId") || normal.has("tachoCardNumber") || normal.has("drivingLicenceNumber") || normal.has("tachoName") || normal.has("displayName")) return "driver";
   if (normal.has("registration") || normal.has("vin") || normal.has("fleetNumber")) return "vehicle";
   if (normal.has("trailerNumber") || (normal.has("standardCapacity") && normal.has("euroCapacity"))) return "trailer";
   if (normal.has("externalCode") || normal.has("collectionAddress") || normal.has("driverTextName")) return "site";
