@@ -31,6 +31,10 @@ export type SamsaraDispatchState = {
   reference?: string;
   routeId: string;
   exportedAtUtc: string;
+  executionState?: string;
+  executionOperation?: string;
+  executionUpdatedAtUtc?: string;
+  lastStopName?: string;
 };
 
 type SamsaraDispatchStatusResponse = {
