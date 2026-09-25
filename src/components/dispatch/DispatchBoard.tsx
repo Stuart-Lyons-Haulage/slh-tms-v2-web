@@ -220,6 +220,36 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
     }
   }
 
+  async function handleSyncAndGetTimes() {
+    setAction("refresh");
+    setError(undefined);
+    setNotice(undefined);
+    setFailures([]);
+    try {
+      const access = await token();
+      await syncDispatchDrivers(access);
+      const nextSnapshot = await getSmartDispatch(planningDate, access);
+      const nextSelections = buildInitialSelections(nextSnapshot.drivers, nextSnapshot.runs, nextSnapshot.equipment);
+      const rows = await getAvailableTimes(
+        planningDate,
+        nextSnapshot.drivers.map(driver => driver.driverId),
+        access,
+        reducedRestDriverIds(nextSelections)
+      );
+      setSnapshot(nextSnapshot);
+      setSelections(applyAvailableTimes(nextSelections, rows));
+      setAvailableTimes(availableTimesByDriver(rows));
+      const warnings = rows.filter(row => Boolean(row.breachDetail)).length;
+      setNotice(warnings > 0
+        ? `Drivers synced and Tacho times refreshed for ${rows.length} drivers · ${warnings} require planner attention.`
+        : `Drivers synced and Tacho times refreshed for ${rows.length} drivers.`);
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : "Driver sync and Tacho refresh failed.");
+    } finally {
+      setAction(undefined);
+    }
+  }
+
   async function handleGetTimes() {
     if (!snapshot || snapshot.drivers.length === 0) return;
     setAction("times");
@@ -348,17 +378,19 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
     setMessage({ runId: selection.runId, reference, text: buildUpdateText(reference), mode: "update", routeMinutes: 0, acknowledgeUnverified: false });
   }
 
-  async function handleSamsara(driver: DispatchDriverDto, selection: DispatchAllocationSelection) {
+  async function handleSamsaraAndDispatch(driver: DispatchDriverDto, selection: DispatchAllocationSelection) {
     if (!selection.runId) return;
     setBusyDriverId(driver.driverId);
     setNotice(undefined);
     setError(undefined);
     setFailures(current => current.filter(failure => failure.driverId !== driver.driverId));
     try {
-      const result = await sendRunToSamsara(selection.runId, await token());
-      setNotice(result.message);
+      const access = await token();
+      const result = await sendRunToSamsara(selection.runId, access);
+      setNotice(`${result.message} Preparing Dispatch…`);
+      await prepareDispatch(driver, selection);
     } catch (exception) {
-      const reason = exception instanceof Error ? exception.message : "Run could not be sent to Samsara.";
+      const reason = exception instanceof Error ? exception.message : "Samsara export and Dispatch could not be completed.";
       setFailures(current => [...current.filter(failure => failure.driverId !== driver.driverId), {
         driverId: driver.driverId,
         runId: selection.runId,
@@ -484,7 +516,7 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
         >
           {action === "samsara" ? "Exporting to Samsara…" : `Export to Samsara${samsaraExportCandidates.length ? ` (${samsaraExportCandidates.length})` : ''}`}
         </button>
-        <button className="smart-action secondary" type="button" disabled={Boolean(action)} onClick={() => void handleSyncDrivers()}>{action === "refresh" ? "Syncing…" : "Sync Drivers"}</button>
+        <button className="smart-action secondary" type="button" disabled={Boolean(action)} onClick={() => void handleSyncAndGetTimes()}>{action === "refresh" ? "Syncing & getting times…" : "Sync Drivers + Get Times"}</button>
         <button className="smart-action ghost" type="button" disabled={Boolean(action)} onClick={() => void refresh()}>{action === "refresh" ? "Refreshing…" : "Refresh"}</button>
         <GetTimesButton busy={action === "times"} onGetTimes={() => void handleGetTimes()} />
       </div>
@@ -562,7 +594,7 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
               onDispatch={(row, selection) => void prepareDispatch(row, selection)}
               onAmend={(row, selection) => void prepareAmendment(row, selection)}
               onUpdate={prepareUpdate}
-              onSamsara={(row, selection) => void handleSamsara(row, selection)}
+              onSamsaraAndDispatch={(row, selection) => void handleSamsaraAndDispatch(row, selection)}
               onUnassign={(row, selection) => void handleUnassign(row, selection)}
             />)}
           </tbody>
