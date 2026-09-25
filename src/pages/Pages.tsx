@@ -11,6 +11,12 @@ import { allocateRun, createRun, getRunDispatch, getRunRoute, listRuns, updateRu
 
 function State({ loading, error, empty, children }: { loading: boolean; error?: string; empty?: boolean; children: ReactNode }) { if (loading) return <div className="state">Loading operational data…</div>; if (error) return <div className="state error">{error}</div>; if (empty) return <div className="state">No records are available for this view.</div>; return <>{children}</>; }
 const formatDate = (value?: string) => value ? new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '—';
+const formatPlanningDate = (value?: unknown) => {
+  const text = String(value ?? '').trim();
+  if (!text) return '—';
+  const date = new Date(`${text.slice(0, 10)}T12:00:00`);
+  return Number.isNaN(date.getTime()) ? text : new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium' }).format(date);
+};
 const stagingStatuses = ['PendingReview', 'Approved', 'Rejected', 'Promoted', 'Failed'];
 const marketOrder = ['Western', 'Spit', 'Covent'];
 const stagingStatus = (value: string | number | undefined) => typeof value === 'number' ? stagingStatuses[value] || String(value) : value || 'PendingReview';
@@ -329,6 +335,8 @@ export function StagingQueue({ ordersOnly = false, masterOnly = false }: { order
   const { data, loading, error, refresh } = useApi(load);
   const [reviewing, setReviewing] = useState<string>();
   const [selected, setSelected] = useState<StagedImport>();
+  const [editingPayload, setEditingPayload] = useState<Record<string, unknown>>();
+  const [savingEdit, setSavingEdit] = useState(false);
   const [bulkEntity, setBulkEntity] = useState('vehicle');
   const [message, setMessage] = useState<string>();
   const [requestingOrders, setRequestingOrders] = useState(false);
@@ -358,6 +366,26 @@ export function StagingQueue({ ordersOnly = false, masterOnly = false }: { order
           : 'The master-data record could not be reviewed.');
     } finally {
       setReviewing(undefined);
+    }
+  }
+
+  async function saveOrderAmendment() {
+    if (!selected || selected.entityType !== 'order' || !editingPayload) return;
+    setSavingEdit(true);
+    setMessage(undefined);
+    try {
+      await request(`/api/v1/staging/${selected.id}/payload`, await token(), {
+        method: 'PUT',
+        body: JSON.stringify({ payload: editingPayload, note: 'Planner amended the order in Order Review before approval.' })
+      });
+      setEditingPayload(undefined);
+      setSelected(undefined);
+      setMessage('Order amended and kept in review. Re-check the readiness status before approving it.');
+      await refresh();
+    } catch (exception) {
+      setMessage(exception instanceof Error ? exception.message : 'The order amendment could not be saved.');
+    } finally {
+      setSavingEdit(false);
     }
   }
 
@@ -450,7 +478,9 @@ export function StagingQueue({ ordersOnly = false, masterOnly = false }: { order
     const stall = pick('stallNumber', 'destinationCode');
     const delivery = directDelivery || (market && stall ? `${market} · ${stall}` : market || stall);
     const pallets = pick('pallets', 'palletQty', 'palletQuantity', 'quantity');
-    return { collection: String(collection || '—'), delivery: String(delivery || '—'), pallets: String(pallets ?? '—') };
+    const collectionDate = pick('collectionDate', 'collectDate', 'pickupDate', 'date');
+    const deliveryDate = pick('deliveryDate', 'deliverDate', 'dropDate');
+    return { collection: String(collection || '—'), delivery: String(delivery || '—'), pallets: String(pallets ?? '—'), collectionDate: String(collectionDate || '—'), deliveryDate: String(deliveryDate || '—') };
   };
 
   const masterSummary = (item: StagedImport) => {
@@ -471,10 +501,12 @@ export function StagingQueue({ ordersOnly = false, masterOnly = false }: { order
     const confidence = String(value.intakeConfidence || '').trim().toLowerCase();
     const confidenceReady = !confidence || confidence === 'high';
     const hasRoute = summary.collection !== '—' && summary.delivery !== '—';
-    const ready = hasRoute && hasPallets && plannerReady && confidenceReady && warnings.length === 0;
+    const overnightConfirmed = value.overnightRoute === true || value.runsOvernight === true || /overnight|cross[- ]?date/i.test(String(value.routeTiming || value.planningWindow || ''));
+    const actionableWarnings = warnings.filter(warning => !(overnightConfirmed && /overnight|cross[- ]?date|following day/i.test(warning)));
+    const ready = hasRoute && hasPallets && plannerReady && confidenceReady && actionableWarnings.length === 0;
     const reason = ready
-      ? 'Route, quantity and intake checks passed.'
-      : warnings[0] || (summary.collection === '—'
+      ? overnightConfirmed ? 'Overnight route confirmed; route and quantity checks passed.' : 'Route, quantity and intake checks passed.'
+      : actionableWarnings[0] || (summary.collection === '—'
         ? 'Collection point is missing or not matched.'
         : summary.delivery === '—'
           ? 'Delivery point is missing or not matched.'
@@ -529,26 +561,42 @@ export function StagingQueue({ ordersOnly = false, masterOnly = false }: { order
         <button className="primary" disabled={!pendingCounts[bulkEntity] || reviewing === 'bulk'} onClick={() => void approveBulk()}>{reviewing === 'bulk' ? 'Approving...' : `Approve ${pendingCounts[bulkEntity] || 0}`}</button>
       </div>}
 
-      {selected && <div className="review-modal-scrim" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setSelected(undefined); }}>
+      {selected && <div className="review-modal-scrim" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) { setEditingPayload(undefined); setSelected(undefined); } }}>
         <div className="panel review-panel review-modal" role="dialog" aria-modal="true" aria-label="Review details">
           <div><p className="eyebrow">Reviewing {selected.entityType}</p><h2>{String(payload?.poNumber || payload?.name || payload?.displayName || payload?.registration || payload?.externalCode || selected.id)}</h2></div>
           <div className="actions">
             {selected.entityType === 'order' && <button onClick={() => setSourceEvidenceId(selected.id)}>View email & attachments</button>}
-            <button onClick={() => setSelected(undefined)}>Close</button>
+            {selected.entityType === 'order' && !editingPayload && <button onClick={() => setEditingPayload({ ...(payload || {}) })}>Edit order</button>}
+            {editingPayload && <><button className="primary" disabled={savingEdit} onClick={() => void saveOrderAmendment()}>{savingEdit ? 'Saving…' : 'Save amendment'}</button><button disabled={savingEdit} onClick={() => setEditingPayload(undefined)}>Cancel edit</button></>}
+            <button onClick={() => { setEditingPayload(undefined); setSelected(undefined); }}>Close</button>
           </div>
-          <dl>{Object.entries(payload || {}).map(([key, value]) => <div key={key}><dt>{key.replace(/([A-Z])/g, ' $1')}</dt><dd>{Array.isArray(value) ? value.join(', ') || '—' : String(value ?? '—')}</dd></div>)}</dl>
+          {editingPayload ? <div className="master-edit-form review-order-editor">
+            <div className="field-grid">
+              {(['customerCode', 'poNumber', 'tmsReference'] as const).map(field => <label key={field}>{field === 'customerCode' ? 'Customer code' : field === 'poNumber' ? 'PO / order reference' : 'TMS reference'}<input value={String(editingPayload[field] ?? '')} onChange={event => setEditingPayload(current => ({ ...(current || {}), [field]: event.target.value }))} /></label>)}
+              <label>Collection date<input type="date" value={String(editingPayload.collectionDate ?? '').slice(0, 10)} onChange={event => setEditingPayload(current => ({ ...(current || {}), collectionDate: event.target.value }))} /></label>
+              <label>Delivery date<input type="date" value={String(editingPayload.deliveryDate ?? '').slice(0, 10)} onChange={event => setEditingPayload(current => ({ ...(current || {}), deliveryDate: event.target.value }))} /></label>
+              <label>Collection point<input value={String(editingPayload.collectionSiteName ?? editingPayload.collectionSite ?? editingPayload.collectionLocation ?? '')} onChange={event => setEditingPayload(current => ({ ...(current || {}), collectionSiteName: event.target.value }))} /></label>
+              <label>Delivery point<input value={String(editingPayload.deliverySiteName ?? editingPayload.deliverySite ?? editingPayload.deliveryLocation ?? '')} onChange={event => setEditingPayload(current => ({ ...(current || {}), deliverySiteName: event.target.value }))} /></label>
+              <label>Pallet quantity<input type="number" min="0" value={String(editingPayload.pallets ?? editingPayload.palletQty ?? editingPayload.palletQuantity ?? '')} onChange={event => setEditingPayload(current => ({ ...(current || {}), pallets: event.target.value ? Number(event.target.value) : undefined }))} /></label>
+              <label>Planning window<select value={String(editingPayload.planningWindow ?? '')} onChange={event => setEditingPayload(current => ({ ...(current || {}), planningWindow: event.target.value || undefined }))}><option value="">Not specified</option><option value="AM">AM</option><option value="PM">PM</option><option value="Transfer">Transfer</option><option value="Market">Market</option></select></label>
+              <label className="checkbox-field"><input type="checkbox" checked={editingPayload.overnightRoute === true || editingPayload.runsOvernight === true} onChange={event => setEditingPayload(current => ({ ...(current || {}), overnightRoute: event.target.checked, runsOvernight: event.target.checked }))} /> Overnight / crosses into the next day</label>
+              <label className="wide">Planner notes<textarea rows={3} value={String(editingPayload.notes ?? editingPayload.orderNotes ?? '')} onChange={event => setEditingPayload(current => ({ ...(current || {}), notes: event.target.value }))} /></label>
+            </div>
+            <p className="hint">Save keeps the order in review. Once the route, dates and quantity are correct, use Approve on the table.</p>
+          </div> : <dl>{Object.entries(payload || {}).map(([key, value]) => <div key={key}><dt>{key.replace(/([A-Z])/g, ' $1')}</dt><dd>{Array.isArray(value) ? value.join(', ') || '—' : String(value ?? '—')}</dd></div>)}</dl>}
         </div>
       </div>}
       {sourceEvidenceId && <SourceEmailEvidenceDrawer stagingId={sourceEvidenceId} onClose={() => setSourceEvidenceId(undefined)} />}
 
       {ordersOnly ? <div className="table-wrap">
         <table className="staging-review-table">
-          <thead><tr><th>Received</th><th>Collection point</th><th>Delivery location</th><th>Pallets</th><th>Source</th><th>Readiness</th><th>Action</th></tr></thead>
+          <thead><tr><th>Collection date</th><th>Delivery date</th><th>Collection point</th><th>Delivery location</th><th>Pallets</th><th>Source</th><th>Readiness</th><th>Action</th></tr></thead>
           <tbody>{data?.map(item => {
             const summary = orderSummary(item);
             const readiness = orderReadiness.get(item.id);
             return <tr key={item.id}>
-              <td>{formatDate(item.receivedAtUtc)}</td>
+              <td>{formatPlanningDate(summary.collectionDate)}</td>
+              <td>{formatPlanningDate(summary.deliveryDate)}</td>
               <td>{summary.collection}</td>
               <td>{summary.delivery}</td>
               <td>{summary.pallets}</td>
