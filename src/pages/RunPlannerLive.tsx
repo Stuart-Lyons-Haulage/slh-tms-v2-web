@@ -3,7 +3,6 @@ import { api, request, type Load, type Site } from "../lib/api";
 import { useAccessToken } from "../lib/auth";
 import { signalPlanningChange, subscribePlanningChanges } from "../lib/planningEvents";
 import { startVisiblePolling } from "../lib/visiblePolling";
-import { RunJobSuggestions } from "../components/RunJobSuggestions";
 import "../simple-planner.css";
 import { createRun, listRuns, updateRunStatus, updateRunStops } from '../api/runs';
 import { planningDeliveryLocation } from "../lib/planningLocations";
@@ -54,15 +53,6 @@ type RunLine = {
   note: string;
 };
 type RunDraft = { key: string; loadId?: string; period: Period; nightOut: boolean; operationalAmendment: string; lines: RunLine[] };
-type OrderClusterKey = "markets" | "south-to-north" | "southbound" | "northbound" | "south-local" | "midlands" | "east" | "west-wales" | "other";
-type PlanningMovement = {
-  key: string;
-  collection: string;
-  destination: string;
-  orderedPallets: number;
-  outstandingPallets: number;
-  orders: PlanningOrder[];
-};
 
 const blankLine = (): RunLine => ({ key: crypto.randomUUID(), collectionSite: "", deliverySite: "", pallets: "", note: "" });
 const blankRun = (key: string): RunDraft => ({
@@ -123,63 +113,12 @@ const stopFromSite = (sites: Site[], value: string) => {
   return { address: site?.collectionAddress, latitude: site?.latitude, longitude: site?.longitude };
 };
 const runRef = (date: string, number: number) => `RUN-${date.replaceAll("-", "")}-${String(number).padStart(2, "0")}`;
-const canonicalRegion = (value?: string) => normalise(value);
-const SOUTH_REGIONS = new Set(["LONDON", "SOUTHEAST", "SOUTHWEST"]);
-const NORTH_REGIONS = new Set(["NORTH"]);
-
-function regionForSite(sites: Site[], value: string) {
-  return canonicalRegion(siteFor(sites, value)?.operationalRegion);
-}
-
-function matchesMarket(value: string, marketNames: string[]) {
-  if (/\bmarket\b/i.test(value)) return true;
-  const key = normalise(value);
-  return Boolean(key) && marketNames.some((market) => {
-    const marketKey = normalise(market);
-    return marketKey.length >= 3 && (key === marketKey || key.includes(marketKey) || marketKey.includes(key));
-  });
-}
-
-function clusterForOrder(order: PlanningOrder, sites: Site[], marketNames: string[]): OrderClusterKey {
-  if (matchesMarket(order.collection, marketNames) || matchesMarket(order.destination, marketNames)) return "markets";
-  const collectionRegion = regionForSite(sites, order.collection);
-  const destinationRegion = regionForSite(sites, order.destination);
-  const collectionSouth = SOUTH_REGIONS.has(collectionRegion);
-  const destinationSouth = SOUTH_REGIONS.has(destinationRegion);
-  const destinationNorth = NORTH_REGIONS.has(destinationRegion);
-  if (collectionSouth && destinationNorth) return "south-to-north";
-  if (!collectionSouth && destinationSouth) return "southbound";
-  if (destinationNorth) return "northbound";
-  if (collectionSouth && destinationSouth) return "south-local";
-  if (destinationRegion === "MIDLANDS") return "midlands";
-  if (destinationRegion === "EAST") return "east";
-  if (destinationRegion === "WESTWALES") return "west-wales";
-  return "other";
-}
-
-function movementKey(order: PlanningOrder, sites: Site[], marketNames: string[]) {
-  const collection = normalise(plannerSiteName(sites, order.collection));
-  const destination = normalise(plannerSiteName(sites, order.destination));
-  const handling = [normalise(order.temperature), normalise(order.palletType), normalise(order.loadUnitType)].join("|");
-  // Market orders stay separate unless richer stall/stand identity is available on the planning row.
-  const marketIdentity = clusterForOrder(order, sites, marketNames) === "markets" ? `|MARKET|${order.id}` : "";
-  return `${collection}|${destination}|${handling}${marketIdentity}`;
-}
-
 function lineOrderIds(line: RunLine) {
   return line.orderIds?.length ? line.orderIds : line.orderId ? [line.orderId] : [];
 }
 
 function orderLineNote(order: PlanningOrder) {
   return order.lineNote?.trim() || `Ref: ${order.reference}`;
-}
-
-function mergedOrderLineNote(existing: string, orders: PlanningOrder[]) {
-  const evidence = [...new Set(orders.map(orderLineNote).filter(Boolean))].join(" · ");
-  if (!existing.trim()) return evidence;
-  if (!evidence || existing.includes(evidence)) return existing;
-  const missing = evidence.split(" · ").filter(part => part && !existing.includes(part));
-  return missing.length ? `${existing.trim()} · ${missing.join(" · ")}` : existing;
 }
 
 function validPallets(value: string) {
@@ -194,7 +133,6 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
   const [control, setControl] = useState<PlanningControlData>();
   const [loads, setLoads] = useState<Load[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
-  const [marketNames, setMarketNames] = useState<string[]>([]);
   const [runs, setRuns] = useState<RunDraft[]>(() => [blankRun(`shell-${localDate()}-1`)]);
   const [activeKey, setActiveKey] = useState(runs[0].key);
   const [busyKey, setBusyKey] = useState<string>();
@@ -278,15 +216,13 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
   const refreshAll = useCallback(async () => {
     const access = await token();
     const nextControl = normalisePlanningControl(await request<PlanningControlData>(`/api/v1/planning-control/pallets?date=${encodeURIComponent(date)}`, access));
-    const [loadsResult, sitesResult, marketsResult] = await Promise.allSettled([listRuns(date, access), api.sites(access), api.marketContacts(access)]);
+    const [loadsResult, sitesResult] = await Promise.allSettled([listRuns(date, access), api.sites(access)]);
     const safeLoads = loadsResult.status === "fulfilled" && Array.isArray(loadsResult.value) ? loadsResult.value : [];
     const safeSites = sitesResult.status === "fulfilled" && Array.isArray(sitesResult.value) ? sitesResult.value : [];
-    const safeMarkets = marketsResult.status === "fulfilled" && Array.isArray(marketsResult.value) ? marketsResult.value : [];
     setControl(nextControl);
     setLoads(safeLoads);
     setSites(safeSites);
-    setMarketNames([...new Set(safeMarkets.map((item) => String(item.market || "").trim()).filter(Boolean))]);
-    if (loadsResult.status === "rejected" || sitesResult.status === "rejected" || marketsResult.status === "rejected") setMessage("Planner loaded the approved pallet balance. Some run, site or market master data is temporarily unavailable.");
+    if (loadsResult.status === "rejected" || sitesResult.status === "rejected") setMessage("Planner loaded the approved pallet balance. Some run or site master data is temporarily unavailable.");
     hydrate(nextControl, safeLoads, safeSites);
   }, [date, hydrate, token]);
 
@@ -304,11 +240,11 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
   }, [refreshAll]);
 
   useEffect(() => {
-    const refresh = () => void refreshControl().catch(() => undefined);
+    const refresh = () => void refreshAll().catch(() => undefined);
     const stopPolling = startVisiblePolling(refresh, 30_000);
     const unsubscribe = subscribePlanningChanges(refresh);
     return () => { stopPolling(); unsubscribe(); };
-  }, [refreshControl]);
+  }, [refreshAll]);
 
   const orders = useMemo(() => control?.orders || [], [control]);
 
@@ -336,27 +272,6 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
 
   const summary = useMemo(() => effectiveOrders.reduce((totals, order) => ({ ordered: totals.ordered + order.orderedPallets, planned: totals.planned + order.plannedPallets, outstanding: totals.outstanding + order.outstandingPallets }), { ordered: 0, planned: 0, outstanding: 0 }), [effectiveOrders]);
 
-  const visible = useMemo(() => effectiveOrders
-    .filter((order) => order.outstandingPallets > 0)
-    .sort((left, right) => left.collection.localeCompare(right.collection) || left.destination.localeCompare(right.destination) || left.reference.localeCompare(right.reference)), [effectiveOrders]);
-
-  const movements = useMemo(() => {
-    const grouped = new Map<string, PlanningMovement>();
-    for (const order of visible) {
-      const key = movementKey(order, sites, marketNames);
-      const existing = grouped.get(key);
-      if (existing) {
-        existing.orders.push(order);
-        existing.orderedPallets += order.orderedPallets;
-        existing.outstandingPallets += order.outstandingPallets;
-      } else {
-        grouped.set(key, { key, collection: plannerSiteName(sites, order.collection), destination: plannerSiteName(sites, order.destination), orderedPallets: order.orderedPallets, outstandingPallets: order.outstandingPallets, orders: [order] });
-      }
-    }
-    return [...grouped.values()].sort((a, b) => a.collection.localeCompare(b.collection) || a.destination.localeCompare(b.destination));
-  }, [marketNames, sites, visible]);
-
-  const active = runs.find((run) => run.key === activeKey) || runs[0];
   const visibleRuns = useMemo(
     () => periodFilter === "ALL" ? runs : runs.filter((run) => run.period === periodFilter || !run.period),
     [periodFilter, runs],
@@ -513,63 +428,6 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
     finally { setBusyKey((current) => current === key ? undefined : current); }
   }
 
-  async function addMovement(movement: PlanningMovement) {
-    if (!active || movement.outstandingPallets <= 0) return;
-    if (!active.loadId && busyKey) return;
-    const orderIds = movement.orders.map((order) => order.id);
-    const movementIdentity = movement.key;
-    const existingLine = active.lines.find((line) => {
-      const first = effectiveOrders.find((order) => lineOrderIds(line).includes(order.id));
-      return first ? movementKey(first, sites, marketNames) === movementIdentity : false;
-    });
-    const initialAllocations = Object.fromEntries(movement.orders.map((order) => [order.id, order.outstandingPallets]));
-    let nextLines: RunLine[];
-    if (existingLine) {
-      const mergedIds = [...new Set([...lineOrderIds(existingLine), ...orderIds])];
-      const mergedAllocations = { ...(existingLine.orderAllocations || {}), ...initialAllocations };
-      const mergedTotal = Object.values(mergedAllocations).reduce((sum, value) => sum + Math.max(value, 0), 0);
-      nextLines = active.lines.map((line) => line.key === existingLine.key ? { ...line, orderIds: mergedIds, orderAllocations: mergedAllocations, pallets: String(mergedTotal), note: mergedOrderLineNote(line.note, movement.orders) } : line);
-    } else {
-      const line: RunLine = { key: crypto.randomUUID(), orderId: orderIds[0], orderIds, orderAllocations: initialAllocations, collectionSite: movement.collection, deliverySite: movement.destination, pallets: String(movement.outstandingPallets), note: mergedOrderLineNote("", movement.orders) };
-      const blankIndex = active.lines.findIndex((item) => !item.orderId && !item.collectionSite && !item.deliverySite && !item.pallets);
-      nextLines = blankIndex >= 0 ? active.lines.map((item, index) => index === blankIndex ? line : item) : [...active.lines, line];
-    }
-    updateRun(active.key, (run) => ({ ...run, lines: nextLines }));
-    const creatingRun = !active.loadId;
-    if (creatingRun) setBusyKey(active.key);
-    try {
-      const access = await token();
-      let loadId = active.loadId;
-      if (!loadId) {
-        const index = Math.max(runs.findIndex((run) => run.key === active.key), 0);
-        const existingReferences = new Set(loads.map((load) => load.reference.toUpperCase()));
-        let number = index + 1;
-        while (existingReferences.has(runRef(date, number).toUpperCase())) number += 1;
-        const created = await createRun({ reference: runRef(date, number), planningDate: date, palletSpacesUsed: runTotal({ ...active, lines: nextLines }), totalPalletSpaces: 26, capacityType: "Standard pallets", plannerNotes: notesForRun(active), stops: buildStops(nextLines) }, access);
-        loadId = created.id;
-        setLoads((current) => current.some((load) => load.id === created.id) ? current : [...current, created]);
-        updateRun(active.key, (run) => ({ ...run, loadId }));
-      }
-      const persisted = nextLines.find((line) => line === existingLine || line.key === existingLine?.key) || nextLines.find((line) => lineOrderIds(line).some((id) => orderIds.includes(id)));
-      const allocations = persisted?.orderAllocations || initialAllocations;
-      await Promise.all([
-        ...Object.entries(allocations).map(([orderId, quantity]) => allocate(orderId, loadId!, quantity, access)),
-        syncStops(loadId!, nextLines, access),
-      ]);
-      signalPlanningChange();
-      setMessage(`${movement.outstandingPallets} pallet${movement.outstandingPallets === 1 ? "" : "s"} added. ${movement.orders.length > 1 ? `${movement.orders.length} source orders consolidated into one movement.` : ""} Any balance remains in Pallet Order.`);
-      void refreshControl().catch(() => undefined);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Movement could not be added to the run.");
-      await refreshAll().catch(() => undefined);
-    } finally { if (creatingRun) setBusyKey(undefined); }
-  }
-
-  async function addOrder(order: PlanningOrder) {
-    const movement = movements.find((item) => item.orders.some((candidate) => candidate.id === order.id)) || { key: movementKey(order, sites, marketNames), collection: plannerSiteName(sites, order.collection), destination: plannerSiteName(sites, order.destination), orderedPallets: order.orderedPallets, outstandingPallets: order.outstandingPallets, orders: [order] };
-    await addMovement(movement);
-  }
-
   async function clearLine(run: RunDraft, line: RunLine) {
     const timerKey = `${run.key}:${line.key}`;
     if (saveTimers.current[timerKey]) { window.clearTimeout(saveTimers.current[timerKey]); delete saveTimers.current[timerKey]; }
@@ -606,8 +464,6 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
   }
 
   useEffect(() => { if (planningDate && planningDate !== date) resetForDate(planningDate); }, [date, planningDate]);
-
-  const poolBlocked = Boolean(active && !active.loadId && busyKey);
 
   return <section className="simple-planner">
     <div className="simple-planner-toolbar">
@@ -647,7 +503,6 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
               </div>;
             })}</div>
             <div className="simple-run-footer"><div className="simple-line-actions"><button type="button" onClick={(event) => { event.stopPropagation(); updateRun(run.key, (current) => ({ ...current, lines: [...current.lines, blankLine()] })); }}>+ Add line</button>{!run.loadId && <button type="button" className="primary" disabled={Boolean(busyKey)} onClick={(event) => { event.stopPropagation(); void createPlanningRun(run); }}>{saving ? "Creating…" : "Create run"}</button>}</div><small>{saving ? "Saving…" : run.loadId ? "✓ Live · available in Pallet Order" : "Create this run before allocating orders from Pallet Order"}</small></div>
-            {load && activeKey === run.key && <RunJobSuggestions lines={run.lines} orders={effectiveOrders} sites={sites} remainingCapacity={Math.max((load.totalPalletSpaces ?? 26) - runTotal(run), 0)} busy={poolBlocked} onAdd={(orderId) => { const order = effectiveOrders.find((item) => item.id === orderId); if (order) void addOrder(order); }} />}
           </article>;
         })}
         <button className="simple-add-run" type="button" onClick={() => { const draft = newDraft(); setRuns((current) => [...current, draft]); setActiveKey(draft.key); }}>+ Add another run</button>
