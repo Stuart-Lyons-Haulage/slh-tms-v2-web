@@ -62,8 +62,16 @@ New-Item -ItemType Directory -Force -Path (Join-Path $WebRoot "archive") | Out-N
 Write-Host "Validating Docker Compose configuration..."
 docker compose --env-file $EnvFile -f $ComposeFile config | Out-Null
 
-Write-Host "Building and starting SLH TMS V2..."
+Write-Host "Building, migrating and starting SLH TMS V2..."
 docker compose --env-file $EnvFile -f $ComposeFile up -d --build
+if ($LASTEXITCODE -ne 0) {
+    Write-Host ""
+    Write-Host "SLH TMS deployment failed before API health became available." -ForegroundColor Red
+    docker compose --env-file $EnvFile -f $ComposeFile ps
+    docker compose --env-file $EnvFile -f $ComposeFile logs migration --tail=160
+    docker compose --env-file $EnvFile -f $ComposeFile logs sql --tail=120
+    throw "Docker Compose deployment failed."
+}
 
 $port = Read-EnvValue "TMS_HTTP_PORT"
 if ([string]::IsNullOrWhiteSpace($port)) { $port = "8080" }
