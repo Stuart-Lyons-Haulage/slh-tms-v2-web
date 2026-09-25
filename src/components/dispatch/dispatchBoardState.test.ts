@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyAvailableTime,
   applyAvailableTimes,
   availableTimesByDriver,
   buildInitialSelections,
@@ -113,6 +114,23 @@ describe("smart Dispatch board state", () => {
 
     expect(validateLockSelections([driver()], [run({ runId: "run-5", reference: "Run 5" })], equipment(), selection, regularTimes))
       .not.toEqual(expect.arrayContaining([expect.objectContaining({ reason: expect.stringContaining("Rest choice changed") })]));
+  });
+
+  it("replaces a prior run start when the same row is reassigned to a driver-specific calculation", () => {
+    const selections = {
+      "driver-2": { runId: "old-run", vehicleId: "vehicle-2", trailerId: "", plannedStartTime: "2026-09-10T06:00:00Z" }
+    };
+
+    const next = applyAvailableTime(selections, "driver-2", {
+      driverId: "driver-2",
+      availableFrom: "2026-09-10T04:00:00Z",
+      requiredRestPeriod: 11,
+      weeklyWorkingTimeUsed: 30,
+      dailyDrivingTimeUsed: 5,
+      wtdStatus: "ok"
+    });
+
+    expect(next["driver-2"].plannedStartTime).toBe("2026-09-10T04:00:00Z");
   });
 
   it("keeps drivers with allocated runs at the top while retaining subcontractors", () => {

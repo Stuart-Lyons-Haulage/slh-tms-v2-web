@@ -8,6 +8,7 @@ import { DispatchFilters } from "./DispatchFilters";
 import { allocateDispatchRun, checkDispatchReadiness, getAvailableTimes, getSmartDispatch, sendRunToSamsara, syncDispatchDrivers, unassignDispatchRun } from "./dispatchApi";
 import {
   applyAvailableTimes,
+  applyAvailableTime,
   availableTimesByDriver,
   buildInitialSelections,
   buildRunOwnerById,
@@ -109,9 +110,16 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
     try {
       const access = await token();
       const data = await getSmartDispatch(planningDate, access);
+      const initialSelections = buildInitialSelections(data.drivers, data.runs, data.equipment);
+      const rows = await getAvailableTimes(
+        planningDate,
+        data.drivers.map(driver => driver.driverId),
+        access,
+        reducedRestDriverIds(initialSelections)
+      );
       setSnapshot(data);
-      setSelections(buildInitialSelections(data.drivers, data.runs, data.equipment));
-      setAvailableTimes({});
+      setSelections(applyAvailableTimes(initialSelections, rows));
+      setAvailableTimes(availableTimesByDriver(rows));
       setFailures([]);
     } catch (exception) {
       setError(exception instanceof Error ? exception.message : "Driver Dispatch could not be loaded.");
@@ -168,19 +176,39 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
   }
 
   function changeSelection(driverId: string, patch: Partial<DispatchSelectionMap[string]>) {
+    const restChanged = Object.prototype.hasOwnProperty.call(patch, "useReducedDailyRest");
+    const runChanged = Object.prototype.hasOwnProperty.call(patch, "runId");
     setSelections(current => ({
       ...current,
-      [driverId]: { ...(current[driverId] || emptyDispatchSelection()), ...patch }
+      [driverId]: {
+        ...(current[driverId] || emptyDispatchSelection()),
+        ...patch,
+        ...(restChanged || runChanged ? { plannedStartTime: undefined } : {})
+      }
     }));
     setFailures(current => current.filter(failure => failure.driverId !== driverId));
-    // Run/equipment changes do not alter legal rest. Only an explicit rest
-    // choice change invalidates this driver's Tacho timing result.
-    if (Object.prototype.hasOwnProperty.call(patch, "useReducedDailyRest")) {
+    if (restChanged || runChanged) {
       setAvailableTimes(current => {
         const next = { ...current };
         delete next[driverId];
         return next;
       });
+      void (async () => {
+        try {
+          const access = await token();
+          const reduced = patch.useReducedDailyRest === true ||
+            (patch.useReducedDailyRest === undefined && selections[driverId]?.useReducedDailyRest === true);
+          const [time] = await getAvailableTimes(planningDate, [driverId], access, reduced ? [driverId] : []);
+          setAvailableTimes(current => ({ ...current, [driverId]: time }));
+          setSelections(current => applyAvailableTime(current, driverId, time));
+        } catch (exception) {
+          setFailures(current => [...current.filter(failure => failure.driverId !== driverId), {
+            driverId,
+            runId: selections[driverId]?.runId,
+            reason: exception instanceof Error ? exception.message : "Tacho legal start could not be recalculated."
+          }]);
+        }
+      })();
     }
     setNotice(undefined);
   }

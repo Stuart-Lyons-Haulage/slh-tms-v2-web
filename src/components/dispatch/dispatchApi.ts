@@ -216,7 +216,8 @@ export async function allocateDispatchRun(
       driverId,
       vehicleId: selection.vehicleId,
       trailerId: selection.trailerId || null,
-      plannedStartUtc: selection.plannedStartTime || null
+      plannedStartUtc: selection.plannedStartTime || null,
+      useReducedDailyRest: selection.useReducedDailyRest === true
     })
   }, 90000);
 }

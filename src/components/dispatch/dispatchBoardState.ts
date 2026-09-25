@@ -67,6 +67,18 @@ export function applyAvailableTimes(
   return next;
 }
 
+export function applyAvailableTime(
+  selections: DispatchSelectionMap,
+  driverId: string,
+  time?: DispatchAvailableTimeDto
+): DispatchSelectionMap {
+  const current = selections[driverId] || emptyDispatchSelection();
+  return {
+    ...selections,
+    [driverId]: { ...current, plannedStartTime: time?.availableFrom || undefined }
+  };
+}
+
 export function availableTimesByDriver(rows: DispatchAvailableTimeDto[]): DispatchAvailableTimeMap {
   return Object.fromEntries(rows.map(row => [row.driverId, row]));
 }

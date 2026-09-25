@@ -200,11 +200,11 @@ export function DispatchDriverRow({
       </label>
       <small>{driver.tachoData.reducedDailyRestsUsed}/3 reduced rests used · {reducedRestSelected ? "Planner selected 9h" : "Regular 11h default"}</small>
       {!availableTime ? <>
-        <strong>{status?.earliestStartUtc ? ukTime(status.earliestStartUtc) : "—"}</strong>
-        <span className="smart-muted">{status?.earliestStartUtc ? status.earliestStartIsAssumption ? "Assumed start" : "Tacho start" : "Get times"}</span>
+        <strong>{driver.availableFrom ? ukTime(driver.availableFrom) : status?.earliestStartUtc ? ukTime(status.earliestStartUtc) : "—"}</strong>
+        <span className="smart-muted">{driver.availableFrom ? "Tacho start" : status?.earliestStartUtc ? status.earliestStartIsAssumption ? "Assumed start" : "Tacho start" : "No legal start"}</span>
       </> : <>
-        <strong>{ukTime(availableTime.availableFrom)}</strong>
-        <small>{availableTime.requiredRestPeriod}h Tacho rest · WTD {availableTime.weeklyWorkingTimeUsed.toFixed(1)}h</small>
+        <strong>{availableTime.availableFrom ? ukTime(availableTime.availableFrom) : "Blocked"}</strong>
+        <small>{availableTime.availableFrom ? `${availableTime.requiredRestPeriod}h Tacho rest · WTD ${availableTime.weeklyWorkingTimeUsed.toFixed(1)}h` : "No legal start can be calculated"}</small>
         <div className={`smart-wtd-bar ${wtdTone}`} title={`WTD ${availableTime.weeklyWorkingTimeUsed.toFixed(1)} hours`}>
           <span style={{ width: `${Math.min(100, Math.max(0, availableTime.weeklyWorkingTimeUsed / 60 * 100))}%` }} />
         </div>
