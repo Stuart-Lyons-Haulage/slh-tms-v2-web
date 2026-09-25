@@ -1,6 +1,7 @@
 services:
   sql:
     image: mcr.microsoft.com/mssql/server:2022-latest
+    platform: linux/amd64
     restart: unless-stopped
     environment:
       ACCEPT_EULA: "Y"
@@ -20,6 +21,7 @@ services:
 
   db-init:
     image: mcr.microsoft.com/mssql/server:2022-latest
+    platform: linux/amd64
     depends_on:
       sql:
         condition: service_healthy
@@ -105,7 +107,8 @@ services:
         VITE_ENTRA_API_SCOPE: "${ENTRA_API_SCOPE}"
     restart: unless-stopped
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     ports:
       - "${TMS_BIND_ADDRESS:-127.0.0.1}:${TMS_HTTP_PORT:-8080}:80"
 
