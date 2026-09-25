@@ -6,3 +6,6 @@ dist
 
 .env.standalone
 backup/
+
+# Host-specific standalone Compose override. Keep this local to the Mac/server.
+deploy/standalone/docker-compose.local.yml
