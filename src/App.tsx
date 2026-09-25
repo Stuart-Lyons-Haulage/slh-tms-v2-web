@@ -44,7 +44,7 @@ const complianceNavigation: NavItem[] = [
 ];
 
 const adminNavigation: NavItem[] = [
-  ['/admin/integrations', 'API Feeds'],
+  ['/admin/integrations', 'Integrations / API Feeds'],
   ['/admin/order-intake', 'Order Intake Rules'],
   ['/admin/imports', 'Imports / Staging Queue'],
 ];
