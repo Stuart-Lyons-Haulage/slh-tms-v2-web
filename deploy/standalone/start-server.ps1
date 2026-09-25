@@ -7,6 +7,7 @@ if (-not (Test-Path $ApiRoot)) { $ApiRoot = Join-Path $Parent "slh-tms-v2-api" }
 $EnvFile = Join-Path $WebRoot ".env.standalone"
 $ComposeFile = Join-Path $WebRoot "deploy\standalone\docker-compose.yml"
 $LocalComposeFile = Join-Path $WebRoot "deploy\standalone\docker-compose.local.yml"
+$HostComposeFile = Join-Path $WebRoot "deploy\standalone\docker-compose.host.yml"
 
 function Require-Command([string]$Name) {
     if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) { throw "$Name is required on the SLH server." }
@@ -60,10 +61,15 @@ Write-Host "API: $apiBefore -> $apiAfter"
 New-Item -ItemType Directory -Force -Path (Join-Path $WebRoot "backup") | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $WebRoot "archive") | Out-Null
 
-$composeArgs = @("--env-file", $EnvFile, "-f", $ComposeFile)
-if (Test-Path $LocalComposeFile) {
-    Write-Host "Using host-specific Compose override: $LocalComposeFile"
-    $composeArgs += @("-f", $LocalComposeFile)
+if (Test-Path $HostComposeFile) {
+    Write-Host "Using host-pinned Compose file: $HostComposeFile"
+    $composeArgs = @("--env-file", $EnvFile, "-f", $HostComposeFile)
+} else {
+    $composeArgs = @("--env-file", $EnvFile, "-f", $ComposeFile)
+    if (Test-Path $LocalComposeFile) {
+        Write-Host "Using host-specific Compose override: $LocalComposeFile"
+        $composeArgs += @("-f", $LocalComposeFile)
+    }
 }
 
 Write-Host "Validating Docker Compose configuration..."
