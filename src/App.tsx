@@ -1,6 +1,5 @@
 import { Component, lazy, Suspense, type ErrorInfo, type ReactNode, useEffect, useState } from 'react';
 import { useIsAuthenticated, useMsal } from '@azure/msal-react';
-import type { AccountInfo } from '@azure/msal-browser';
 import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom';
 
 const PlannerEnhanced = lazy(() => import('./pages/PlannerEnhanced').then(module => ({ default: module.PlannerEnhanced })));
@@ -16,6 +15,7 @@ const StagingQueue = lazy(() => import('./pages/Pages').then(module => ({ defaul
 const DriverDispatchOperational = lazy(() => import('./pages/DriverDispatchOperational').then(module => ({ default: module.DriverDispatchOperational })));
 const DriverTimesheets = lazy(() => import('./pages/DriverTimesheets').then(module => ({ default: module.DriverTimesheets })));
 const AdminIntegrationSyncControls = lazy(() => import('./components/AdminIntegrationSyncControls').then(module => ({ default: module.AdminIntegrationSyncControls })));
+const OrderIntakeMappingAdmin = lazy(() => import('./pages/OrderIntakeMappingAdmin').then(module => ({ default: module.OrderIntakeMappingAdmin })));
 const MobileOperations = lazy(() => import('./pages/MobileOperations').then(module => ({ default: module.MobileOperations })));
 
 import { apiScope, localTestAuthEnabled, useAccessToken } from './lib/auth';
@@ -30,10 +30,11 @@ type NavItem = [string, string];
 const coreNavigation: NavItem[] = [
   ['/dashboard', 'Dashboard'],
   ['/orders', 'Order Entry'],
-  ['/staging', 'Orders'],
+  ['/staging', 'Order Review'],
   ['/', 'Planner Builder'],
   ['/pallet-control', 'Pallet Order'],
   ['/driver-dispatch', 'Driver Dispatch'],
+  ['/driver-timesheets', 'Timesheets'],
   ['/master-data', 'Master Data'],
   ['/night-outs', 'Invoice / Job History'],
 ];
@@ -41,11 +42,11 @@ const coreNavigation: NavItem[] = [
 const complianceNavigation: NavItem[] = [
   ['/compliance', 'Compliance'],
   ['/driver-assignments', 'Driver History'],
-  ['/driver-timesheets', 'Timesheets'],
 ];
 
 const adminNavigation: NavItem[] = [
   ['/admin/integrations', 'Integrations'],
+  ['/admin/order-intake', 'Order Intake Rules'],
   ['/admin/staging', 'Import Reviews'],
   ['/master-data/roadrunner-review', 'RoadRunner Review'],
 ];
@@ -74,13 +75,6 @@ function AdminNav({ current }: { current: string }) {
   </details>;
 }
 
-function accountHasRole(account: AccountInfo | null | undefined, role: string) {
-  if (!account?.idTokenClaims) return false;
-  const claims = account.idTokenClaims as Record<string, unknown>;
-  const roles = Array.isArray(claims.roles) ? claims.roles.filter((value): value is string => typeof value === 'string') : [];
-  return roles.includes(role);
-}
-
 function Shell() {
   const entraAuthenticated = useIsAuthenticated();
   const { instance, accounts } = useMsal();
@@ -90,7 +84,6 @@ function Shell() {
   const [pendingOrderReviews, setPendingOrderReviews] = useState(0);
   const location = useLocation();
   const activeAccount = instance.getActiveAccount() || accounts[0];
-  const isAdmin = localTestAuthEnabled || accountHasRole(activeAccount, 'TMS.Admin');
 
   const signIn = async () => {
     const request = { scopes: apiScope ? [apiScope] : [] };
@@ -181,7 +174,7 @@ function Shell() {
         </NavLink>;
       })}
       <ComplianceNav current={location.pathname} />
-      {isAdmin && <AdminNav current={location.pathname} />}
+      <AdminNav current={location.pathname} />
     </nav>}
 
     {authenticated && <div className="system-strip"><HeaderIntelligence /></div>}
@@ -196,7 +189,7 @@ function Shell() {
         <Route path="/pallet-control" element={<PalletPlanningControl />} />
         <Route path="/driver-dispatch" element={<DriverDispatchOperational />} />
         <Route path="/master-data" element={<MasterDataHub />} />
-        <Route path="/master-data/roadrunner-review" element={isAdmin ? <RoadrunnerSiteReview /> : <Navigate to="/dashboard" replace />} />
+        <Route path="/master-data/roadrunner-review" element={<RoadrunnerSiteReview />} />
         <Route path="/drivers" element={<MasterDataHub initialSection="drivers" />} />
         <Route path="/fleet-assets" element={<MasterDataHub initialSection="vehicles" />} />
         <Route path="/fuel-cards" element={<MasterDataHub initialSection="fuel-cards" />} />
@@ -208,8 +201,9 @@ function Shell() {
         <Route path="/night-outs" element={<JobInvoiceHistory />} />
         <Route path="/driver-assignments" element={<DriverAssignments />} />
         <Route path="/driver-timesheets" element={<DriverTimesheets />} />
-        <Route path="/admin/staging" element={isAdmin ? <StagingQueue /> : <Navigate to="/dashboard" replace />} />
-        <Route path="/admin/integrations" element={isAdmin ? <AdminIntegrationSyncControls /> : <Navigate to="/dashboard" replace />} />
+        <Route path="/admin/staging" element={<StagingQueue />} />
+        <Route path="/admin/integrations" element={<AdminIntegrationSyncControls />} />
+        <Route path="/admin/order-intake" element={<OrderIntakeMappingAdmin />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes></RouteErrorBoundary></Suspense> : <section className="sign-in-panel">
         <p className="eyebrow">Secure operations portal</p>
