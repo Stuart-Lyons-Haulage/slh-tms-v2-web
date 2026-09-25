@@ -9,3 +9,7 @@ backup/
 
 # Host-specific standalone Compose override. Keep this local to the Mac/server.
 deploy/standalone/docker-compose.local.yml
+
+# macOS metadata
+.DS_Store
+**/.DS_Store
