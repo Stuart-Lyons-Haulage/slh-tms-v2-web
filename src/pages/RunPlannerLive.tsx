@@ -121,7 +121,7 @@ function orderLineNote(order: PlanningOrder) {
   return order.lineNote?.trim() || `Ref: ${order.reference}`;
 }
 
-function mergeLineNotes(...values: Array<string | undefined>) {
+function mergedOrderLineNote(...values: Array<string | undefined>) {
   const parts = values
     .flatMap(value => (value || "").split("·"))
     .map(value => value.trim())
@@ -173,7 +173,7 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
         orderIds: ids,
         orderAllocations: { ...(existing.orderAllocations || {}), [line.orderId]: pallets },
         pallets: String((validPallets(existing.pallets) || 0) + pallets),
-        note: mergeLineNotes(
+        note: mergedOrderLineNote(
           existing.note,
           line.note,
           ...ids.map(id => ordersById.get(id)).filter((order): order is PlanningOrder => Boolean(order)).map(orderLineNote),
@@ -204,12 +204,12 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
           const allocation = order?.allocations.find((item) => item.loadId === load.id && item.pallets > 0);
           if (!order || !allocation) return [];
           seenOrderIds.add(order.id);
-          return [{ key: `${load.id}-${order.id}`, orderId: order.id, collectionSite: plannerSiteName(nextSites, order.collection), deliverySite: plannerSiteName(nextSites, order.destination), pallets: String(allocation.pallets), note: mergeLineNotes(stop.plannerNote, orderLineNote(order)) }];
+          return [{ key: `${load.id}-${order.id}`, orderId: order.id, collectionSite: plannerSiteName(nextSites, order.collection), deliverySite: plannerSiteName(nextSites, order.destination), pallets: String(allocation.pallets), note: mergedOrderLineNote(stop.plannerNote, orderLineNote(order)) }];
         });
       const unsequencedLines = nextControl.orders.flatMap((order) => {
         if (seenOrderIds.has(order.id)) return [];
         const allocation = order.allocations.find((item) => item.loadId === load.id && item.pallets > 0);
-        return allocation ? [{ key: `${load.id}-${order.id}`, orderId: order.id, collectionSite: plannerSiteName(nextSites, order.collection), deliverySite: plannerSiteName(nextSites, order.destination), pallets: String(allocation.pallets), note: mergeLineNotes(load.stops.find((stop) => stop.orderId === order.id && /^deliver/i.test(stop.name))?.plannerNote, orderLineNote(order)) }] : [];
+        return allocation ? [{ key: `${load.id}-${order.id}`, orderId: order.id, collectionSite: plannerSiteName(nextSites, order.collection), deliverySite: plannerSiteName(nextSites, order.destination), pallets: String(allocation.pallets), note: mergedOrderLineNote(load.stops.find((stop) => stop.orderId === order.id && /^deliver/i.test(stop.name))?.plannerNote, orderLineNote(order)) }] : [];
       });
       const lines = consolidateLines([...sequencedLines, ...unsequencedLines], ordersById);
       return {
