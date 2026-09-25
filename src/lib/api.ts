@@ -73,15 +73,6 @@ export type RoadrunnerSiteReconcileResponse = {
   unmatched: number;
   results: RoadrunnerSiteReconcileResult[];
 };
-export type RoadrunnerSiteReview = {
-  id: string;
-  idempotencyKey: string;
-  source?: string;
-  receivedAtUtc: string;
-  reviewNote?: string;
-  proposal?: Record<string, unknown>;
-};
-export type RoadrunnerSiteReviewAction = { reviewId: string; status: string; action: string; roadRunnerCode?: string; site?: Site; };
 export type MarketContact = { id: string; market: string; name: string; standOrLocation?: string; salesman?: string; sender?: string; active: boolean };
 export type FuelPrice = { id: string; weekCommencing: string; provider: string; pricePencePerLitre: number; isPricingMaximum: boolean; source?: string; notes?: string; createdAtUtc: string };
 export type StagedImport = { id: string; entityType: string; idempotencyKey: string; payloadJson: string; status: string | number; source?: string; receivedAtUtc: string; reviewedAtUtc?: string; reviewedBy?: string; reviewNote?: string };
@@ -270,12 +261,6 @@ export interface TmsApi {
   sites(token?: string): Promise<Site[]>;
   updateSite(id: string, payload: SiteUpdate, token?: string): Promise<Site>;
   reconcileRoadrunnerSites(records: RoadrunnerSiteProfile[], token?: string): Promise<RoadrunnerSiteReconcileResponse>;
-  roadrunnerSiteReviews(token?: string): Promise<RoadrunnerSiteReview[]>;
-  linkRoadrunnerSiteReview(id: string, payload: { siteId: string; note?: string }, token?: string): Promise<RoadrunnerSiteReviewAction>;
-  addRoadrunnerSiteAlias(id: string, payload: { siteId: string; alias?: string; note?: string }, token?: string): Promise<RoadrunnerSiteReviewAction>;
-  acceptRoadrunnerSiteFields(id: string, payload: { siteId: string; fields: string[]; note?: string }, token?: string): Promise<RoadrunnerSiteReviewAction>;
-  createRoadrunnerSite(id: string, payload: { name?: string; driverTextName?: string; collectionAddress?: string; alias?: string; note?: string }, token?: string): Promise<RoadrunnerSiteReviewAction>;
-  dismissRoadrunnerSiteReview(id: string, payload: { note?: string }, token?: string): Promise<RoadrunnerSiteReviewAction>;
   marketContacts(token?: string): Promise<MarketContact[]>;
   updateMarketContact(id: string, payload: Omit<MarketContact, 'id'>, token?: string): Promise<MarketContact>;
   fuelPrices(token?: string): Promise<FuelPrice[]>;
@@ -333,12 +318,6 @@ export const api: TmsApi = {
   sites: token => request<Site[]>('/api/v1/sites', token),
   updateSite: (id, payload, token) => request<Site>(`/api/v1/sites/${id}`, token, { method: 'PUT', body: JSON.stringify(payload) }),
   reconcileRoadrunnerSites: (records, token) => request<RoadrunnerSiteReconcileResponse>('/api/v1/sites/roadrunner-master/reconcile', token, { method: 'POST', body: JSON.stringify(records) }),
-  roadrunnerSiteReviews: token => request<RoadrunnerSiteReview[]>('/api/v1/master-data/roadrunner-site-review', token),
-  linkRoadrunnerSiteReview: (id, payload, token) => request<RoadrunnerSiteReviewAction>(`/api/v1/master-data/roadrunner-site-review/${id}/link`, token, { method: 'POST', body: JSON.stringify(payload) }),
-  addRoadrunnerSiteAlias: (id, payload, token) => request<RoadrunnerSiteReviewAction>(`/api/v1/master-data/roadrunner-site-review/${id}/add-alias`, token, { method: 'POST', body: JSON.stringify(payload) }),
-  acceptRoadrunnerSiteFields: (id, payload, token) => request<RoadrunnerSiteReviewAction>(`/api/v1/master-data/roadrunner-site-review/${id}/accept-fields`, token, { method: 'POST', body: JSON.stringify(payload) }),
-  createRoadrunnerSite: (id, payload, token) => request<RoadrunnerSiteReviewAction>(`/api/v1/master-data/roadrunner-site-review/${id}/create-site`, token, { method: 'POST', body: JSON.stringify(payload) }),
-  dismissRoadrunnerSiteReview: (id, payload, token) => request<RoadrunnerSiteReviewAction>(`/api/v1/master-data/roadrunner-site-review/${id}/dismiss`, token, { method: 'POST', body: JSON.stringify(payload) }),
   marketContacts: async token => normaliseMarketContacts(await request<MarketContact[]>('/api/v1/market-contacts', token)),
   updateMarketContact: (id, payload, token) => request<MarketContact>(`/api/v1/market-contacts/${id}`, token, { method: 'PUT', body: JSON.stringify(payload) }),
   fuelPrices: token => request<FuelPrice[]>('/api/v1/fuel-prices', token),
