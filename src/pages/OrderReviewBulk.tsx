@@ -70,6 +70,11 @@ type StagingQueuePage = {
   records: StagedImport[];
 };
 
+type BulkApproveItemResult = {
+  id: string;
+  reason: string;
+};
+
 type BulkApproveResponse = {
   date: string;
   requested: number;
@@ -77,6 +82,8 @@ type BulkApproveResponse = {
   skipped: number;
   failed: number;
   missing: number;
+  skippedItems?: BulkApproveItemResult[];
+  failedItems?: BulkApproveItemResult[];
   message: string;
 };
 
@@ -230,6 +237,11 @@ function amendmentPrompt(items: Array<{ row: ParsedRow; comparison: ApprovalComp
     return [`Approve amendment for ${reference}?`, ...changes].join("\n");
   });
   return `${sections.join("\n\n")}\n\nOK = approve the amendment. Cancel = keep the existing live order unchanged.`;
+}
+
+function approvalFailureDetail(result: BulkApproveResponse) {
+  const first = result.failedItems?.[0] ?? result.skippedItems?.[0];
+  return first?.reason ? ` ${first.reason}` : "";
 }
 
 export function OrderReviewBulk({ date }: { date: string }) {
@@ -387,6 +399,62 @@ export function OrderReviewBulk({ date }: { date: string }) {
     }
   }
 
+  async function approveRow(row: ParsedRow) {
+    if (busy || busyId || blockingReason(row, date)) return;
+    setBusyId(row.item.id);
+    setNotice(undefined);
+    try {
+      const comparison = await request<ApprovalComparison>(
+        `/api/v1/order-intake/duplicate-check/staging/${encodeURIComponent(row.item.id)}/comparison`,
+        await token(),
+      );
+
+      if (comparison.classification === "Exact duplicate") {
+        setNotice(`${displayReference(row.payload)} is already live with no changes to apply.`);
+        return;
+      }
+
+      if (comparison.classification === "Amendment/update" &&
+          !window.confirm(amendmentPrompt([{ row, comparison }]))) {
+        setNotice("Amendment approval cancelled. The existing live order has not been changed.");
+        return;
+      }
+
+      const result = await request<BulkApproveResponse>(
+        "/api/v1/staging/orders/bulk-approve",
+        await token(),
+        {
+          method: "POST",
+          body: JSON.stringify({
+            date,
+            ids: [row.item.id],
+            acknowledgeReviewFlags: true,
+          }),
+        },
+        120000,
+      );
+
+      setNotice(`${result.message}${approvalFailureDetail(result)}`);
+      if (result.approved > 0) {
+        setSelectedIds((current) => {
+          const next = new Set(current);
+          next.delete(row.item.id);
+          return next;
+        });
+        if (editingId === row.item.id) {
+          setEditingId(undefined);
+          setDraft(undefined);
+        }
+        if (sourceEmailStagingId === row.item.id) setSourceEmailStagingId(undefined);
+        await queue.refresh();
+      }
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "The order could not be approved.");
+    } finally {
+      setBusyId(undefined);
+    }
+  }
+
   async function approveSelectedOrders() {
     if (!selectedRows.length || busy || busyId) return;
     setBusy(true);
@@ -431,7 +499,7 @@ export function OrderReviewBulk({ date }: { date: string }) {
       const duplicateNote = duplicates.length > 0
         ? ` ${duplicates.length} exact duplicate${duplicates.length === 1 ? " was" : "s were"} left unchanged because there were no differences to apply.`
         : "";
-      setNotice(`${result.message}${result.skipped || result.failed ? ` ${result.skipped} skipped and ${result.failed} failed remain for review.` : ""}${duplicateNote}`);
+      setNotice(`${result.message}${result.skipped || result.failed ? ` ${result.skipped} skipped and ${result.failed} failed remain for review.` : ""}${approvalFailureDetail(result)}${duplicateNote}`);
       setSelectedIds(new Set());
       setEditingId(undefined);
       setDraft(undefined);
@@ -517,6 +585,7 @@ export function OrderReviewBulk({ date }: { date: string }) {
           <div className="bulk-order-actions">
             {hasSourceIdentity && <button type="button" className="source-email-review-button" onClick={() => setSourceEmailStagingId(row.item.id)} disabled={busy || Boolean(busyId)}>Review source email</button>}
             {!isEditing && <button type="button" onClick={() => void beginEdit(row)} disabled={busy || Boolean(busyId)}>{rowBusy ? "Loading…" : "Edit"}</button>}
+            {!isEditing && <button type="button" className="primary" onClick={() => void approveRow(row)} disabled={!selectable || busy || Boolean(busyId)}>{rowBusy ? "Working…" : "Approve"}</button>}
             {isEditing && <>
               <button type="button" onClick={() => { setEditingId(undefined); setDraft(undefined); }} disabled={rowBusy}>Cancel</button>
               <button type="button" className="primary" onClick={() => void saveEdit(row)} disabled={rowBusy}>{rowBusy ? "Saving…" : "Save"}</button>
