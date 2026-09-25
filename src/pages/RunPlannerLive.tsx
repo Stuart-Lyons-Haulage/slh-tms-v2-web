@@ -121,6 +121,14 @@ function orderLineNote(order: PlanningOrder) {
   return order.lineNote?.trim() || `Ref: ${order.reference}`;
 }
 
+function mergeLineNotes(...values: Array<string | undefined>) {
+  const parts = values
+    .flatMap(value => (value || "").split("·"))
+    .map(value => value.trim())
+    .filter(Boolean);
+  return [...new Map(parts.map(value => [normalise(value), value])).values()].join(" · ");
+}
+
 function validPallets(value: string) {
   const pallets = Number(value);
   return Number.isInteger(pallets) && pallets >= 0 ? pallets : undefined;
@@ -165,7 +173,11 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
         orderIds: ids,
         orderAllocations: { ...(existing.orderAllocations || {}), [line.orderId]: pallets },
         pallets: String((validPallets(existing.pallets) || 0) + pallets),
-        note: [existing.note, line.note].filter(Boolean).filter((value, index, list) => list.indexOf(value) === index).join(" · "),
+        note: mergeLineNotes(
+          existing.note,
+          line.note,
+          ...ids.map(id => ordersById.get(id)).filter((order): order is PlanningOrder => Boolean(order)).map(orderLineNote),
+        ),
       });
     }
     return [...groups.values()];
@@ -192,12 +204,12 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
           const allocation = order?.allocations.find((item) => item.loadId === load.id && item.pallets > 0);
           if (!order || !allocation) return [];
           seenOrderIds.add(order.id);
-          return [{ key: `${load.id}-${order.id}`, orderId: order.id, collectionSite: plannerSiteName(nextSites, order.collection), deliverySite: plannerSiteName(nextSites, order.destination), pallets: String(allocation.pallets), note: stop.plannerNote || orderLineNote(order) }];
+          return [{ key: `${load.id}-${order.id}`, orderId: order.id, collectionSite: plannerSiteName(nextSites, order.collection), deliverySite: plannerSiteName(nextSites, order.destination), pallets: String(allocation.pallets), note: mergeLineNotes(stop.plannerNote, orderLineNote(order)) }];
         });
       const unsequencedLines = nextControl.orders.flatMap((order) => {
         if (seenOrderIds.has(order.id)) return [];
         const allocation = order.allocations.find((item) => item.loadId === load.id && item.pallets > 0);
-        return allocation ? [{ key: `${load.id}-${order.id}`, orderId: order.id, collectionSite: plannerSiteName(nextSites, order.collection), deliverySite: plannerSiteName(nextSites, order.destination), pallets: String(allocation.pallets), note: load.stops.find((stop) => stop.orderId === order.id && /^deliver/i.test(stop.name))?.plannerNote || orderLineNote(order) }] : [];
+        return allocation ? [{ key: `${load.id}-${order.id}`, orderId: order.id, collectionSite: plannerSiteName(nextSites, order.collection), deliverySite: plannerSiteName(nextSites, order.destination), pallets: String(allocation.pallets), note: mergeLineNotes(load.stops.find((stop) => stop.orderId === order.id && /^deliver/i.test(stop.name))?.plannerNote, orderLineNote(order)) }] : [];
       });
       const lines = consolidateLines([...sequencedLines, ...unsequencedLines], ordersById);
       return {
@@ -285,6 +297,10 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
   };
   const updateRun = (key: string, updater: (run: RunDraft) => RunDraft) => setRuns((current) => current.map((run) => run.key === key ? updater(run) : run));
   const updateLine = (runKey: string, lineKey: string, patch: Partial<RunLine>) => updateRun(runKey, (run) => ({ ...run, lines: run.lines.map((line) => line.key === lineKey ? { ...line, ...patch } : line) }));
+  const canonicaliseSiteEntry = (runKey: string, lineKey: string, field: "collectionSite" | "deliverySite", value: string) => {
+    const site = siteFor(sites, value);
+    if (site) updateLine(runKey, lineKey, { [field]: site.name?.trim() || site.driverTextName?.trim() || value });
+  };
   const runTotal = (run: RunDraft) => run.lines.reduce((sum, line) => sum + (validPallets(line.pallets) || 0), 0);
 
   function buildStops(lines: RunLine[]) {
@@ -494,9 +510,9 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
               const refs = lineOrderIds(line).map((id) => effectiveOrders.find((order) => order.id === id)?.reference).filter(Boolean);
               return <div className="simple-run-line" key={line.key} title={refs.length > 1 ? `${refs.length} source orders: ${refs.join(", ")}` : refs[0]}>
                 <span className="simple-line-number">{lineIndex + 1}</span>
-                <input list="planner-site-options" value={line.collectionSite} readOnly={lineOrderIds(line).length > 0} onChange={(event) => updateLine(run.key, line.key, { collectionSite: event.target.value })} placeholder="Type collection site…" />
+                <input list="planner-site-options" autoComplete="off" value={line.collectionSite} readOnly={lineOrderIds(line).length > 0} onChange={(event) => updateLine(run.key, line.key, { collectionSite: event.target.value })} onBlur={(event) => canonicaliseSiteEntry(run.key, line.key, "collectionSite", event.currentTarget.value)} placeholder="Start typing collection site…" />
                 <input className="simple-pallet-input" type="number" min="0" inputMode="numeric" value={line.pallets} onChange={(event) => scheduleQuantity(run, line, event.target.value)} placeholder="0" />
-                <input list="planner-site-options" value={line.deliverySite} readOnly={lineOrderIds(line).length > 0} onChange={(event) => updateLine(run.key, line.key, { deliverySite: event.target.value })} placeholder="Type delivery site…" />
+                <input list="planner-site-options" autoComplete="off" value={line.deliverySite} readOnly={lineOrderIds(line).length > 0} onChange={(event) => updateLine(run.key, line.key, { deliverySite: event.target.value })} onBlur={(event) => canonicaliseSiteEntry(run.key, line.key, "deliverySite", event.currentTarget.value)} placeholder="Start typing delivery site…" />
                 <input value={line.note} onChange={(event) => updateLine(run.key, line.key, { note: event.target.value })} onBlur={(event) => void persistLineNote(run, line, event.currentTarget.value)} placeholder={refs.length > 1 ? `${refs.length} orders consolidated` : "Facility / load-line note"} />
                 <button type="button" className="simple-clear-line" aria-label={`Clear line ${lineIndex + 1}`} disabled={busyKey === `${run.key}:${line.key}`} onClick={(event) => { event.stopPropagation(); void clearLine(run, line); }}>×</button>
               </div>;
