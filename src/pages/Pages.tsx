@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
 import { MasterDataExportButton } from '../components/MasterDataExportButton';
+import { SourceEmailEvidenceDrawer } from '../components/SourceEmailEvidenceDrawer';
 import * as XLSX from 'xlsx';
 import { api, type Customer, type CustomerContact, type DiagnosticsTables, type Driver, type DriverAssignment, type FleetStatus, type Load, type LoadDispatch, type MarketContact, type ReturnLoadSuggestions, type Site, type StageBatchRequest, type StagedImport, type Telemetry, type Trailer, type TransportOrder, type Vehicle } from '../lib/api';
 import { useAccessToken } from '../lib/auth';
@@ -296,64 +297,174 @@ export function ExportCentre() {
 }
 
 export function StagingQueue({ ordersOnly = false }: { ordersOnly?: boolean } = {}) {
-  const token = useAccessToken(); const [entityFilter, setEntityFilter] = useState(''); const effectiveEntityFilter = ordersOnly ? 'order' : entityFilter; const load = useCallback(async () => api.staging(await token(), 'PendingReview', effectiveEntityFilter, 2000), [token, effectiveEntityFilter]); const { data, loading, error, refresh } = useApi(load); const [reviewing, setReviewing] = useState<string>(); const [selected, setSelected] = useState<StagedImport>(); const [bulkEntity, setBulkEntity] = useState('vehicle'); const [bulkMessage, setBulkMessage] = useState<string>();
-  async function review(item: StagedImport, approved: boolean) { setReviewing(item.id); try { await api.review(item.id, approved, '', await token()); await refresh(); } finally { setReviewing(undefined); } }
-  async function approveBulk() { const pending = (data || []).filter(item => stagingStatus(item.status) === 'PendingReview' && item.entityType === bulkEntity); if (!pending.length) return; setReviewing('bulk'); setBulkMessage(undefined); try { const accessToken = await token(); for (const item of pending) await api.review(item.id, true, `Bulk approved ${bulkEntity} master data`, accessToken); setBulkMessage(`${pending.length} ${bulkEntity} record${pending.length === 1 ? '' : 's'} approved and promoted.`); await refresh(); } catch (exception) { setBulkMessage(exception instanceof Error ? exception.message : 'Bulk approval failed.'); } finally { setReviewing(undefined); } }
-  async function clearPending() { if (!confirm('Clear all pending staging records? Promoted master data will stay in place.')) return; setReviewing('clear'); setBulkMessage(undefined); try { const result = await api.clearPendingStaging(await token()); setBulkMessage(`${result.deleted} pending staging record${result.deleted === 1 ? '' : 's'} cleared. You can now re-import fresh.`); setSelected(undefined); await refresh(); } catch (exception) { setBulkMessage(exception instanceof Error ? exception.message : 'Could not clear pending staging records.'); } finally { setReviewing(undefined); } }
+  const token = useAccessToken();
+  const [entityFilter, setEntityFilter] = useState('');
+  const effectiveEntityFilter = ordersOnly ? 'order' : entityFilter;
+  const load = useCallback(async () => api.staging(await token(), 'PendingReview', effectiveEntityFilter, 2000), [token, effectiveEntityFilter]);
+  const { data, loading, error, refresh } = useApi(load);
+  const [reviewing, setReviewing] = useState<string>();
+  const [selected, setSelected] = useState<StagedImport>();
+  const [bulkEntity, setBulkEntity] = useState('vehicle');
+  const [message, setMessage] = useState<string>();
+  const [requestingOrders, setRequestingOrders] = useState(false);
+  const [sourceEvidenceId, setSourceEvidenceId] = useState<string>();
+
+  async function review(item: StagedImport, approved: boolean) {
+    setReviewing(item.id);
+    setMessage(undefined);
+    try {
+      await api.review(item.id, approved, '', await token());
+      setMessage(approved ? 'Order approved and promoted to Planner Builder.' : 'Order rejected and removed from the review queue.');
+      setSelected(undefined);
+      await refresh();
+    } catch (exception) {
+      setMessage(exception instanceof Error ? exception.message : 'The order could not be reviewed. Check the readiness reason and source evidence.');
+    } finally {
+      setReviewing(undefined);
+    }
+  }
+
+  async function requestOrders() {
+    setRequestingOrders(true);
+    setMessage(undefined);
+    try {
+      const result = await api.pollMailboxNow(await token());
+      setMessage(`${result.message} ${result.lastMessagesIngested} new message${result.lastMessagesIngested === 1 ? '' : 's'} staged.`);
+      await refresh();
+    } catch (exception) {
+      setMessage(exception instanceof Error ? exception.message : 'Orders could not be requested from Microsoft Graph.');
+    } finally {
+      setRequestingOrders(false);
+    }
+  }
+
+  async function approveBulk() {
+    const pending = (data || []).filter(item => stagingStatus(item.status) === 'PendingReview' && item.entityType === bulkEntity);
+    if (!pending.length) return;
+    setReviewing('bulk');
+    setMessage(undefined);
+    try {
+      const accessToken = await token();
+      for (const item of pending) await api.review(item.id, true, `Bulk approved ${bulkEntity} master data`, accessToken);
+      setMessage(`${pending.length} ${bulkEntity} record${pending.length === 1 ? '' : 's'} approved and promoted.`);
+      await refresh();
+    } catch (exception) {
+      setMessage(exception instanceof Error ? exception.message : 'Bulk approval failed.');
+    } finally {
+      setReviewing(undefined);
+    }
+  }
+
+  async function clearPending() {
+    if (!confirm('Clear all pending staging records? Promoted master data will stay in place.')) return;
+    setReviewing('clear');
+    setMessage(undefined);
+    try {
+      const result = await api.clearPendingStaging(await token());
+      setMessage(`${result.deleted} pending staging record${result.deleted === 1 ? '' : 's'} cleared. You can now re-import fresh.`);
+      setSelected(undefined);
+      await refresh();
+    } catch (exception) {
+      setMessage(exception instanceof Error ? exception.message : 'Could not clear pending staging records.');
+    } finally {
+      setReviewing(undefined);
+    }
+  }
+
   const parseStagingPayload = (item?: StagedImport) => {
     if (!item) return {} as Record<string, unknown>;
     try { return JSON.parse(item.payloadJson) as Record<string, unknown>; } catch { return {}; }
   };
   const payload = selected ? parseStagingPayload(selected) : undefined;
+
   const orderSummary = (item: StagedImport) => {
     if (item.entityType !== 'order') return { collection: '—', delivery: '—', pallets: '—' };
     const value = parseStagingPayload(item);
     const pick = (...keys: string[]) => keys.map(key => value[key]).find(candidate => String(candidate ?? '').trim().length > 0);
-    const collection = pick('collectionSiteName', 'collectionSite', 'originSiteName', 'originSite', 'originSiteCode', 'sellerName', 'collectFrom');
-    const directDelivery = pick('deliverySiteName', 'deliverySite', 'destinationName', 'destinationSiteName', 'destinationSite', 'destinationSiteCode', 'deliverTo');
+    const collection = pick('collectionSiteName', 'collectionSite', 'collectionLocation', 'originSiteName', 'originSite', 'originSiteCode', 'sellerName', 'collectFrom', 'collectionAddress');
+    const directDelivery = pick('deliverySiteName', 'deliverySite', 'deliveryLocation', 'destination', 'destinationName', 'destinationSiteName', 'destinationSite', 'destinationSiteCode', 'deliverTo', 'deliveryAddress');
     const market = pick('marketName', 'retailerName', 'retailerCode');
     const stall = pick('stallNumber', 'destinationCode');
     const delivery = directDelivery || (market && stall ? `${market} · ${stall}` : market || stall);
-    const pallets = pick('pallets', 'palletQty', 'palletQuantity');
+    const pallets = pick('pallets', 'palletQty', 'palletQuantity', 'quantity');
     return { collection: String(collection || '—'), delivery: String(delivery || '—'), pallets: String(pallets ?? '—') };
   };
+
+  const orderReadiness = useMemo(() => new Map((data || []).filter(item => item.entityType === 'order').map(item => {
+    const value = parseStagingPayload(item);
+    const summary = orderSummary(item);
+    const warnings = Array.isArray(value.intakeWarnings) ? value.intakeWarnings.filter(Boolean).map(String) : [];
+    const hasPallets = Number(summary.pallets) > 0 || /backhaul|backload/i.test(String(value.jobType || ''));
+    const hasPlannerContract = Object.prototype.hasOwnProperty.call(value, 'plannerReady');
+    const plannerReady = !hasPlannerContract || value.plannerReady === true || value.plannerReady === 'true';
+    const confidence = String(value.intakeConfidence || '').trim().toLowerCase();
+    const confidenceReady = !confidence || confidence === 'high';
+    const hasRoute = summary.collection !== '—' && summary.delivery !== '—';
+    const ready = hasRoute && hasPallets && plannerReady && confidenceReady && warnings.length === 0;
+    const reason = ready
+      ? 'Route, quantity and intake checks passed.'
+      : warnings[0] || (summary.collection === '—'
+        ? 'Collection point is missing or not matched.'
+        : summary.delivery === '—'
+          ? 'Delivery point is missing or not matched.'
+          : !hasPallets
+            ? 'Pallet quantity is missing.'
+            : !plannerReady
+              ? 'Parser has not marked this order planner-ready.'
+              : !confidenceReady
+                ? 'Intake confidence requires planner review.'
+                : 'Review the source evidence before approval.');
+    return [item.id, { ...summary, ready, reason }] as const;
+  })), [data]);
+
+  const clearForApproval = (data || []).filter(item => orderReadiness.get(item.id)?.ready).length;
   const pendingCounts = (data || []).filter(item => stagingStatus(item.status) === 'PendingReview').reduce<Record<string, number>>((counts, item) => ({ ...counts, [item.entityType]: (counts[item.entityType] || 0) + 1 }), {});
+
   return <section>
     <div className="title-row">
       <div>
         <p className="eyebrow">{ordersOnly ? 'Microsoft Graph order intake' : 'Control gate'}</p>
         <h1>{ordersOnly ? 'Order Review' : 'Staging review queue'}</h1>
-        {ordersOnly && <p className="hint">Orders captured from the Info mailbox through Microsoft Graph land here first. Check collection, delivery and pallet quantity, then approve them into live planning.</p>}
+        {ordersOnly && <p className="hint">Orders captured from the Info mailbox through Microsoft Graph land here first. Check collection, delivery, pallet quantity and source evidence before approval.</p>}
       </div>
       <div className="actions">
         <button onClick={() => void refresh()}>Refresh</button>
+        {ordersOnly && <button className="primary" disabled={requestingOrders || Boolean(reviewing)} onClick={() => void requestOrders()}>{requestingOrders ? 'Requesting orders…' : 'Request orders now'}</button>}
         {!ordersOnly && <button className="reject" disabled={reviewing === 'clear'} onClick={() => void clearPending()}>{reviewing === 'clear' ? 'Clearing...' : 'Clear pending'}</button>}
       </div>
     </div>
 
     {ordersOnly
-      ? <div className="planner-toolbar staging-filter"><strong>{data?.length || 0} order{data?.length === 1 ? '' : 's'} awaiting review</strong><span>Approve only after the source email/attachment evidence is correct.</span></div>
-      : <div className="planner-toolbar staging-filter"><label>Show pending <select value={entityFilter} onChange={event => { setEntityFilter(event.target.value); setSelected(undefined); }}><option value="">All record types</option>{['vehicle', 'driver', 'trailer', 'site', 'customercontact', 'marketcontact', 'customer', 'order'].map(type => <option key={type} value={type}>{type}</option>)}</select></label><span>{data?.length || 0} pending record{data?.length === 1 ? '' : 's'} shown</span></div>}
+      ? <div className="planner-toolbar staging-filter"><strong>{data?.length || 0} order{data?.length === 1 ? '' : 's'} awaiting review</strong><span>{clearForApproval} clear for approval · {Math.max((data?.length || 0) - clearForApproval, 0)} need review</span>{message && <span className="notice inline-notice">{message}</span>}</div>
+      : <div className="planner-toolbar staging-filter"><label>Show pending <select value={entityFilter} onChange={event => { setEntityFilter(event.target.value); setSelected(undefined); }}><option value="">All record types</option>{['vehicle', 'driver', 'trailer', 'site', 'customercontact', 'marketcontact', 'customer', 'order'].map(type => <option key={type} value={type}>{type}</option>)}</select></label><span>{data?.length || 0} pending record{data?.length === 1 ? '' : 's'} shown</span>{message && <span className="notice inline-notice">{message}</span>}</div>}
 
     <State loading={loading} error={error} empty={!data?.length}>
+      {ordersOnly && <div className="review-readiness-summary"><strong>{data?.length || 0} order{data?.length === 1 ? '' : 's'} in review</strong><span>{clearForApproval} clear for approval</span><span>{Math.max((data?.length || 0) - clearForApproval, 0)} need route, quantity or master-data review</span></div>}
+
       {!ordersOnly && <div className="bulk-review panel">
         <div><h2>Bulk approve master data</h2><p>Use this after checking the imported workbook. Vehicles must be promoted before Live Tracking can show the fleet.</p></div>
         <label>Record type <select value={bulkEntity} onChange={event => setBulkEntity(event.target.value)}>{['vehicle', 'driver', 'trailer', 'site', 'customercontact', 'marketcontact', 'customer', 'order'].map(type => <option key={type} value={type}>{type} ({pendingCounts[type] || 0})</option>)}</select></label>
         <button className="primary" disabled={!pendingCounts[bulkEntity] || reviewing === 'bulk'} onClick={() => void approveBulk()}>{reviewing === 'bulk' ? 'Approving...' : `Approve ${pendingCounts[bulkEntity] || 0}`}</button>
-        {bulkMessage && <p className="notice inline-notice">{bulkMessage}</p>}
       </div>}
 
-      {selected && <div className="panel review-panel">
-        <div><p className="eyebrow">Reviewing {selected.entityType}</p><h2>{String(payload?.poNumber || payload?.name || payload?.displayName || payload?.externalCode || selected.id)}</h2></div>
-        <button onClick={() => setSelected(undefined)}>Close</button>
-        <dl>{Object.entries(payload || {}).map(([key, value]) => <div key={key}><dt>{key.replace(/([A-Z])/g, ' $1')}</dt><dd>{String(value || '—')}</dd></div>)}</dl>
+      {selected && <div className="review-modal-scrim" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setSelected(undefined); }}>
+        <div className="panel review-panel review-modal" role="dialog" aria-modal="true" aria-label="Review details">
+          <div><p className="eyebrow">Reviewing {selected.entityType}</p><h2>{String(payload?.poNumber || payload?.name || payload?.displayName || payload?.externalCode || selected.id)}</h2></div>
+          <div className="actions">
+            {selected.entityType === 'order' && <button onClick={() => setSourceEvidenceId(selected.id)}>View email & attachments</button>}
+            <button onClick={() => setSelected(undefined)}>Close</button>
+          </div>
+          <dl>{Object.entries(payload || {}).map(([key, value]) => <div key={key}><dt>{key.replace(/([A-Z])/g, ' $1')}</dt><dd>{Array.isArray(value) ? value.join(', ') || '—' : String(value ?? '—')}</dd></div>)}</dl>
+        </div>
       </div>}
+      {sourceEvidenceId && <SourceEmailEvidenceDrawer stagingId={sourceEvidenceId} onClose={() => setSourceEvidenceId(undefined)} />}
 
       <div className="table-wrap">
         <table className="staging-review-table">
-          <thead><tr><th>Received</th>{!ordersOnly && <th>Type</th>}<th>Collection point</th><th>Delivery location</th><th>Pallets</th><th>Source</th><th>Status</th><th>Action</th></tr></thead>
+          <thead><tr><th>Received</th>{!ordersOnly && <th>Type</th>}<th>Collection point</th><th>Delivery location</th><th>Pallets</th><th>Source</th><th>{ordersOnly ? 'Readiness' : 'Status'}</th><th>Action</th></tr></thead>
           <tbody>{data?.map(item => {
             const summary = orderSummary(item);
+            const readiness = orderReadiness.get(item.id);
             return <tr key={item.id}>
               <td>{formatDate(item.receivedAtUtc)}</td>
               {!ordersOnly && <td>{item.entityType}</td>}
@@ -361,9 +472,11 @@ export function StagingQueue({ ordersOnly = false }: { ordersOnly?: boolean } = 
               <td>{summary.delivery}</td>
               <td>{summary.pallets}</td>
               <td>{item.source || '—'}</td>
-              <td><span className={`status ${statusClass(item.status)}`}>{stagingStatus(item.status)}</span></td>
+              <td>{ordersOnly && readiness
+                ? <span className={`order-readiness ${readiness.ready ? 'clear' : 'review'}`} title={readiness.reason}><strong>{readiness.ready ? 'Clear for approval' : 'Needs review'}</strong><small>{readiness.reason}</small></span>
+                : <span className={`status ${statusClass(item.status)}`}>{stagingStatus(item.status)}</span>}</td>
               <td><div className="actions">
-                <button onClick={() => setSelected(item)}>Review details</button>
+                <button onClick={() => { setSelected(item); setSourceEvidenceId(undefined); }}>Review details</button>
                 {stagingStatus(item.status) === 'PendingReview' && <>
                   <button className="approve" disabled={reviewing === item.id || reviewing === 'bulk'} onClick={() => void review(item, true)}>Approve</button>
                   <button className="reject" disabled={reviewing === item.id || reviewing === 'bulk'} onClick={() => void review(item, false)}>Reject</button>
