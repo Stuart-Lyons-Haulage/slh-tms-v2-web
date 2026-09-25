@@ -15,6 +15,7 @@ const StagingQueue = lazy(() => import('./pages/Pages').then(module => ({ defaul
 const DriverDispatchOperational = lazy(() => import('./pages/DriverDispatchOperational').then(module => ({ default: module.DriverDispatchOperational })));
 const DriverTimesheets = lazy(() => import('./pages/DriverTimesheets').then(module => ({ default: module.DriverTimesheets })));
 const AdminIntegrationSyncControls = lazy(() => import('./components/AdminIntegrationSyncControls').then(module => ({ default: module.AdminIntegrationSyncControls })));
+const AdminHub = lazy(() => import('./pages/AdminHub').then(module => ({ default: module.AdminHub })));
 const OrderIntakeMappingAdmin = lazy(() => import('./pages/OrderIntakeMappingAdmin').then(module => ({ default: module.OrderIntakeMappingAdmin })));
 const MobileOperations = lazy(() => import('./pages/MobileOperations').then(module => ({ default: module.MobileOperations })));
 
@@ -45,6 +46,7 @@ const complianceNavigation: NavItem[] = [
 ];
 
 const adminNavigation: NavItem[] = [
+  ['/admin', 'Admin Home'],
   ['/admin/integrations', 'Integrations'],
   ['/admin/order-intake', 'Order Intake Rules'],
   ['/admin/staging', 'Import Reviews'],
@@ -201,6 +203,7 @@ function Shell() {
         <Route path="/night-outs" element={<JobInvoiceHistory />} />
         <Route path="/driver-assignments" element={<DriverAssignments />} />
         <Route path="/driver-timesheets" element={<DriverTimesheets />} />
+        <Route path="/admin" element={<AdminHub />} />
         <Route path="/admin/staging" element={<StagingQueue />} />
         <Route path="/admin/integrations" element={<AdminIntegrationSyncControls />} />
         <Route path="/admin/order-intake" element={<OrderIntakeMappingAdmin />} />
