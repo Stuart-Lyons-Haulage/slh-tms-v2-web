@@ -23,14 +23,12 @@ describe("system feed health", () => {
           generatedAtUtc: new Date().toISOString(),
           lastPlatformUpdateUtc: isoMinutesAgo(2),
           schedules: {
-            dot: "continuous ingestion",
-            tachoMaster: "every 5 minutes",
+            roadTech: "tracking live every minute · history every 5 minutes · tacho every 20 minutes",
             sageHr: "05:30 Europe/London daily",
             fleetio: "every hour",
           },
           providers: [
-            { name: "DOT / Falcon", configured: true, state: "current", lastUpdatedUtc: isoMinutesAgo(2), ageMinutes: 2 },
-            { name: "TachoMaster", configured: true, state: "current", lastUpdatedUtc: isoMinutesAgo(4), ageMinutes: 4 },
+            { name: "RoadTech", configured: true, state: "current", lastUpdatedUtc: isoMinutesAgo(2), ageMinutes: 2 },
             { name: "Sage HR", configured: true, state: "current", lastUpdatedUtc: isoMinutesAgo(600), ageMinutes: 600 },
             { name: "Fleetio", configured: true, state: "current", lastUpdatedUtc: isoMinutesAgo(30), ageMinutes: 30 },
           ],
@@ -45,6 +43,19 @@ describe("system feed health", () => {
           emailIntake: { lastReceivedUtc: isoMinutesAgo(120) },
         } as never;
       }
+      if (url === "/api/v1/health/intake") {
+        return {
+          graph: {
+            enabled: true,
+            configured: true,
+            mailbox: "info@lyonshaulage.com",
+            lastSuccessUtc: isoMinutesAgo(1),
+            lastMessagesSeen: 1,
+            lastMessagesIngested: 1,
+            stale: false,
+          },
+        } as never;
+      }
       throw new Error(`Unexpected request ${url}`);
     });
 
@@ -52,8 +63,9 @@ describe("system feed health", () => {
     const byName = new Map(result.sources.map((feed) => [feed.name, feed]));
 
     expect(mockedRequest).toHaveBeenCalledWith("/api/v1/system-sync/state", "token");
-    expect(byName.get("Tracking")?.state).toBe("green");
-    expect(byName.get("TachoMaster")?.state).toBe("green");
+    expect(byName.get("RoadTech")?.state).toBe("green");
+    expect(byName.get("Info mailbox · Microsoft Graph")?.state).toBe("green");
+    expect(byName.get("Info mailbox · Microsoft Graph")?.detail).toContain("1 new message staged");
     expect(byName.get("Sage HR")?.state).toBe("green");
     expect(byName.get("Fleetio")?.state).toBe("green");
     expect(byName.get("Sage HR")?.ageMinutes).toBe(600);
