@@ -23,6 +23,7 @@ Office Microsoft account
 
 - Web: V2 React portal and SLH Mobile PWA
 - API: V2 .NET API
+- Migration job: one-shot API image that applies schema changes before the API starts
 - SQL: local SQL Server database `SLH_TMS_V2`
 - Authentication: Microsoft Entra only for Lyons office accounts
 - Remote access: optional Cloudflare Tunnel using an outbound-only connection
@@ -135,8 +136,9 @@ The start script:
 2. refuses to start if the required Entra values are missing;
 3. validates the tunnel token/public URL when the remote profile is enabled;
 4. validates Docker Compose;
-5. builds and starts the local stack;
-6. checks the API health endpoint;
+5. builds the local stack and runs the one-shot database migration stage;
+6. starts the API only after migrations complete successfully;
+7. checks the API health endpoint;
 7. reports the local and public portal URLs.
 
 ## Mobile use
