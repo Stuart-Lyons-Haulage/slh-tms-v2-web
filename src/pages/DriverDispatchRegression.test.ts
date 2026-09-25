@@ -48,15 +48,16 @@ describe("Driver Dispatch UI contract", () => {
     expect(operationalSource).not.toContain("<DriverDispatch />");
   });
 
-  it("keeps allocation, readiness and SMS dispatch inside the authoritative board without a stale overlay lookup", () => {
+  it("keeps allocation, readiness and Samsara route export inside the authoritative board without a stale overlay lookup", () => {
     expect(operationalSource).not.toContain("openDispatchPreview");
     expect(operationalSource).not.toContain("does not currently have an allocated run");
     expect(operationalSource).not.toContain("event.preventDefault()");
     expect(operationalSource).not.toContain("event.stopPropagation()");
     expect(authoritativeSource).toContain("getDriverDispatchRoute(effectiveSelection.runId");
     expect(authoritativeSource).toContain("checkDispatchReadiness(effectiveSelection.runId");
-    expect(authoritativeSource).toContain("sendDriverMessage(");
-    expect(authoritativeSource).toContain("<DispatchMessageDialog");
+    expect(authoritativeSource).toContain("sendRunToSamsara(effectiveSelection.runId, access)");
+    expect(authoritativeSource).not.toContain("sendDriverMessage(");
+    expect(authoritativeSource).not.toContain("<DispatchMessageDialog");
   });
 
   it("keeps driver search, sync and customer exports on the routed Driver Dispatch surface", () => {
@@ -79,7 +80,7 @@ describe("Driver Dispatch UI contract", () => {
     expect(authoritativeCss).toContain("visibility: visible !important");
   });
 
-  it("exposes Dispatch immediately for a selected row and allocates it before the SMS preview", () => {
+  it("exposes Dispatch immediately for a selected row and allocates it before route export", () => {
     expect(rowSource).toContain('action === "allocate" && selection.runId');
     expect(rowSource).toContain('{busy ? "Allocating…" : "Dispatch"}');
     expect(authoritativeSource).toContain("allocateDispatchRun(effectiveSelection.runId, driver.driverId, effectiveSelection, access)");

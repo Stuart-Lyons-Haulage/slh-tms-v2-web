@@ -29,8 +29,6 @@ type Props = {
   busy: boolean;
   onSelectionChange: (driverId: string, patch: Partial<DispatchAllocationSelection>) => void;
   onDispatch: (driver: DispatchDriverDto, selection: DispatchAllocationSelection) => void;
-  onAmend: (driver: DispatchDriverDto, selection: DispatchAllocationSelection) => void;
-  onUpdate: (driver: DispatchDriverDto, selection: DispatchAllocationSelection) => void;
   onSamsaraAndDispatch: (driver: DispatchDriverDto, selection: DispatchAllocationSelection) => void;
   onUnassign: (driver: DispatchDriverDto, selection: DispatchAllocationSelection) => void;
 };
@@ -74,8 +72,6 @@ export function DispatchDriverRow({
   busy,
   onSelectionChange,
   onDispatch,
-  onAmend,
-  onUpdate,
   onSamsaraAndDispatch,
   onUnassign
 }: Props) {
@@ -229,14 +225,10 @@ export function DispatchDriverRow({
     <td className="smart-dispatch-action-cell">
       {action === "allocate" && selection.runId && <>
         <button className="smart-action primary" type="button" disabled={busy || blocked || !selection.vehicleId} onClick={() => onDispatch(driver, selection)}>{busy ? "Allocating…" : "Dispatch"}</button>
-        <small>Validates and locks this row, then opens the editable text preview.</small>
+        <small>Validates and locks this row, then prepares it for route export.</small>
       </>}
       {action === "dispatch" && lockedToDriver && <button className="smart-action primary" type="button" disabled={busy || blocked || status?.availabilityStatus === "Unavailable"} onClick={() => onDispatch(driver, selection)}>{busy ? "Preparing…" : "Dispatch"}</button>}
-      {action === "amend" && lockedToDriver && <>
-        <button className="smart-action secondary" type="button" disabled={busy} onClick={() => onAmend(driver, selection)}>{busy ? "Working…" : "Amendment"}</button>
-        <button className="smart-action ghost dark" type="button" disabled={busy} onClick={() => onUpdate(driver, selection)}>Update text</button>
-      </>}
-      {lockedToDriver && selection.runId && <button className="smart-action ghost dark" type="button" disabled={busy || !samsaraConfigured} onClick={() => onSamsaraAndDispatch(driver, selection)}>{busy ? "Working…" : samsaraState ? "Update Samsara & Dispatch" : "Send to Samsara & Dispatch"}</button>}
+      {lockedToDriver && selection.runId && <button className="smart-action ghost dark" type="button" disabled={busy || !samsaraConfigured} onClick={() => onSamsaraAndDispatch(driver, selection)}>{busy ? "Working…" : samsaraState ? "Update Samsara route" : "Export route to Samsara"}</button>}
       {lockedToDriver && !samsaraConfigured && <small>Samsara not configured</small>}
       {samsaraState && <small title={samsaraState.routeId}>Samsara sent · {new Date(samsaraState.exportedAtUtc).toLocaleString("en-GB")}</small>}
       {samsaraState?.executionState && <small className="smart-inline-status">

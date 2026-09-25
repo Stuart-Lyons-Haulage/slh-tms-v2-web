@@ -188,20 +188,6 @@ export async function checkDispatchReadiness(
   }, 90000);
 }
 
-export async function sendDriverMessage(
-  runId: string,
-  message: string,
-  dispatch: boolean,
-  routeDrivingMinutes: number | null,
-  acknowledgeUnverified: boolean,
-  token: string
-): Promise<void> {
-  await request(`/api/v1/loads/${encodeURIComponent(runId)}/driver-message/sms`, token, {
-    method: "POST",
-    body: JSON.stringify({ message, dispatch, routeDrivingMinutes, acknowledgeUnverified })
-  }, 90000);
-}
-
 export async function sendRunToSamsara(runId: string, token: string): Promise<SamsaraDispatchResult> {
   return request<SamsaraDispatchResult>(
     `/api/v1/integrations/samsara/dispatch/${encodeURIComponent(runId)}`,

@@ -1,12 +1,11 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
-import { getDriverDispatchRoute, getRunDispatch } from "../../api/runs";
+import { getDriverDispatchRoute } from "../../api/runs";
 import { useAccessToken } from "../../lib/auth";
 import "../../smart-dispatch.css";
 import { ComplianceWarningBanner } from "./ComplianceWarningBanner";
 import { DispatchDriverRow } from "./DispatchDriverRow";
 import { DispatchFilters } from "./DispatchFilters";
-import { DispatchMessageDialog } from "./DispatchMessageDialog";
-import { allocateDispatchRun, checkDispatchReadiness, getAvailableTimes, getSmartDispatch, sendDriverMessage, sendRunToSamsara, syncDispatchDrivers, unassignDispatchRun } from "./dispatchApi";
+import { allocateDispatchRun, checkDispatchReadiness, getAvailableTimes, getSmartDispatch, sendRunToSamsara, syncDispatchDrivers, unassignDispatchRun } from "./dispatchApi";
 import {
   applyAvailableTimes,
   availableTimesByDriver,
@@ -23,14 +22,7 @@ import {
   type DispatchAvailableTimeMap,
   type DispatchSelectionMap
 } from "./dispatchBoardState";
-import {
-  buildAmendmentText,
-  buildDispatchText,
-  buildUpdateText,
-  plannedStartLocal,
-  routeDrivingMinutes,
-  type DriverMessageMode
-} from "./dispatchMessaging";
+import { routeDrivingMinutes } from "./dispatchMessaging";
 import type { DispatchAllocationSelection, DispatchDriverDto, DispatchEmploymentFilter, DispatchFilter, DispatchLockFailure, DispatchRunDto } from "./types";
 
 type Props = {
@@ -42,15 +34,6 @@ type Props = {
 
 type SmartDispatchSnapshot = Awaited<ReturnType<typeof getSmartDispatch>>;
 type ActionState = "times" | "lock" | "refresh" | "samsara" | undefined;
-type MessageState = {
-  runId: string;
-  reference: string;
-  text: string;
-  mode: DriverMessageMode;
-  routeMinutes: number;
-  acknowledgeUnverified: boolean;
-};
-
 const filterValues: DispatchFilter[] = ["all", "unallocated", "backloads", "warnings", "skills-mismatch"];
 const employmentFilterValues: DispatchEmploymentFilter[] = ["all", "employed", "agency", "casual", "subcontractor", "unmatched"];
 
@@ -117,9 +100,6 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
   const [driverSearch, setDriverSearch] = useState("");
   const [action, setAction] = useState<ActionState>();
   const [busyDriverId, setBusyDriverId] = useState<string>();
-  const [message, setMessage] = useState<MessageState>();
-  const [messageError, setMessageError] = useState<string>();
-  const [sendingMessage, setSendingMessage] = useState(false);
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
 
@@ -280,7 +260,6 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
   async function prepareDispatch(driver: DispatchDriverDto, selection: DispatchAllocationSelection) {
     if (!snapshot || !selection.runId) return;
     setBusyDriverId(driver.driverId);
-    setMessageError(undefined);
     setNotice(undefined);
     setFailures(current => current.filter(failure => failure.driverId !== driver.driverId));
     try {
@@ -307,7 +286,7 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
 
       if (lockedRunId(driver.driverId) !== effectiveSelection.runId) {
         await allocateDispatchRun(effectiveSelection.runId, driver.driverId, effectiveSelection, access);
-        setNotice(`${snapshot.runs.find(run => run.runId === effectiveSelection.runId)?.reference || "Run"} allocated to ${driver.name}. Preparing Dispatch text…`);
+        setNotice(`${snapshot.runs.find(run => run.runId === effectiveSelection.runId)?.reference || "Run"} allocated to ${driver.name}. Checking route and Samsara readiness…`);
         onLocked?.();
       }
 
@@ -316,86 +295,25 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
       if (!minutes) throw new Error("The run could not be routed. No HGV driving time was returned.");
 
       let readiness = await checkDispatchReadiness(effectiveSelection.runId, minutes, false, access);
-      let acknowledged = false;
       if (!readiness.canDispatch && readiness.structuralReadiness?.classification === "Unverified" && readiness.structuralReadiness.requiresAcknowledgement) {
         const warnings = readiness.structuralReadiness.checks.filter(check => !check.passed).map(check => `• ${check.message}`).join("\n");
         if (!window.confirm(`Pre-dispatch warnings:\n\n${warnings}\n\nAcknowledge and continue?`)) return;
-        acknowledged = true;
         readiness = await checkDispatchReadiness(effectiveSelection.runId, minutes, true, access);
       }
       if (!readiness.canDispatch) throw new Error(readiness.explanation || "Dispatch readiness did not pass.");
 
-      const dispatch = await getRunDispatch(effectiveSelection.runId, access);
-      const reference = snapshot.runs.find(run => run.runId === effectiveSelection.runId)?.reference || dispatch.reference;
-      setMessage({
-        runId: effectiveSelection.runId,
-        reference,
-        text: buildDispatchText(reference, dispatch, plannedStartLocal(effectiveSelection.plannedStartTime)),
-        mode: "initial",
-        routeMinutes: minutes,
-        acknowledgeUnverified: acknowledged
-      });
+      if (!snapshot.samsaraConfigured) {
+        setNotice("Dispatch checks passed, but Samsara is not configured. The run is allocated and ready for route export.");
+        return;
+      }
+      const result = await sendRunToSamsara(effectiveSelection.runId, access);
+      await refresh();
+      setNotice(result.message);
     } catch (exception) {
       const reason = exception instanceof Error ? exception.message : "Dispatch could not be prepared.";
       setFailures(current => current.some(failure => failure.driverId === driver.driverId && failure.reason === reason)
         ? current
         : [...current.filter(failure => failure.driverId !== driver.driverId), { driverId: driver.driverId, runId: selection.runId, reason }]);
-    } finally {
-      setBusyDriverId(undefined);
-    }
-  }
-
-  async function prepareAmendment(driver: DispatchDriverDto, selection: DispatchAllocationSelection) {
-    if (!snapshot || !selection.runId) return;
-    setBusyDriverId(driver.driverId);
-    setMessageError(undefined);
-    try {
-      const access = await token();
-      const dispatch = await getRunDispatch(selection.runId, access);
-      const reference = snapshot.runs.find(run => run.runId === selection.runId)?.reference || dispatch.reference;
-      setMessage({
-        runId: selection.runId,
-        reference,
-        text: buildAmendmentText(reference, dispatch, plannedStartLocal(selection.plannedStartTime)),
-        mode: "amendment",
-        routeMinutes: 0,
-        acknowledgeUnverified: false
-      });
-    } catch (exception) {
-      setFailures(current => [...current.filter(failure => failure.driverId !== driver.driverId), {
-        driverId: driver.driverId,
-        runId: selection.runId,
-        reason: exception instanceof Error ? exception.message : "Amendment preview could not be prepared."
-      }]);
-    } finally {
-      setBusyDriverId(undefined);
-    }
-  }
-
-  function prepareUpdate(driver: DispatchDriverDto, selection: DispatchAllocationSelection) {
-    if (!snapshot || !selection.runId) return;
-    const reference = snapshot.runs.find(run => run.runId === selection.runId)?.reference || "Run";
-    setMessage({ runId: selection.runId, reference, text: buildUpdateText(reference), mode: "update", routeMinutes: 0, acknowledgeUnverified: false });
-  }
-
-  async function handleSamsaraAndDispatch(driver: DispatchDriverDto, selection: DispatchAllocationSelection) {
-    if (!selection.runId) return;
-    setBusyDriverId(driver.driverId);
-    setNotice(undefined);
-    setError(undefined);
-    setFailures(current => current.filter(failure => failure.driverId !== driver.driverId));
-    try {
-      const access = await token();
-      const result = await sendRunToSamsara(selection.runId, access);
-      setNotice(`${result.message} Preparing Dispatch…`);
-      await prepareDispatch(driver, selection);
-    } catch (exception) {
-      const reason = exception instanceof Error ? exception.message : "Samsara export and Dispatch could not be completed.";
-      setFailures(current => [...current.filter(failure => failure.driverId !== driver.driverId), {
-        driverId: driver.driverId,
-        runId: selection.runId,
-        reason
-      }]);
     } finally {
       setBusyDriverId(undefined);
     }
@@ -459,31 +377,6 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
     }
   }
 
-  async function handleSendMessage(text: string, reason?: string) {
-    if (!message) return;
-    setSendingMessage(true);
-    setMessageError(undefined);
-    try {
-      const access = await token();
-       await sendDriverMessage(
-         message.runId,
-         reason ? `${text}\n\nReason for amendment: ${reason}` : text,
-        message.mode === "initial",
-        message.mode === "initial" ? message.routeMinutes : null,
-        message.mode === "initial" ? message.acknowledgeUnverified : false,
-        access
-      );
-      const sentMode = message.mode;
-      setMessage(undefined);
-      await refresh();
-      setNotice(sentMode === "initial" ? "Dispatch sent. Waiting for driver confirmation." : sentMode === "amendment" ? "Amendment sent." : "Driver update sent.");
-    } catch (exception) {
-      setMessageError(exception instanceof Error ? exception.message : "Driver text could not be sent.");
-    } finally {
-      setSendingMessage(false);
-    }
-  }
-
   if (!snapshot && action === "refresh") {
     return <section className="smart-dispatch-board"><div className="smart-dispatch-loading">Building Driver Dispatch…</div></section>;
   }
@@ -502,7 +395,7 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
       <div>
         <span className="smart-eyebrow">Authoritative planning & dispatch</span>
         <h2>Driver Dispatch</h2>
-        <p>One screen for Tacho/live driver selection, allocation, compliance, driver messaging and Samsara route dispatch.</p>
+        <p>One screen for Tacho/live driver selection, allocation, compliance and Samsara route dispatch.</p>
       </div>
       <div className="smart-dispatch-actions">
         {onPlanningDateChange && <label className="smart-date-control">Planning date<input type="date" value={planningDate} onChange={event => onPlanningDateChange(event.target.value)} /></label>}
@@ -592,9 +485,7 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
               busy={busyDriverId === driver.driverId}
               onSelectionChange={changeSelection}
               onDispatch={(row, selection) => void prepareDispatch(row, selection)}
-              onAmend={(row, selection) => void prepareAmendment(row, selection)}
-              onUpdate={prepareUpdate}
-              onSamsaraAndDispatch={(row, selection) => void handleSamsaraAndDispatch(row, selection)}
+              onSamsaraAndDispatch={(row, selection) => void prepareDispatch(row, selection)}
               onUnassign={(row, selection) => void handleUnassign(row, selection)}
             />)}
           </tbody>
@@ -603,16 +494,6 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
       </div>
     </div>
 
-     <p className="smart-dispatch-footnote">Select work and press Dispatch on the row to validate and allocate it, then open the editable SMS preview. The Planner owns the built-run Lock Plan step. Regular 11h daily rest is the default; choose Reduced rest (9h) only when the planner intends to use that concession. Trailer continuity follows the driver's last-used trailer unless the selected run contains a planner trailer-swap instruction. Send to Samsara updates the same external run rather than creating duplicates. Amendments, free-form updates and Unassign stay on the same row and are audited after the plan is locked.</p>
-
-    {message && <DispatchMessageDialog
-      reference={message.reference}
-      initialText={message.text}
-      mode={message.mode}
-      busy={sendingMessage}
-      error={messageError}
-      onClose={() => { if (!sendingMessage) { setMessage(undefined); setMessageError(undefined); } }}
-      onSend={text => void handleSendMessage(text)}
-    />}
+     <p className="smart-dispatch-footnote">Select work and press Dispatch to validate, allocate and export the route to Samsara. The Planner owns the built-run Lock Plan step. Regular 11h daily rest is the default; choose Reduced rest (9h) only when the planner intends to use that concession. Trailer continuity follows the driver's last-used trailer unless the selected run contains a planner trailer-swap instruction. Samsara updates the same external run rather than creating duplicates. Unassign remains audited after the plan is locked.</p>
   </section>;
 }
