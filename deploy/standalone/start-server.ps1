@@ -15,18 +15,15 @@ function Read-EnvValue([string]$Name) {
     if (-not $line) { return "" }
     return ($line -split '=',2)[1].Trim()
 }
+function Assert-CleanRepository([string]$Path) {
+    $changes = git -C $Path status --porcelain --untracked-files=no
+    if ($LASTEXITCODE -ne 0) { throw "Unable to inspect Git repository at $Path." }
+    if ($changes) { throw "Refusing automatic update because tracked local changes exist in $Path. Commit, stash or discard them first." }
+}
 
 Require-Command "git"
 Require-Command "docker"
 if (-not (Test-Path $ApiRoot)) { throw "Expected sibling API repository at $ApiRoot" }
-
-Write-Host "Updating canonical V2 repositories from main..."
-git -C $WebRoot fetch origin main
-git -C $WebRoot checkout main
-git -C $WebRoot pull --ff-only origin main
-git -C $ApiRoot fetch origin main
-git -C $ApiRoot checkout main
-git -C $ApiRoot pull --ff-only origin main
 
 if (-not (Test-Path $EnvFile)) {
     Copy-Item (Join-Path $WebRoot ".env.standalone.example") $EnvFile
@@ -46,17 +43,38 @@ if ($profiles -match "(^|,)remote(,|$)") {
     if ([string]::IsNullOrWhiteSpace((Read-EnvValue "TMS_PUBLIC_URL"))) { throw "Remote profile requires TMS_PUBLIC_URL." }
 }
 
+Assert-CleanRepository $WebRoot
+Assert-CleanRepository $ApiRoot
+
+$webBefore = (git -C $WebRoot rev-parse --short HEAD).Trim()
+$apiBefore = (git -C $ApiRoot rev-parse --short HEAD).Trim()
+
+Write-Host "Updating canonical V2 repositories from main..."
+git -C $WebRoot fetch origin main
+git -C $WebRoot checkout main
+git -C $WebRoot pull --ff-only origin main
+git -C $ApiRoot fetch origin main
+git -C $ApiRoot checkout main
+git -C $ApiRoot pull --ff-only origin main
+
+$webAfter = (git -C $WebRoot rev-parse --short HEAD).Trim()
+$apiAfter = (git -C $ApiRoot rev-parse --short HEAD).Trim()
+Write-Host "Web: $webBefore -> $webAfter"
+Write-Host "API: $apiBefore -> $apiAfter"
+
 New-Item -ItemType Directory -Force -Path (Join-Path $WebRoot "backup") | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $WebRoot "archive") | Out-Null
 
 Write-Host "Validating Docker Compose configuration..."
 docker compose --env-file $EnvFile -f $ComposeFile config | Out-Null
+
 Write-Host "Building and starting SLH TMS V2..."
 docker compose --env-file $EnvFile -f $ComposeFile up -d --build
 
 $port = Read-EnvValue "TMS_HTTP_PORT"
 if ([string]::IsNullOrWhiteSpace($port)) { $port = "8080" }
 $health = "http://127.0.0.1:$port/tms-api/api/v1/health"
+
 Write-Host "Waiting for API health..."
 $ready = $false
 for ($i = 0; $i -lt 30; $i++) {
@@ -66,14 +84,22 @@ for ($i = 0; $i -lt 30; $i++) {
     } catch {}
     Start-Sleep -Seconds 2
 }
+
 if (-not $ready) {
+    Write-Host ""
+    Write-Host "Update completed but the API did not become healthy." -ForegroundColor Red
+    Write-Host "Web version: $webAfter"
+    Write-Host "API version: $apiAfter"
     docker compose --env-file $EnvFile -f $ComposeFile ps
+    docker compose --env-file $EnvFile -f $ComposeFile logs api --tail=120
     throw "V2 containers started, but API health did not become ready at $health."
 }
 
 Write-Host ""
-Write-Host "SLH TMS V2 is healthy."
-Write-Host ("Local portal: http://" + $env:COMPUTERNAME + ":" + $port)
+Write-Host "SLH TMS V2 is healthy." -ForegroundColor Green
+Write-Host "Web version: $webAfter"
+Write-Host "API version: $apiAfter"
+Write-Host "Local portal: http://127.0.0.1:$port"
 $publicUrl = Read-EnvValue "TMS_PUBLIC_URL"
 if (-not [string]::IsNullOrWhiteSpace($publicUrl)) { Write-Host "Remote portal: $publicUrl" }
 Write-Host "Authentication: Microsoft Entra"
