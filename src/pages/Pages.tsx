@@ -445,10 +445,10 @@ export function StagingQueue({ ordersOnly = false, masterOnly = false }: { order
     <div className="title-row">
       <div>
         <p className="eyebrow">{ordersOnly ? 'Microsoft Graph order intake' : 'Admin · Imports'}</p>
-        <h1>{ordersOnly ? 'Order Review' : 'Master Data Imports & Staging'}</h1>
+        <h1>{ordersOnly ? 'Order Review' : 'Master Data Imports & Staging Queue'}</h1>
         {ordersOnly
           ? <p className="hint">Orders captured from the Info mailbox through Microsoft Graph land here first. Check collection, delivery, pallet quantity and source evidence before approval.</p>
-          : <p className="hint">Import and review additions to governed Master Data here. Transport orders never appear in this queue; they remain in Order Review.</p>}
+          : <p className="hint">Add, import and approve governed Master Data here only — sites, vehicles, drivers, trailers, customers, contacts, markets, fuel data and geofences. Transport orders never appear in this queue; they remain exclusively in Order Review.</p>}
       </div>
       <div className="actions">
         <button onClick={() => void refresh()}>Refresh</button>
@@ -466,7 +466,7 @@ export function StagingQueue({ ordersOnly = false, masterOnly = false }: { order
       {ordersOnly && <div className="review-readiness-summary"><strong>{data?.length || 0} order{data?.length === 1 ? '' : 's'} in review</strong><span>{clearForApproval} clear for approval</span><span>{Math.max((data?.length || 0) - clearForApproval, 0)} need route, quantity or master-data review</span></div>}
 
       {!ordersOnly && <div className="bulk-review panel">
-        <div><h2>Bulk approve master data</h2><p>Use this only after checking the import preview. Order approvals are deliberately excluded from this Admin queue.</p></div>
+        <div><h2>Bulk approve master data</h2><p>This queue is only for additions or changes to Master Data. Order approvals are deliberately excluded and stay in Order Review.</p></div>
         <label>Record type <select value={bulkEntity} onChange={event => setBulkEntity(event.target.value)}>{masterStagingTypes.map(type => <option key={type} value={type}>{type} ({pendingCounts[type] || 0})</option>)}</select></label>
         <button className="primary" disabled={!pendingCounts[bulkEntity] || reviewing === 'bulk'} onClick={() => void approveBulk()}>{reviewing === 'bulk' ? 'Approving...' : `Approve ${pendingCounts[bulkEntity] || 0}`}</button>
       </div>}
