@@ -11,7 +11,7 @@ ENV VITE_ENTRA_CLIENT_ID=$VITE_ENTRA_CLIENT_ID
 ENV VITE_ENTRA_API_SCOPE=$VITE_ENTRA_API_SCOPE
 ENV VITE_AZURE_MAPS_CLIENT_ID=$VITE_AZURE_MAPS_CLIENT_ID
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-RUN corepack enable && pnpm install --frozen-lockfile
+RUN corepack enable && corepack prepare pnpm@11.0.0 --activate && pnpm install --frozen-lockfile
 COPY . .
 RUN test -n "$VITE_API_BASE_URL" \
     && test -n "$VITE_ENTRA_TENANT_ID" \
