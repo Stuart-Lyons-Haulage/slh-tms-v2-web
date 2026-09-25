@@ -23,10 +23,11 @@ type DuplicateCandidate = {
   preservedFields: string[];
 };
 
-type DuplicateEntityType = 'sites' | 'drivers' | 'vehicles' | 'trailers' | 'markets';
+type DuplicateEntityType = 'sites' | 'customers' | 'drivers' | 'vehicles' | 'trailers' | 'markets';
 type MergeResult = { merged: number; reviewed: number; messages: string[] };
 const entityLabels: Record<DuplicateEntityType, string> = {
   sites: 'Sites',
+  customers: 'Customers',
   drivers: 'Drivers',
   vehicles: 'Vehicles',
   trailers: 'Trailers',

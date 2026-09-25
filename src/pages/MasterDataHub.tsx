@@ -9,7 +9,7 @@ import { GeofenceOperational } from './GeofenceOperational';
 import { MasterDataDuplicateReviewPanel } from '../components/MasterDataDuplicateReviewPanel';
 
 type MasterSection = MasterDataTab | 'fuel-cards' | 'markets' | 'fuel-prices';
-type DuplicateEntity = 'sites' | 'drivers' | 'vehicles' | 'trailers' | 'markets';
+type DuplicateEntity = 'sites' | 'customers' | 'drivers' | 'vehicles' | 'trailers' | 'markets';
 
 const sections: Array<{ key: MasterSection; label: string }> = [
   { key: 'drivers', label: 'Drivers' },
@@ -27,7 +27,7 @@ function canonicalSection(value: MasterSection): MasterSection {
 }
 
 function duplicateEntity(section: MasterSection): DuplicateEntity | undefined {
-  if (section === 'sites' || section === 'drivers' || section === 'vehicles' || section === 'trailers' || section === 'markets') return section;
+  if (section === 'sites' || section === 'customers' || section === 'drivers' || section === 'vehicles' || section === 'trailers' || section === 'markets') return section;
   return undefined;
 }
 
