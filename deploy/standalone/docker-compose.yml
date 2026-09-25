@@ -34,11 +34,12 @@ services:
         -Q "IF DB_ID(N'SLH_TMS_V2') IS NULL CREATE DATABASE [SLH_TMS_V2];"
     restart: "no"
 
-  api:
+  migration:
     build:
       context: "${API_BUILD_CONTEXT:-../../../API}"
       dockerfile: Dockerfile
-    restart: unless-stopped
+    image: slh-tms-v2-api:local
+    restart: "no"
     depends_on:
       db-init:
         condition: service_completed_successfully
@@ -47,6 +48,28 @@ services:
       ConnectionStrings__TmsDb: "Server=sql,1433;Database=SLH_TMS_V2;User Id=sa;Password=${SQL_SA_PASSWORD};Encrypt=True;TrustServerCertificate=True"
       Database__ApplySchemaChangesOnStartup: "true"
       Database__ApplyDeferredSchemaMigrations: "${APPLY_DEFERRED_SCHEMA_MIGRATIONS:-false}"
+      Database__MigrationOnly: "true"
+      Database__ExpectedDatabaseName: "SLH_TMS_V2"
+      Entra__TenantId: "${ENTRA_TENANT_ID}"
+      Entra__Audience: "${ENTRA_API_AUDIENCE}"
+      Entra__AllowedDomains__0: "${ENTRA_ALLOWED_DOMAIN_0:-lyonshaulage.com}"
+      Entra__AllowedDomains__1: "${ENTRA_ALLOWED_DOMAIN_1:-stuartlyonshaulage.co.uk}"
+
+  api:
+    build:
+      context: "${API_BUILD_CONTEXT:-../../../API}"
+      dockerfile: Dockerfile
+    image: slh-tms-v2-api:local
+    restart: unless-stopped
+    depends_on:
+      migration:
+        condition: service_completed_successfully
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__TmsDb: "Server=sql,1433;Database=SLH_TMS_V2;User Id=sa;Password=${SQL_SA_PASSWORD};Encrypt=True;TrustServerCertificate=True"
+      Database__ApplySchemaChangesOnStartup: "false"
+      Database__ApplyDeferredSchemaMigrations: "${APPLY_DEFERRED_SCHEMA_MIGRATIONS:-false}"
+      Database__MigrationOnly: "false"
       Database__ExpectedDatabaseName: "SLH_TMS_V2"
       Auth__Mode: Entra
       Entra__TenantId: "${ENTRA_TENANT_ID}"
