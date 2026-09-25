@@ -318,7 +318,64 @@ export function StagingQueue({ ordersOnly = false }: { ordersOnly?: boolean } = 
     return { collection: String(collection || '—'), delivery: String(delivery || '—'), pallets: String(pallets ?? '—') };
   };
   const pendingCounts = (data || []).filter(item => stagingStatus(item.status) === 'PendingReview').reduce<Record<string, number>>((counts, item) => ({ ...counts, [item.entityType]: (counts[item.entityType] || 0) + 1 }), {});
-  return <section><div className="title-row"><div><p className="eyebrow">Control gate</p><h1>Staging review queue</h1></div><div className="actions"><button onClick={() => void refresh()}>Refresh</button><button className="reject" disabled={reviewing === 'clear'} onClick={() => void clearPending()}>{reviewing === 'clear' ? 'Clearing...' : 'Clear pending'}</button></div></div><div className="planner-toolbar staging-filter"><label>Show pending <select value={entityFilter} onChange={event => { setEntityFilter(event.target.value); setSelected(undefined); }}><option value="">All record types</option>{['vehicle', 'driver', 'trailer', 'site', 'customercontact', 'marketcontact', 'customer', 'order'].map(type => <option key={type} value={type}>{type}</option>)}</select></label><span>{data?.length || 0} pending record{data?.length === 1 ? '' : 's'} shown</span></div><State loading={loading} error={error} empty={!data?.length}><div className="bulk-review panel"><div><h2>Bulk approve master data</h2><p>Use this after checking the imported workbook. Vehicles must be promoted before Live Tracking can show the fleet.</p></div><label>Record type <select value={bulkEntity} onChange={event => setBulkEntity(event.target.value)}>{['vehicle', 'driver', 'trailer', 'site', 'customercontact', 'marketcontact', 'customer', 'order'].map(type => <option key={type} value={type}>{type} ({pendingCounts[type] || 0})</option>)}</select></label><button className="primary" disabled={!pendingCounts[bulkEntity] || reviewing === 'bulk'} onClick={() => void approveBulk()}>{reviewing === 'bulk' ? 'Approving...' : `Approve ${pendingCounts[bulkEntity] || 0}`}</button>{bulkMessage && <p className="notice inline-notice">{bulkMessage}</p>}</div>{selected && <div className="panel review-panel"><div><p className="eyebrow">Reviewing {selected.entityType}</p><h2>{String(payload?.poNumber || payload?.name || payload?.displayName || payload?.externalCode || selected.id)}</h2></div><button onClick={() => setSelected(undefined)}>Close</button><dl>{Object.entries(payload || {}).map(([key, value]) => <div key={key}><dt>{key.replace(/([A-Z])/g, ' $1')}</dt><dd>{String(value || '—')}</dd></div>)}</dl></div>}<div className="table-wrap"><table className="staging-review-table"><thead><tr><th>Received</th><th>Type</th><th>Collection point</th><th>Delivery location</th><th>Pallets</th><th>Source</th><th>Status</th><th>Action</th></tr></thead><tbody>{data?.map(item => { const summary = orderSummary(item); return <tr key={item.id}><td>{formatDate(item.receivedAtUtc)}</td><td>{item.entityType}</td><td>{summary.collection}</td><td>{summary.delivery}</td><td>{summary.pallets}</td><td>{item.source || '—'}</td><td><span className={`status ${statusClass(item.status)}`}>{stagingStatus(item.status)}</span></td><td><div className="actions"><button onClick={() => setSelected(item)}>Review details</button>{stagingStatus(item.status) === 'PendingReview' && <><button className="approve" disabled={reviewing === item.id || reviewing === 'bulk'} onClick={() => void review(item, true)}>Approve</button><button className="reject" disabled={reviewing === item.id || reviewing === 'bulk'} onClick={() => void review(item, false)}>Reject</button></>}{stagingStatus(item.status) !== 'PendingReview' && (item.reviewNote || '—')}</div></td></tr>; })}</tbody></table></div></State></section>;
+  return <section>
+    <div className="title-row">
+      <div>
+        <p className="eyebrow">{ordersOnly ? 'Microsoft Graph order intake' : 'Control gate'}</p>
+        <h1>{ordersOnly ? 'Order Review' : 'Staging review queue'}</h1>
+        {ordersOnly && <p className="hint">Orders captured from the Info mailbox through Microsoft Graph land here first. Check collection, delivery and pallet quantity, then approve them into live planning.</p>}
+      </div>
+      <div className="actions">
+        <button onClick={() => void refresh()}>Refresh</button>
+        {!ordersOnly && <button className="reject" disabled={reviewing === 'clear'} onClick={() => void clearPending()}>{reviewing === 'clear' ? 'Clearing...' : 'Clear pending'}</button>}
+      </div>
+    </div>
+
+    {ordersOnly
+      ? <div className="planner-toolbar staging-filter"><strong>{data?.length || 0} order{data?.length === 1 ? '' : 's'} awaiting review</strong><span>Approve only after the source email/attachment evidence is correct.</span></div>
+      : <div className="planner-toolbar staging-filter"><label>Show pending <select value={entityFilter} onChange={event => { setEntityFilter(event.target.value); setSelected(undefined); }}><option value="">All record types</option>{['vehicle', 'driver', 'trailer', 'site', 'customercontact', 'marketcontact', 'customer', 'order'].map(type => <option key={type} value={type}>{type}</option>)}</select></label><span>{data?.length || 0} pending record{data?.length === 1 ? '' : 's'} shown</span></div>}
+
+    <State loading={loading} error={error} empty={!data?.length}>
+      {!ordersOnly && <div className="bulk-review panel">
+        <div><h2>Bulk approve master data</h2><p>Use this after checking the imported workbook. Vehicles must be promoted before Live Tracking can show the fleet.</p></div>
+        <label>Record type <select value={bulkEntity} onChange={event => setBulkEntity(event.target.value)}>{['vehicle', 'driver', 'trailer', 'site', 'customercontact', 'marketcontact', 'customer', 'order'].map(type => <option key={type} value={type}>{type} ({pendingCounts[type] || 0})</option>)}</select></label>
+        <button className="primary" disabled={!pendingCounts[bulkEntity] || reviewing === 'bulk'} onClick={() => void approveBulk()}>{reviewing === 'bulk' ? 'Approving...' : `Approve ${pendingCounts[bulkEntity] || 0}`}</button>
+        {bulkMessage && <p className="notice inline-notice">{bulkMessage}</p>}
+      </div>}
+
+      {selected && <div className="panel review-panel">
+        <div><p className="eyebrow">Reviewing {selected.entityType}</p><h2>{String(payload?.poNumber || payload?.name || payload?.displayName || payload?.externalCode || selected.id)}</h2></div>
+        <button onClick={() => setSelected(undefined)}>Close</button>
+        <dl>{Object.entries(payload || {}).map(([key, value]) => <div key={key}><dt>{key.replace(/([A-Z])/g, ' $1')}</dt><dd>{String(value || '—')}</dd></div>)}</dl>
+      </div>}
+
+      <div className="table-wrap">
+        <table className="staging-review-table">
+          <thead><tr><th>Received</th>{!ordersOnly && <th>Type</th>}<th>Collection point</th><th>Delivery location</th><th>Pallets</th><th>Source</th><th>Status</th><th>Action</th></tr></thead>
+          <tbody>{data?.map(item => {
+            const summary = orderSummary(item);
+            return <tr key={item.id}>
+              <td>{formatDate(item.receivedAtUtc)}</td>
+              {!ordersOnly && <td>{item.entityType}</td>}
+              <td>{summary.collection}</td>
+              <td>{summary.delivery}</td>
+              <td>{summary.pallets}</td>
+              <td>{item.source || '—'}</td>
+              <td><span className={`status ${statusClass(item.status)}`}>{stagingStatus(item.status)}</span></td>
+              <td><div className="actions">
+                <button onClick={() => setSelected(item)}>Review details</button>
+                {stagingStatus(item.status) === 'PendingReview' && <>
+                  <button className="approve" disabled={reviewing === item.id || reviewing === 'bulk'} onClick={() => void review(item, true)}>Approve</button>
+                  <button className="reject" disabled={reviewing === item.id || reviewing === 'bulk'} onClick={() => void review(item, false)}>Reject</button>
+                </>}
+                {stagingStatus(item.status) !== 'PendingReview' && (item.reviewNote || '—')}
+              </div></td>
+            </tr>;
+          })}</tbody>
+        </table>
+      </div>
+    </State>
+  </section>;
 }
 
 async function loadFleetStatus(accessToken: string): Promise<FleetStatus> {
