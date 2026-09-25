@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type
 import { NavLink } from 'react-router-dom';
 import { MasterDataExportButton } from '../components/MasterDataExportButton';
 import { SourceEmailEvidenceDrawer } from '../components/SourceEmailEvidenceDrawer';
+import { MasterDataCsvImport } from './MasterDataCsvImport';
 import * as XLSX from 'xlsx';
 import { api, type Customer, type CustomerContact, type DiagnosticsTables, type Driver, type DriverAssignment, type FleetStatus, type Load, type LoadDispatch, type MarketContact, type ReturnLoadSuggestions, type Site, type StageBatchRequest, type StagedImport, type Telemetry, type Trailer, type TransportOrder, type Vehicle } from '../lib/api';
 import { useAccessToken } from '../lib/auth';
@@ -297,23 +298,27 @@ export function ExportCentre() {
   return <section><div className="title-row"><div><p className="eyebrow">Handover & reporting</p><h1>Operational exports</h1></div><button onClick={refresh}>Refresh data</button></div><div className="report-toolbar"><label>ETA operating date <input type="date" value={date} onChange={event => setDate(event.target.value)} /></label><span>Customer ETA exports use live tracking where available and clearly label planned fallback values.</span></div><State loading={ordersApi.loading || loads.loading || vehicles.loading || drivers.loading || customerContacts.loading || etaApi.loading} error={exportErrors[0]} empty={!ready}>{telemetry.error && <p className="notice inline-notice">Live fleet export could not refresh yet; order and ETA exports are still available.</p>}<div className="eta-summary"><strong>{customerEtaRows.length} customer ETA line{customerEtaRows.length === 1 ? '' : 's'}</strong><span>{etaRiskCounts.Late || 0} late · {etaRiskCounts.AtRisk || 0} at risk · {etaRiskCounts.OnTrack || 0} on track · {etaRiskCounts.Pending || 0} pending</span><button onClick={() => void copyCustomerEtas()} disabled={!customerEtaRows.length}>Copy customer ETA brief</button></div><div className="export-grid"><article className="export-card"><h2>Customer ETA update</h2><p>Approved recipient, order, load, vehicle, driver, delivery window, ETA source and delivery risk.</p><button onClick={() => downloadCsv('slh-customer-eta-update', [['Customer', 'Recipient email', 'Order', 'Load', 'Vehicle', 'Driver', 'Delivery stop', 'Window start', 'Window end', 'ETA', 'ETA source', 'Status'], customerEtaRows])} disabled={!customerEtaRows.length}>Download customer ETA CSV</button></article><article className="export-card"><h2>Approved order list</h2><p>Approved orders with collection and delivery dates, ready for operational export.</p><button onClick={() => downloadCsv('slh-orders', [['Collection date', 'Order / PO', 'Customer', 'Pallets', 'Delivery date', 'Status'], ...orders.map(order => [order.collectionDate, order.poNumber, order.customerCode, order.pallets, order.deliveryDate, order.status])])} disabled={!orders.length}>Download orders CSV</button></article><article className="export-card"><h2>Planned loads</h2><p>Load references, assignment status and route stop count for daily control.</p><button onClick={() => downloadCsv('slh-planned-loads', [['Planning date', 'Load reference', 'Status', 'Vehicle', 'Driver', 'Trailer ID', 'Stops'], ...(loads.data || []).map(load => [load.planningDate, load.reference, load.status, vehicleById.get(load.vehicleId || '')?.registration, driverById.get(load.driverId || '')?.displayName, load.trailerId, load.stops.length])])} disabled={!loads.data?.length}>Download loads CSV</button></article><article className="export-card"><h2>Live fleet positions</h2><p>Latest DOT tracking data for escalation, customer updates and ETA review.</p><button onClick={() => downloadCsv('slh-live-fleet', [['Vehicle', 'Updated', 'Latitude', 'Longitude', 'Speed kph', 'Moving', 'Status'], ...(telemetry.data?.records || []).map(record => [record.vehicleIdentifier, record.eventTimeUtc, record.latitude, record.longitude, record.speedKph, record.isMoving ? 'Yes' : 'No', record.status])])} disabled={!telemetry.data?.records.length}>Download tracking CSV</button></article></div><div className="panel export-note"><h2>Automated intake</h2><p>The protected batch endpoint accepts up to 500 idempotent email or workbook rows into Staging for planner approval.</p></div></State></section>;
 }
 
-export function StagingQueue({ ordersOnly = false }: { ordersOnly?: boolean } = {}) {
+export function StagingQueue({ ordersOnly = false, masterOnly = false }: { ordersOnly?: boolean; masterOnly?: boolean } = {}) {
   const token = useAccessToken();
+  const masterTypes = ['vehicle', 'driver', 'trailer', 'site', 'customer', 'customercontact', 'marketcontact', 'fuelprice', 'fuelcard', 'geofence'];
   const [entityFilter, setEntityFilter] = useState('');
   const [planningDate, setPlanningDate] = useState(localDateInput);
   const effectiveEntityFilter = ordersOnly ? 'order' : entityFilter;
   const load = useCallback(async () => {
-    if (!ordersOnly) return api.staging(await token(), 'PendingReview', effectiveEntityFilter, 2000);
-    const records: StagedImport[] = [];
-    let page = 1;
-    while (page <= 20) {
-      const result = await api.stagingQueue(planningDate, await token(), page, 100);
-      records.push(...result.records);
-      if (!result.hasMore) break;
-      page += 1;
+    if (ordersOnly) {
+      const records: StagedImport[] = [];
+      let page = 1;
+      while (page <= 20) {
+        const result = await api.stagingQueue(planningDate, await token(), page, 100);
+        records.push(...result.records);
+        if (!result.hasMore) break;
+        page += 1;
+      }
+      return records;
     }
-    return records;
-  }, [token, effectiveEntityFilter, ordersOnly, planningDate]);
+    const records = await api.staging(await token(), 'PendingReview', effectiveEntityFilter, 2000);
+    return masterOnly ? records.filter(item => masterTypes.includes(item.entityType.toLowerCase())) : records;
+  }, [token, effectiveEntityFilter, ordersOnly, masterOnly, planningDate]);
   const { data, loading, error, refresh } = useApi(load);
   const [reviewing, setReviewing] = useState<string>();
   const [selected, setSelected] = useState<StagedImport>();
@@ -327,11 +332,21 @@ export function StagingQueue({ ordersOnly = false }: { ordersOnly?: boolean } = 
     setMessage(undefined);
     try {
       await api.review(item.id, approved, '', await token());
-      setMessage(approved ? 'Order approved and promoted to Planner Builder.' : 'Order rejected and removed from the review queue.');
+      if (ordersOnly) {
+        setMessage(approved ? 'Order approved and promoted to Planner Builder.' : 'Order rejected and removed from Order Review.');
+      } else {
+        setMessage(approved
+          ? `${item.entityType} record approved and promoted to Master Data.`
+          : `${item.entityType} record rejected and removed from the import review queue.`);
+      }
       setSelected(undefined);
       await refresh();
     } catch (exception) {
-      setMessage(exception instanceof Error ? exception.message : 'The order could not be reviewed. Check the readiness reason and source evidence.');
+      setMessage(exception instanceof Error
+        ? exception.message
+        : ordersOnly
+          ? 'The order could not be reviewed. Check the readiness reason and source evidence.'
+          : 'The master-data record could not be reviewed.');
     } finally {
       setReviewing(undefined);
     }
@@ -368,22 +383,6 @@ export function StagingQueue({ ordersOnly = false }: { ordersOnly?: boolean } = 
     }
   }
 
-  async function clearPending() {
-    if (!confirm('Clear all pending staging records? Promoted master data will stay in place.')) return;
-    setReviewing('clear');
-    setMessage(undefined);
-    try {
-      const result = await api.clearPendingStaging(await token());
-      setMessage(`${result.deleted} pending staging record${result.deleted === 1 ? '' : 's'} cleared. You can now re-import fresh.`);
-      setSelected(undefined);
-      await refresh();
-    } catch (exception) {
-      setMessage(exception instanceof Error ? exception.message : 'Could not clear pending staging records.');
-    } finally {
-      setReviewing(undefined);
-    }
-  }
-
   const parseStagingPayload = (item?: StagedImport) => {
     if (!item) return {} as Record<string, unknown>;
     try { return JSON.parse(item.payloadJson) as Record<string, unknown>; } catch { return {}; }
@@ -401,6 +400,14 @@ export function StagingQueue({ ordersOnly = false }: { ordersOnly?: boolean } = 
     const delivery = directDelivery || (market && stall ? `${market} · ${stall}` : market || stall);
     const pallets = pick('pallets', 'palletQty', 'palletQuantity', 'quantity');
     return { collection: String(collection || '—'), delivery: String(delivery || '—'), pallets: String(pallets ?? '—') };
+  };
+
+  const masterSummary = (item: StagedImport) => {
+    const value = parseStagingPayload(item);
+    const pick = (...keys: string[]) => keys.map(key => value[key]).find(candidate => String(candidate ?? '').trim().length > 0);
+    const identity = pick('displayName', 'name', 'registration', 'trailerNumber', 'externalCode', 'code', 'employeeNumber', 'market', 'provider');
+    const secondary = pick('customerCode', 'fleetNumber', 'collectionAddress', 'driverType', 'standOrLocation', 'weekCommencing');
+    return { identity: String(identity || item.id), secondary: String(secondary || '') };
   };
 
   const orderReadiness = new Map((data || []).filter(item => item.entityType === 'order').map(item => {
@@ -431,38 +438,42 @@ export function StagingQueue({ ordersOnly = false }: { ordersOnly?: boolean } = 
   }));
 
   const clearForApproval = (data || []).filter(item => orderReadiness.get(item.id)?.ready).length;
-  const pendingCounts = (data || []).filter(item => stagingStatus(item.status) === 'PendingReview').reduce<Record<string, number>>((counts, item) => ({ ...counts, [item.entityType]: (counts[item.entityType] || 0) + 1 }), {});
+  const pendingCounts = (data || []).filter(item => stagingStatus(item.status) === 'PendingReview')
+    .reduce<Record<string, number>>((counts, item) => ({ ...counts, [item.entityType]: (counts[item.entityType] || 0) + 1 }), {});
 
   return <section>
     <div className="title-row">
       <div>
-        <p className="eyebrow">{ordersOnly ? 'Microsoft Graph order intake' : 'Control gate'}</p>
-        <h1>{ordersOnly ? 'Order Review' : 'Staging review queue'}</h1>
-        {ordersOnly && <p className="hint">Orders captured from the Info mailbox through Microsoft Graph land here first. Check collection, delivery, pallet quantity and source evidence before approval.</p>}
+        <p className="eyebrow">{ordersOnly ? 'Microsoft Graph order intake' : 'Admin · Imports'}</p>
+        <h1>{ordersOnly ? 'Order Review' : 'Master Data Imports & Staging'}</h1>
+        {ordersOnly
+          ? <p className="hint">Orders captured from the Info mailbox through Microsoft Graph land here first. Check collection, delivery, pallet quantity and source evidence before approval.</p>
+          : <p className="hint">Import and review additions to governed Master Data here. Transport orders never appear in this queue; they remain in Order Review.</p>}
       </div>
       <div className="actions">
         <button onClick={() => void refresh()}>Refresh</button>
         {ordersOnly && <button className="primary" disabled={requestingOrders || Boolean(reviewing)} onClick={() => void requestOrders()}>{requestingOrders ? 'Requesting orders…' : 'Request orders now'}</button>}
-        {!ordersOnly && <button className="reject" disabled={reviewing === 'clear'} onClick={() => void clearPending()}>{reviewing === 'clear' ? 'Clearing...' : 'Clear pending'}</button>}
       </div>
     </div>
 
+    {!ordersOnly && <div style={{ marginBottom: 18 }}><MasterDataCsvImport onCommitted={() => void refresh()} /></div>}
+
     {ordersOnly
       ? <div className="planner-toolbar staging-filter"><label>Orders for planning date <input type="date" value={planningDate} onChange={event => { setPlanningDate(event.target.value); setSelected(undefined); }} /></label><strong>{data?.length || 0} order{data?.length === 1 ? '' : 's'} awaiting review</strong><span>{clearForApproval} clear for approval · {Math.max((data?.length || 0) - clearForApproval, 0)} need review</span>{message && <span className="notice inline-notice">{message}</span>}</div>
-      : <div className="planner-toolbar staging-filter"><label>Show pending <select value={entityFilter} onChange={event => { setEntityFilter(event.target.value); setSelected(undefined); }}><option value="">All record types</option>{['vehicle', 'driver', 'trailer', 'site', 'customercontact', 'marketcontact', 'customer', 'order'].map(type => <option key={type} value={type}>{type}</option>)}</select></label><span>{data?.length || 0} pending record{data?.length === 1 ? '' : 's'} shown</span>{message && <span className="notice inline-notice">{message}</span>}</div>}
+      : <div className="planner-toolbar staging-filter"><label>Show pending <select value={entityFilter} onChange={event => { setEntityFilter(event.target.value); setSelected(undefined); }}><option value="">All master-data types</option>{masterTypes.map(type => <option key={type} value={type}>{type}</option>)}</select></label><span>{data?.length || 0} pending master-data record{data?.length === 1 ? '' : 's'} shown</span>{message && <span className="notice inline-notice">{message}</span>}</div>}
 
     <State loading={loading} error={error} empty={!data?.length}>
       {ordersOnly && <div className="review-readiness-summary"><strong>{data?.length || 0} order{data?.length === 1 ? '' : 's'} in review</strong><span>{clearForApproval} clear for approval</span><span>{Math.max((data?.length || 0) - clearForApproval, 0)} need route, quantity or master-data review</span></div>}
 
       {!ordersOnly && <div className="bulk-review panel">
-        <div><h2>Bulk approve master data</h2><p>Use this after checking the imported workbook. Vehicles must be promoted before Live Tracking can show the fleet.</p></div>
-        <label>Record type <select value={bulkEntity} onChange={event => setBulkEntity(event.target.value)}>{['vehicle', 'driver', 'trailer', 'site', 'customercontact', 'marketcontact', 'customer', 'order'].map(type => <option key={type} value={type}>{type} ({pendingCounts[type] || 0})</option>)}</select></label>
+        <div><h2>Bulk approve master data</h2><p>Use this only after checking the import preview. Order approvals are deliberately excluded from this Admin queue.</p></div>
+        <label>Record type <select value={bulkEntity} onChange={event => setBulkEntity(event.target.value)}>{masterTypes.map(type => <option key={type} value={type}>{type} ({pendingCounts[type] || 0})</option>)}</select></label>
         <button className="primary" disabled={!pendingCounts[bulkEntity] || reviewing === 'bulk'} onClick={() => void approveBulk()}>{reviewing === 'bulk' ? 'Approving...' : `Approve ${pendingCounts[bulkEntity] || 0}`}</button>
       </div>}
 
       {selected && <div className="review-modal-scrim" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setSelected(undefined); }}>
         <div className="panel review-panel review-modal" role="dialog" aria-modal="true" aria-label="Review details">
-          <div><p className="eyebrow">Reviewing {selected.entityType}</p><h2>{String(payload?.poNumber || payload?.name || payload?.displayName || payload?.externalCode || selected.id)}</h2></div>
+          <div><p className="eyebrow">Reviewing {selected.entityType}</p><h2>{String(payload?.poNumber || payload?.name || payload?.displayName || payload?.registration || payload?.externalCode || selected.id)}</h2></div>
           <div className="actions">
             {selected.entityType === 'order' && <button onClick={() => setSourceEvidenceId(selected.id)}>View email & attachments</button>}
             <button onClick={() => setSelected(undefined)}>Close</button>
@@ -472,34 +483,53 @@ export function StagingQueue({ ordersOnly = false }: { ordersOnly?: boolean } = 
       </div>}
       {sourceEvidenceId && <SourceEmailEvidenceDrawer stagingId={sourceEvidenceId} onClose={() => setSourceEvidenceId(undefined)} />}
 
-      <div className="table-wrap">
+      {ordersOnly ? <div className="table-wrap">
         <table className="staging-review-table">
-          <thead><tr><th>Received</th>{!ordersOnly && <th>Type</th>}<th>Collection point</th><th>Delivery location</th><th>Pallets</th><th>Source</th><th>{ordersOnly ? 'Readiness' : 'Status'}</th><th>Action</th></tr></thead>
+          <thead><tr><th>Received</th><th>Collection point</th><th>Delivery location</th><th>Pallets</th><th>Source</th><th>Readiness</th><th>Action</th></tr></thead>
           <tbody>{data?.map(item => {
             const summary = orderSummary(item);
             const readiness = orderReadiness.get(item.id);
             return <tr key={item.id}>
               <td>{formatDate(item.receivedAtUtc)}</td>
-              {!ordersOnly && <td>{item.entityType}</td>}
               <td>{summary.collection}</td>
               <td>{summary.delivery}</td>
               <td>{summary.pallets}</td>
               <td>{item.source || '—'}</td>
-              <td>{ordersOnly && readiness
+              <td>{readiness
                 ? <span className={`order-readiness ${readiness.ready ? 'clear' : 'review'}`} title={readiness.reason}><strong>{readiness.ready ? 'Clear for approval' : 'Needs review'}</strong><small>{readiness.reason}</small></span>
                 : <span className={`status ${statusClass(item.status)}`}>{stagingStatus(item.status)}</span>}</td>
               <td><div className="actions">
                 <button onClick={() => { setSelected(item); setSourceEvidenceId(undefined); }}>Review details</button>
                 {stagingStatus(item.status) === 'PendingReview' && <>
-                  <button className="approve" disabled={reviewing === item.id || reviewing === 'bulk'} onClick={() => void review(item, true)}>Approve</button>
-                  <button className="reject" disabled={reviewing === item.id || reviewing === 'bulk'} onClick={() => void review(item, false)}>Reject</button>
+                  <button className="approve" disabled={reviewing === item.id} onClick={() => void review(item, true)}>Approve</button>
+                  <button className="reject" disabled={reviewing === item.id} onClick={() => void review(item, false)}>Reject</button>
                 </>}
-                {stagingStatus(item.status) !== 'PendingReview' && (item.reviewNote || '—')}
               </div></td>
             </tr>;
           })}</tbody>
         </table>
-      </div>
+      </div> : <div className="table-wrap">
+        <table className="staging-review-table">
+          <thead><tr><th>Received</th><th>Type</th><th>Record</th><th>Source</th><th>Status</th><th>Action</th></tr></thead>
+          <tbody>{data?.map(item => {
+            const summary = masterSummary(item);
+            return <tr key={item.id}>
+              <td>{formatDate(item.receivedAtUtc)}</td>
+              <td>{item.entityType}</td>
+              <td><strong>{summary.identity}</strong>{summary.secondary && <small style={{ display: 'block' }}>{summary.secondary}</small>}</td>
+              <td>{item.source || '—'}</td>
+              <td><span className={`status ${statusClass(item.status)}`}>{stagingStatus(item.status)}</span></td>
+              <td><div className="actions">
+                <button onClick={() => setSelected(item)}>Review details</button>
+                {stagingStatus(item.status) === 'PendingReview' && <>
+                  <button className="approve" disabled={reviewing === item.id || reviewing === 'bulk'} onClick={() => void review(item, true)}>Approve</button>
+                  <button className="reject" disabled={reviewing === item.id || reviewing === 'bulk'} onClick={() => void review(item, false)}>Reject</button>
+                </>}
+              </div></td>
+            </tr>;
+          })}</tbody>
+        </table>
+      </div>}
     </State>
   </section>;
 }
