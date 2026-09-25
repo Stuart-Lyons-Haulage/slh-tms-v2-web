@@ -18,6 +18,8 @@ export type Attachment = {
   isInline?: boolean;
   contentBase64?: string;
   contentBytes?: string;
+  sourceUrl?: string;
+  retrievalError?: string;
 };
 
 export type SourceEmailEvidence = {
@@ -351,7 +353,10 @@ export function SourceEmailEvidenceDrawer({ stagingId, onClose }: { stagingId: s
                 {copyHref && <button type="button" onClick={() => openPreview(attachment)}>Open preview</button>}
                 {copyHref
                   ? <a href={copyHref} download={safeDownloadName(name)}>Download copy</a>
-                  : <em>Copy not retained</em>}
+                  : attachment.sourceUrl
+                    ? <a href={attachment.sourceUrl} target="_blank" rel="noreferrer">Open linked file</a>
+                    : <em>Copy not retained</em>}
+                {attachment.retrievalError && <small className="error">{attachment.retrievalError}</small>}
               </div>
             </li>;
           })}</ul> : <p>No PDF, Excel or CSV order documents were recorded.</p>}
