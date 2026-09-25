@@ -490,6 +490,23 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
       </div>
     </header>
 
+    <div className="samsara-dispatch-strip" role="region" aria-label="Samsara dispatch export">
+      <div>
+        <strong>Samsara route export</strong>
+        <span>{snapshot.samsaraConfigured
+          ? `${samsaraExportCandidates.length} allocated unsent run${samsaraExportCandidates.length === 1 ? '' : 's'} ready · ${Object.keys(snapshot.samsaraDispatch).length} already sent`
+          : 'Samsara dispatch is not available from the current API/runtime configuration.'}</span>
+      </div>
+      <button
+        className="smart-action primary"
+        type="button"
+        disabled={Boolean(action) || !snapshot.samsaraConfigured || samsaraExportCandidates.length === 0}
+        onClick={() => void handleSamsaraBatch()}
+      >
+        {action === "samsara" ? "Exporting…" : "Export to Samsara"}
+      </button>
+    </div>
+
     <ComplianceWarningBanner drivers={snapshot.drivers} availableTimes={availableTimes} failures={failures} />
     {notice && <div className="smart-dispatch-notice" role="status">{notice}</div>}
     {error && <div className="smart-dispatch-error inline" role="alert">{error}</div>}
