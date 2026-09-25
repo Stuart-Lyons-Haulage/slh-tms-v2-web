@@ -70,9 +70,10 @@ describe("operations housekeeping contract", () => {
   it("keeps Admin focused on API feeds, order intake rules and master imports only", () => {
     expect(app).not.toContain("Admin Home");
     expect(app).not.toContain("RoadRunner Review");
-    expect(app).toContain("['/admin/integrations', 'API Feeds']");
-    expect(app).toContain("['/admin/imports', 'Imports']");
+    expect(app).toContain("['/admin/integrations', 'Integrations / API Feeds']");
+    expect(app).toContain("['/admin/imports', 'Imports / Staging Queue']");
     expect(app).toContain('path="/admin" element={<Navigate to="/admin/integrations" replace />}');
+    expect(app).not.toContain('path="/admin/staging"');
     expect(integrations).toContain("API Feeds & Integrations");
     expect(integrations).toContain("single TMS source for external API/feed health");
   });
@@ -84,6 +85,8 @@ describe("operations housekeeping contract", () => {
     expect(runBuilder).toContain("Use Pallet Order on the second screen to allocate work");
     expect(runBuilder).toContain("orderLineNote(order)");
     expect(runBuilder).toContain("mergedOrderLineNote");
+    expect(runBuilder).toContain('Start typing collection site');
+    expect(runBuilder).toContain('Start typing delivery site');
   });
 
 
