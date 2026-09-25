@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
 import { applyMasterDataInChunks, detectMasterEntity, parseMasterDataCsv, parseCsvRows } from "./MasterDataCsvImport";
-import { parseTachoWorkerCsv } from "./DriverMasterImport";
 import type { MasterApplyResponse, StageBatchRequest } from "../lib/api";
 
 describe("MasterDataCsvImport", () => {
@@ -53,22 +52,22 @@ describe("MasterDataCsvImport", () => {
     });
   });
 
-  it("parses the current TachoMaster Worker List export format", () => {
+  it("routes the current TachoMaster Worker List through the governed Admin import parser", () => {
     const csv = [
       "Member Code,Worker Name,Department,Type,Employee Number,Agency,Email,Started,Card Last Read,Driver Card No.,Driver Card Exp.,Card Reading State,Contract,Licence Pass Date,Driving Licence Exp.,Licence Check Due,Licence Photo Exp.,CPC Expiry,Double Decker Training Date,At Work Now,DQC Expiry",
       '762763,"Sultanov, Daniel Ivaylov",Stuart Lyons,agency,,A1 RECRUITMENT,,13-04-2016,26-07-2026 18:14,DB15104162091502,14-04-2030,include,,,,,,,,0,',
     ].join("\n");
 
-    const workers = parseTachoWorkerCsv(csv);
-    expect(workers).toHaveLength(1);
-    expect(workers[0]).toMatchObject({
-      memberCode: "762763",
-      workerName: "Sultanov, Daniel Ivaylov",
-      type: "agency",
-      agency: "A1 RECRUITMENT",
-      cardLastRead: "26-07-2026 18:14",
-      driverCardNumber: "DB15104162091502",
-      driverCardExpiry: "14-04-2030",
+    expect(detectMasterEntity(parseCsvRows(csv)[0])).toBe("driver");
+    const parsed = parseMasterDataCsv(csv, "driver", "TachoMaster Worker List.csv");
+    expect(parsed.requests).toHaveLength(1);
+    expect(parsed.requests[0].payload).toMatchObject({
+      tachoMasterDriverId: "762763",
+      displayName: "Sultanov, Daniel Ivaylov",
+      driverType: "agency",
+      agencyName: "A1 RECRUITMENT",
+      tachoCardNumber: "DB15104162091502",
+      digitalTachoCardExpiry: "14-04-2030",
     });
   });
 
