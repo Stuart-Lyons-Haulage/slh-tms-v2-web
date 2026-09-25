@@ -16,6 +16,7 @@ const marketOrder = ['Western', 'Spit', 'Covent'];
 const stagingStatus = (value: string | number | undefined) => typeof value === 'number' ? stagingStatuses[value] || String(value) : value || 'PendingReview';
 const statusClass = (value: string | number | undefined) => stagingStatus(value).toLowerCase();
 const localDateInput = () => { const today = new Date(); return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`; };
+const addDays = (date: string, days: number) => { const value = new Date(`${date}T00:00:00Z`); value.setUTCDate(value.getUTCDate() + days); return value.toISOString().slice(0, 10); };
 const masterStagingTypes: readonly string[] = ['vehicle', 'driver', 'trailer', 'site', 'customer', 'customercontact', 'marketcontact', 'fuelprice', 'fuelcard', 'geofence'];
 
 export function Dashboard() {
@@ -302,7 +303,7 @@ export function ExportCentre() {
 export function StagingQueue({ ordersOnly = false, masterOnly = false }: { ordersOnly?: boolean; masterOnly?: boolean } = {}) {
   const token = useAccessToken();
   const [entityFilter, setEntityFilter] = useState('');
-  const [planningDate, setPlanningDate] = useState(localDateInput);
+  const [planningDate, setPlanningDate] = useState(() => new URLSearchParams(window.location.search).get('date') || localDateInput());
   const effectiveEntityFilter = ordersOnly ? 'order' : entityFilter;
   const load = useCallback(async () => {
     if (ordersOnly) {
@@ -331,6 +332,7 @@ export function StagingQueue({ ordersOnly = false, masterOnly = false }: { order
   const [bulkEntity, setBulkEntity] = useState('vehicle');
   const [message, setMessage] = useState<string>();
   const [requestingOrders, setRequestingOrders] = useState(false);
+  const [replaying, setReplaying] = useState(false);
   const [sourceEvidenceId, setSourceEvidenceId] = useState<string>();
   const [masterImportBusy, setMasterImportBusy] = useState(false);
 
@@ -370,6 +372,33 @@ export function StagingQueue({ ordersOnly = false, masterOnly = false }: { order
       setMessage(exception instanceof Error ? exception.message : 'Orders could not be requested from Microsoft Graph.');
     } finally {
       setRequestingOrders(false);
+    }
+  }
+
+  async function replayRetainedEvidence() {
+    setReplaying(true);
+    setMessage(undefined);
+    try {
+      const result = await request<{ eligibleOrders: number; pendingAfterReplay: number; legacyMappingExceptionsArchived: number }>(
+        '/api/v1/order-intake/replay-retained-evidence',
+        await token(),
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            receivedFromUtc: `${addDays(planningDate, -2)}T00:00:00Z`,
+            minimumPlanningDate: planningDate,
+            maximumPlanningDate: planningDate,
+            refreshUnamendedPending: false,
+            maxMessages: 500
+          })
+        }
+      );
+      setMessage(`Replay complete: ${result.eligibleOrders} order${result.eligibleOrders === 1 ? '' : 's'} re-parsed; ${result.legacyMappingExceptionsArchived} old mapping exception${result.legacyMappingExceptionsArchived === 1 ? '' : 's'} archived; ${result.pendingAfterReplay} now awaiting review.`);
+      await refresh();
+    } catch (exception) {
+      setMessage(exception instanceof Error ? exception.message : 'Retained evidence replay failed.');
+    } finally {
+      setReplaying(false);
     }
   }
 
@@ -474,7 +503,8 @@ export function StagingQueue({ ordersOnly = false, masterOnly = false }: { order
       </div>
       <div className="actions">
         <button onClick={() => void refresh()}>Refresh</button>
-        {ordersOnly && <button className="primary" disabled={requestingOrders || Boolean(reviewing)} onClick={() => void requestOrders()}>{requestingOrders ? 'Requesting orders…' : 'Request orders now'}</button>}
+        {ordersOnly && <button className="primary" disabled={requestingOrders || replaying || Boolean(reviewing)} onClick={() => void requestOrders()}>{requestingOrders ? 'Requesting orders…' : 'Request orders now'}</button>}
+        {ordersOnly && <button disabled={requestingOrders || replaying || Boolean(reviewing)} onClick={() => void replayRetainedEvidence()}>{replaying ? 'Replaying…' : `Re-parse ${planningDate}`}</button>}
       </div>
     </div>
 
