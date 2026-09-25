@@ -7,6 +7,7 @@ import { MarketsMasterClean } from './MarketsMasterClean';
 import { MasterDataOperational, type MasterDataTab } from './MasterDataOperational';
 import { GeofenceOperational } from './GeofenceOperational';
 import { MasterDataDuplicateReviewPanel } from '../components/MasterDataDuplicateReviewPanel';
+import { MasterDataAddPanel, type AddableMasterSection } from './MasterDataAddPanel';
 
 type MasterSection = MasterDataTab | 'fuel-cards' | 'markets' | 'fuel-prices';
 type DuplicateEntity = 'sites' | 'customers' | 'drivers' | 'vehicles' | 'trailers' | 'markets';
@@ -36,6 +37,7 @@ export function MasterDataHub({ initialSection = 'drivers' }: { initialSection?:
   useEffect(() => { setSection(canonicalSection(initialSection)); }, [initialSection]);
 
   const duplicateReviewEntity = duplicateEntity(section);
+  const addableSection = section as AddableMasterSection;
 
   return <section>
     <div className="panel master-section-panel" style={{ marginBottom: 18 }}>
@@ -46,6 +48,7 @@ export function MasterDataHub({ initialSection = 'drivers' }: { initialSection?:
     </div>
 
     {duplicateReviewEntity && <MasterDataDuplicateReviewPanel entityType={duplicateReviewEntity} />}
+    <MasterDataAddPanel section={addableSection} onAdded={() => window.dispatchEvent(new Event('slh:master-data-changed'))} />
 
     <div>
       {section === 'drivers' && <DriversMasterOperational />}
