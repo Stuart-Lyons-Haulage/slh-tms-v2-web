@@ -33,7 +33,7 @@ const coreNavigation: NavItem[] = [
   ['/orders', 'Order Entry'],
   ['/staging', 'Order Review'],
   ['/', 'Planner Builder'],
-  ['/pallet-control', 'Pallets'],
+  ['/pallet-control', 'Pallet Order'],
   ['/driver-dispatch', 'Dispatch'],
   ['/driver-timesheets', 'Timesheets'],
   ['/master-data', 'Master Data'],
