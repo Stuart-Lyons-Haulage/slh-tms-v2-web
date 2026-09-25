@@ -401,6 +401,38 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
     return plannerTag(plannerTag(withPlannerPeriod(current, period), "Night out", run.nightOut ? "Yes" : "No"), "Operational amendment", run.operationalAmendment);
   }
 
+  async function createPlanningRun(run: RunDraft) {
+    if (run.loadId || busyKey) return run.loadId;
+    setBusyKey(run.key);
+    setMessage(undefined);
+    try {
+      const access = await token();
+      const index = Math.max(runs.findIndex((item) => item.key === run.key), 0);
+      const existingReferences = new Set(loads.map((load) => load.reference.toUpperCase()));
+      let number = index + 1;
+      while (existingReferences.has(runRef(date, number).toUpperCase())) number += 1;
+      const created = await createRun({
+        reference: runRef(date, number),
+        planningDate: date,
+        palletSpacesUsed: runTotal(run),
+        totalPalletSpaces: 26,
+        capacityType: "Standard pallets",
+        plannerNotes: notesForRun(run),
+        stops: buildStops(run.lines),
+      }, access);
+      setLoads((current) => current.some((load) => load.id === created.id) ? current : [...current, created]);
+      updateRun(run.key, (current) => ({ ...current, loadId: created.id }));
+      signalPlanningChange();
+      setMessage(`${created.reference} created. It is now available in Pallet Order for allocation.`);
+      return created.id;
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Run could not be created.");
+      return undefined;
+    } finally {
+      setBusyKey((current) => current === run.key ? undefined : current);
+    }
+  }
+
   async function persistRunDetails(run: RunDraft, patch: Partial<RunDraft>) {
     if (!run.loadId) return;
     const next = { ...run, ...patch };
@@ -614,7 +646,7 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
                 <button type="button" className="simple-clear-line" aria-label={`Clear line ${lineIndex + 1}`} disabled={busyKey === `${run.key}:${line.key}`} onClick={(event) => { event.stopPropagation(); void clearLine(run, line); }}>×</button>
               </div>;
             })}</div>
-            <div className="simple-run-footer"><div className="simple-line-actions"><button type="button" onClick={(event) => { event.stopPropagation(); updateRun(run.key, (current) => ({ ...current, lines: [...current.lines, blankLine()] })); }}>+ Add line</button></div><small>{saving ? "Saving…" : run.loadId ? "✓ Auto-saved" : "Create the run, then allocate orders from Pallet Order"}</small></div>
+            <div className="simple-run-footer"><div className="simple-line-actions"><button type="button" onClick={(event) => { event.stopPropagation(); updateRun(run.key, (current) => ({ ...current, lines: [...current.lines, blankLine()] })); }}>+ Add line</button>{!run.loadId && <button type="button" className="primary" disabled={Boolean(busyKey)} onClick={(event) => { event.stopPropagation(); void createPlanningRun(run); }}>{saving ? "Creating…" : "Create run"}</button>}</div><small>{saving ? "Saving…" : run.loadId ? "✓ Live · available in Pallet Order" : "Create this run before allocating orders from Pallet Order"}</small></div>
             {load && activeKey === run.key && <RunJobSuggestions lines={run.lines} orders={effectiveOrders} sites={sites} remainingCapacity={Math.max((load.totalPalletSpaces ?? 26) - runTotal(run), 0)} busy={poolBlocked} onAdd={(orderId) => { const order = effectiveOrders.find((item) => item.id === orderId); if (order) void addOrder(order); }} />}
           </article>;
         })}
