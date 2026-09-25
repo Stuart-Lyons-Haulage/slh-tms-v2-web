@@ -136,9 +136,9 @@ export function AdminIntegrationSyncControls() {
   return <section className="panel" style={{ marginBottom: 18 }}>
     <div className="title-row">
       <div>
-        <p className="eyebrow">Admin recovery only</p>
-        <h2>Integration synchronisation</h2>
-        <p className="hint">Normal updates are automatic. Receipt health below is the same source used by Dashboard, so a provider cannot be green here while red there because of a different timeout rule.</p>
+        <p className="eyebrow">Admin · API feeds</p>
+        <h2>API Feeds & Integrations</h2>
+        <p className="hint">This is the single TMS source for external API/feed health, connectivity and controlled refresh actions. Normal updates remain automatic.</p>
       </div>
       <button onClick={() => { void loadState(); void feedHealth.refresh(); }}>Check system state</button>
     </div>
@@ -146,8 +146,8 @@ export function AdminIntegrationSyncControls() {
     <div className="admin-card" style={{ marginBottom: 14 }}>
       <div className="title-row" style={{ marginBottom: 8 }}>
         <div>
-          <p className="eyebrow">Authoritative receipt health</p>
-          <h3>Are the links delivering data?</h3>
+          <p className="eyebrow">Authoritative feed health</p>
+          <h3>API and provider feeds</h3>
         </div>
         {feedHealth.data?.generatedAtUtc && <small>Checked {new Date(feedHealth.data.generatedAtUtc).toLocaleTimeString('en-GB')}</small>}
       </div>
