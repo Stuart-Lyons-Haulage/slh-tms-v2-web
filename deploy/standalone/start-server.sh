@@ -9,8 +9,57 @@ ENV_FILE="$WEB_ROOT/.env.standalone"
 COMPOSE_FILE="$WEB_ROOT/deploy/standalone/docker-compose.yml"
 
 command -v git >/dev/null || { echo "git is required on the SLH server."; exit 1; }
-command -v docker >/dev/null || { echo "docker is required on the SLH server."; exit 1; }
 command -v curl >/dev/null || { echo "curl is required on the SLH server."; exit 1; }
+
+find_docker() {
+  local candidate
+  if command -v docker >/dev/null 2>&1; then
+    command -v docker
+    return 0
+  fi
+  for candidate in \
+    "/usr/local/bin/docker" \
+    "/opt/homebrew/bin/docker" \
+    "$HOME/.docker/bin/docker" \
+    "/Applications/Docker.app/Contents/Resources/bin/docker"
+  do
+    if [[ -x "$candidate" ]]; then
+      echo "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+DOCKER_BIN="$(find_docker || true)"
+if [[ -z "$DOCKER_BIN" ]]; then
+  echo "Docker CLI was not found. Install Docker Desktop on this machine, then run the updater again." >&2
+  exit 1
+fi
+
+export PATH="$(dirname "$DOCKER_BIN"):$PATH"
+
+if ! "$DOCKER_BIN" info >/dev/null 2>&1; then
+  if [[ "$(uname -s)" == "Darwin" ]] && [[ -d "/Applications/Docker.app" ]]; then
+    echo "Starting Docker Desktop..."
+    open -a Docker >/dev/null 2>&1 || true
+    docker_ready=false
+    for _ in $(seq 1 60); do
+      if "$DOCKER_BIN" info >/dev/null 2>&1; then
+        docker_ready=true
+        break
+      fi
+      sleep 2
+    done
+    if [[ "$docker_ready" != "true" ]]; then
+      echo "Docker Desktop was found but did not become ready." >&2
+      exit 1
+    fi
+  else
+    echo "Docker is installed but the Docker engine is not running." >&2
+    exit 1
+  fi
+fi
 [[ -d "$API_ROOT" ]] || { echo "Expected sibling API repository at $API_ROOT"; exit 1; }
 
 env_value() { awk -F= -v key="$1" '$1==key {sub(/^[^=]*=/,""); print; exit}' "$ENV_FILE"; }
@@ -59,10 +108,10 @@ echo "API: $API_BEFORE -> $API_AFTER"
 
 mkdir -p "$WEB_ROOT/backup" "$WEB_ROOT/archive"
 echo "Validating Docker Compose configuration..."
-docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" config >/dev/null
+"$DOCKER_BIN" compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" config >/dev/null
 
 echo "Building and starting SLH TMS V2..."
-docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --build
+"$DOCKER_BIN" compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --build
 
 PORT="$(env_value TMS_HTTP_PORT)"
 PORT="${PORT:-8080}"
@@ -83,8 +132,8 @@ if [[ "$ready" != "true" ]]; then
   echo "Update completed but the API did not become healthy." >&2
   echo "Web version: $WEB_AFTER" >&2
   echo "API version: $API_AFTER" >&2
-  docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" ps
-  docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" logs api --tail=120 || true
+  "$DOCKER_BIN" compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" ps
+  "$DOCKER_BIN" compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" logs api --tail=120 || true
   exit 1
 fi
 
@@ -97,4 +146,4 @@ PUBLIC_URL="$(env_value TMS_PUBLIC_URL)"
 [[ -z "$PUBLIC_URL" ]] || echo "Remote portal: $PUBLIC_URL"
 echo "Authentication: Microsoft Entra"
 echo "API health: $HEALTH"
-docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" ps
+"$DOCKER_BIN" compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" ps
