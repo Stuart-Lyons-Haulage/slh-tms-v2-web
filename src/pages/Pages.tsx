@@ -16,6 +16,7 @@ const marketOrder = ['Western', 'Spit', 'Covent'];
 const stagingStatus = (value: string | number | undefined) => typeof value === 'number' ? stagingStatuses[value] || String(value) : value || 'PendingReview';
 const statusClass = (value: string | number | undefined) => stagingStatus(value).toLowerCase();
 const localDateInput = () => { const today = new Date(); return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`; };
+const masterStagingTypes = ['vehicle', 'driver', 'trailer', 'site', 'customer', 'customercontact', 'marketcontact', 'fuelprice', 'fuelcard', 'geofence'] as const;
 
 export function Dashboard() {
   const token = useAccessToken(); const [date, setDate] = useState(new Date().toISOString().slice(0, 10)); const staging = useApi(useCallback(async () => api.staging(await token(), ''), [token])); const loads = useApi(useCallback(async () => listRuns(date, await token()), [date, token])); const orders = useApi(useCallback(async () => api.orders(date, date, await token()), [date, token])); const fleet = useApi(useCallback(async () => api.fleetStatus(await token()), [token])); const etaApi = useApi(useCallback(async () => api.deliveryEtas(date, await token()), [date, token])); const assignments = useApi(useCallback(async () => api.driverAssignments(date, date, await token()), [date, token]));
@@ -300,7 +301,6 @@ export function ExportCentre() {
 
 export function StagingQueue({ ordersOnly = false, masterOnly = false }: { ordersOnly?: boolean; masterOnly?: boolean } = {}) {
   const token = useAccessToken();
-  const masterTypes = ['vehicle', 'driver', 'trailer', 'site', 'customer', 'customercontact', 'marketcontact', 'fuelprice', 'fuelcard', 'geofence'];
   const [entityFilter, setEntityFilter] = useState('');
   const [planningDate, setPlanningDate] = useState(localDateInput);
   const effectiveEntityFilter = ordersOnly ? 'order' : entityFilter;
@@ -317,7 +317,7 @@ export function StagingQueue({ ordersOnly = false, masterOnly = false }: { order
       return records;
     }
     const records = await api.staging(await token(), 'PendingReview', effectiveEntityFilter, 2000);
-    return masterOnly ? records.filter(item => masterTypes.includes(item.entityType.toLowerCase())) : records;
+    return masterOnly ? records.filter(item => masterStagingTypes.includes(item.entityType.toLowerCase())) : records;
   }, [token, effectiveEntityFilter, ordersOnly, masterOnly, planningDate]);
   const { data, loading, error, refresh } = useApi(load);
   const [reviewing, setReviewing] = useState<string>();
@@ -460,14 +460,14 @@ export function StagingQueue({ ordersOnly = false, masterOnly = false }: { order
 
     {ordersOnly
       ? <div className="planner-toolbar staging-filter"><label>Orders for planning date <input type="date" value={planningDate} onChange={event => { setPlanningDate(event.target.value); setSelected(undefined); }} /></label><strong>{data?.length || 0} order{data?.length === 1 ? '' : 's'} awaiting review</strong><span>{clearForApproval} clear for approval · {Math.max((data?.length || 0) - clearForApproval, 0)} need review</span>{message && <span className="notice inline-notice">{message}</span>}</div>
-      : <div className="planner-toolbar staging-filter"><label>Show pending <select value={entityFilter} onChange={event => { setEntityFilter(event.target.value); setSelected(undefined); }}><option value="">All master-data types</option>{masterTypes.map(type => <option key={type} value={type}>{type}</option>)}</select></label><span>{data?.length || 0} pending master-data record{data?.length === 1 ? '' : 's'} shown</span>{message && <span className="notice inline-notice">{message}</span>}</div>}
+      : <div className="planner-toolbar staging-filter"><label>Show pending <select value={entityFilter} onChange={event => { setEntityFilter(event.target.value); setSelected(undefined); }}><option value="">All master-data types</option>{masterStagingTypes.map(type => <option key={type} value={type}>{type}</option>)}</select></label><span>{data?.length || 0} pending master-data record{data?.length === 1 ? '' : 's'} shown</span>{message && <span className="notice inline-notice">{message}</span>}</div>}
 
     <State loading={loading} error={error} empty={!data?.length}>
       {ordersOnly && <div className="review-readiness-summary"><strong>{data?.length || 0} order{data?.length === 1 ? '' : 's'} in review</strong><span>{clearForApproval} clear for approval</span><span>{Math.max((data?.length || 0) - clearForApproval, 0)} need route, quantity or master-data review</span></div>}
 
       {!ordersOnly && <div className="bulk-review panel">
         <div><h2>Bulk approve master data</h2><p>Use this only after checking the import preview. Order approvals are deliberately excluded from this Admin queue.</p></div>
-        <label>Record type <select value={bulkEntity} onChange={event => setBulkEntity(event.target.value)}>{masterTypes.map(type => <option key={type} value={type}>{type} ({pendingCounts[type] || 0})</option>)}</select></label>
+        <label>Record type <select value={bulkEntity} onChange={event => setBulkEntity(event.target.value)}>{masterStagingTypes.map(type => <option key={type} value={type}>{type} ({pendingCounts[type] || 0})</option>)}</select></label>
         <button className="primary" disabled={!pendingCounts[bulkEntity] || reviewing === 'bulk'} onClick={() => void approveBulk()}>{reviewing === 'bulk' ? 'Approving...' : `Approve ${pendingCounts[bulkEntity] || 0}`}</button>
       </div>}
 
