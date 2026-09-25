@@ -75,12 +75,6 @@ for name in SQL_SA_PASSWORD ENTRA_TENANT_ID ENTRA_WEB_CLIENT_ID ENTRA_API_AUDIEN
   [[ -n "$value" && "$value" != CHANGE_ME* ]] || { echo "$name must be populated in .env.standalone before V2 can start." >&2; exit 2; }
 done
 
-profiles="$(env_value COMPOSE_PROFILES)"
-if [[ ",$profiles," == *",remote,"* ]]; then
-  [[ -n "$(env_value CLOUDFLARE_TUNNEL_TOKEN)" ]] || { echo "Remote profile requires CLOUDFLARE_TUNNEL_TOKEN." >&2; exit 2; }
-  [[ -n "$(env_value TMS_PUBLIC_URL)" ]] || { echo "Remote profile requires TMS_PUBLIC_URL." >&2; exit 2; }
-fi
-
 for repo in "$WEB_ROOT" "$API_ROOT"; do
   if [[ -n "$(git -C "$repo" status --porcelain --untracked-files=no)" ]]; then
     echo "Refusing automatic update because tracked local changes exist in $repo." >&2
@@ -142,8 +136,6 @@ echo "SLH TMS V2 is healthy."
 echo "Web version: $WEB_AFTER"
 echo "API version: $API_AFTER"
 echo "Local portal: http://127.0.0.1:$PORT"
-PUBLIC_URL="$(env_value TMS_PUBLIC_URL)"
-[[ -z "$PUBLIC_URL" ]] || echo "Remote portal: $PUBLIC_URL"
 echo "Authentication: Microsoft Entra"
 echo "API health: $HEALTH"
 "$DOCKER_BIN" compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" ps
