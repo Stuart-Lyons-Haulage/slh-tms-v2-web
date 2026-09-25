@@ -316,8 +316,14 @@ export function StagingQueue({ ordersOnly = false, masterOnly = false }: { order
       }
       return records;
     }
-    const records = await api.staging(await token(), 'PendingReview', effectiveEntityFilter, 2000);
-    return masterOnly ? records.filter(item => masterStagingTypes.includes(item.entityType.toLowerCase())) : records;
+    const access = await token();
+    if (masterOnly) {
+      if (effectiveEntityFilter)
+        return api.staging(access, 'PendingReview', effectiveEntityFilter, 500);
+      const batches = await Promise.all(masterStagingTypes.map(type => api.staging(access, 'PendingReview', type, 500)));
+      return batches.flat().filter(item => masterStagingTypes.includes(item.entityType.toLowerCase()));
+    }
+    return api.staging(access, 'PendingReview', effectiveEntityFilter, 2000);
   }, [token, effectiveEntityFilter, ordersOnly, masterOnly, planningDate]);
   const { data, loading, error, refresh } = useApi(load);
   const [reviewing, setReviewing] = useState<string>();
