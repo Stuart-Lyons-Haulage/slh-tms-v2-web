@@ -85,6 +85,7 @@ export type RoadrunnerSiteReviewAction = { reviewId: string; status: string; act
 export type MarketContact = { id: string; market: string; name: string; standOrLocation?: string; salesman?: string; sender?: string; active: boolean };
 export type FuelPrice = { id: string; weekCommencing: string; provider: string; pricePencePerLitre: number; isPricingMaximum: boolean; source?: string; notes?: string; createdAtUtc: string };
 export type StagedImport = { id: string; entityType: string; idempotencyKey: string; payloadJson: string; status: string | number; source?: string; receivedAtUtc: string; reviewedAtUtc?: string; reviewedBy?: string; reviewNote?: string };
+export type StagingQueuePage = { page: number; pageSize: number; total: number; hasMore: boolean; records: StagedImport[] };
 export type TransportOrder = OrderDto;
 export type Telemetry = TelemetryDto;
 export type FleetStatus = FleetStatusDto;
@@ -280,6 +281,7 @@ export interface TmsApi {
   fuelPrices(token?: string): Promise<FuelPrice[]>;
   saveFuelPrice(payload: { weekCommencing: string; provider: string; pricePencePerLitre: number; isPricingMaximum: boolean; source?: string; notes?: string }, token?: string): Promise<FuelPrice>;
   staging(token?: string, status?: string, entityType?: string, take?: number): Promise<StagedImport[]>;
+  stagingQueue(planningDate: string, token?: string, page?: number, pageSize?: number): Promise<StagingQueuePage>;
   orders(from?: string, to?: string, token?: string): Promise<TransportOrder[]>;
   stageOrder(payload: Record<string, string>, idempotencyKey: string, token?: string): Promise<StageImportResponse>;
   stageRecord(entityType: string, payload: Record<string, string | boolean | number | undefined>, idempotencyKey: string, token?: string): Promise<StageImportResponse>;
@@ -342,6 +344,7 @@ export const api: TmsApi = {
   fuelPrices: token => request<FuelPrice[]>('/api/v1/fuel-prices', token),
   saveFuelPrice: (payload, token) => request<FuelPrice>('/api/v1/fuel-prices', token, { method: 'POST', body: JSON.stringify(payload) }),
   staging: (token, status = 'PendingReview', entityType = '', take = 100) => request<StagedImport[]>(`/api/v1/staging?take=${Math.min(Math.max(take, 1), 200)}${status ? `&status=${encodeURIComponent(status)}` : ''}${entityType ? `&entityType=${encodeURIComponent(entityType)}` : ''}`, token),
+  stagingQueue: (planningDate, token, page = 1, pageSize = 100) => request<StagingQueuePage>(`/api/v1/staging/queue?status=PendingReview&entityType=order&planningDate=${encodeURIComponent(planningDate)}&page=${Math.max(page, 1)}&pageSize=${Math.min(Math.max(pageSize, 1), 100)}`, token),
   orders: (from, to, token) => request<TransportOrder[]>(`/api/v1/orders?${new URLSearchParams({ ...(from ? { from } : {}), ...(to ? { to } : {}) })}`, token),
   stageOrder: (payload, idempotencyKey, token) => request<StageImportResponse>('/api/v1/staging', token, { method: 'POST', body: JSON.stringify({ entityType: 'order', idempotencyKey, source: 'SLH TMS Web/CSV', payload }) }),
   stageRecord: (entityType, payload, idempotencyKey, token) => request<StageImportResponse>('/api/v1/staging', token, { method: 'POST', body: JSON.stringify({ entityType, idempotencyKey, source: 'SLH TMS Web', payload }) }),

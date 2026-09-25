@@ -14,6 +14,7 @@ const stagingStatuses = ['PendingReview', 'Approved', 'Rejected', 'Promoted', 'F
 const marketOrder = ['Western', 'Spit', 'Covent'];
 const stagingStatus = (value: string | number | undefined) => typeof value === 'number' ? stagingStatuses[value] || String(value) : value || 'PendingReview';
 const statusClass = (value: string | number | undefined) => stagingStatus(value).toLowerCase();
+const localDateInput = () => { const today = new Date(); return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`; };
 
 export function Dashboard() {
   const token = useAccessToken(); const [date, setDate] = useState(new Date().toISOString().slice(0, 10)); const staging = useApi(useCallback(async () => api.staging(await token(), ''), [token])); const loads = useApi(useCallback(async () => listRuns(date, await token()), [date, token])); const orders = useApi(useCallback(async () => api.orders(date, date, await token()), [date, token])); const fleet = useApi(useCallback(async () => api.fleetStatus(await token()), [token])); const etaApi = useApi(useCallback(async () => api.deliveryEtas(date, await token()), [date, token])); const assignments = useApi(useCallback(async () => api.driverAssignments(date, date, await token()), [date, token]));
@@ -299,8 +300,20 @@ export function ExportCentre() {
 export function StagingQueue({ ordersOnly = false }: { ordersOnly?: boolean } = {}) {
   const token = useAccessToken();
   const [entityFilter, setEntityFilter] = useState('');
+  const [planningDate, setPlanningDate] = useState(localDateInput);
   const effectiveEntityFilter = ordersOnly ? 'order' : entityFilter;
-  const load = useCallback(async () => api.staging(await token(), 'PendingReview', effectiveEntityFilter, 2000), [token, effectiveEntityFilter]);
+  const load = useCallback(async () => {
+    if (!ordersOnly) return api.staging(await token(), 'PendingReview', effectiveEntityFilter, 2000);
+    const records: StagedImport[] = [];
+    let page = 1;
+    while (page <= 20) {
+      const result = await api.stagingQueue(planningDate, await token(), page, 100);
+      records.push(...result.records);
+      if (!result.hasMore) break;
+      page += 1;
+    }
+    return records;
+  }, [token, effectiveEntityFilter, ordersOnly, planningDate]);
   const { data, loading, error, refresh } = useApi(load);
   const [reviewing, setReviewing] = useState<string>();
   const [selected, setSelected] = useState<StagedImport>();
@@ -435,7 +448,7 @@ export function StagingQueue({ ordersOnly = false }: { ordersOnly?: boolean } = 
     </div>
 
     {ordersOnly
-      ? <div className="planner-toolbar staging-filter"><strong>{data?.length || 0} order{data?.length === 1 ? '' : 's'} awaiting review</strong><span>{clearForApproval} clear for approval · {Math.max((data?.length || 0) - clearForApproval, 0)} need review</span>{message && <span className="notice inline-notice">{message}</span>}</div>
+      ? <div className="planner-toolbar staging-filter"><label>Orders for planning date <input type="date" value={planningDate} onChange={event => { setPlanningDate(event.target.value); setSelected(undefined); }} /></label><strong>{data?.length || 0} order{data?.length === 1 ? '' : 's'} awaiting review</strong><span>{clearForApproval} clear for approval · {Math.max((data?.length || 0) - clearForApproval, 0)} need review</span>{message && <span className="notice inline-notice">{message}</span>}</div>
       : <div className="planner-toolbar staging-filter"><label>Show pending <select value={entityFilter} onChange={event => { setEntityFilter(event.target.value); setSelected(undefined); }}><option value="">All record types</option>{['vehicle', 'driver', 'trailer', 'site', 'customercontact', 'marketcontact', 'customer', 'order'].map(type => <option key={type} value={type}>{type}</option>)}</select></label><span>{data?.length || 0} pending record{data?.length === 1 ? '' : 's'} shown</span>{message && <span className="notice inline-notice">{message}</span>}</div>}
 
     <State loading={loading} error={error} empty={!data?.length}>
