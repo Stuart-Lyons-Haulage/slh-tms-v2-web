@@ -37,12 +37,6 @@ foreach ($name in $required) {
     if ([string]::IsNullOrWhiteSpace($value) -or $value -like "CHANGE_ME*") { throw "$name must be populated in .env.standalone before V2 can start." }
 }
 
-$profiles = Read-EnvValue "COMPOSE_PROFILES"
-if ($profiles -match "(^|,)remote(,|$)") {
-    if ([string]::IsNullOrWhiteSpace((Read-EnvValue "CLOUDFLARE_TUNNEL_TOKEN"))) { throw "Remote profile requires CLOUDFLARE_TUNNEL_TOKEN." }
-    if ([string]::IsNullOrWhiteSpace((Read-EnvValue "TMS_PUBLIC_URL"))) { throw "Remote profile requires TMS_PUBLIC_URL." }
-}
-
 Assert-CleanRepository $WebRoot
 Assert-CleanRepository $ApiRoot
 
@@ -100,8 +94,6 @@ Write-Host "SLH TMS V2 is healthy." -ForegroundColor Green
 Write-Host "Web version: $webAfter"
 Write-Host "API version: $apiAfter"
 Write-Host "Local portal: http://127.0.0.1:$port"
-$publicUrl = Read-EnvValue "TMS_PUBLIC_URL"
-if (-not [string]::IsNullOrWhiteSpace($publicUrl)) { Write-Host "Remote portal: $publicUrl" }
 Write-Host "Authentication: Microsoft Entra"
 Write-Host "API health: $health"
 docker compose --env-file $EnvFile -f $ComposeFile ps
