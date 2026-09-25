@@ -46,7 +46,7 @@ const complianceNavigation: NavItem[] = [
 const adminNavigation: NavItem[] = [
   ['/admin/integrations', 'API Feeds'],
   ['/admin/order-intake', 'Order Intake Rules'],
-  ['/admin/imports', 'Imports'],
+  ['/admin/imports', 'Imports / Staging Queue'],
 ];
 
 function pathActive(current: string, path: string) {
@@ -199,7 +199,6 @@ function Shell() {
         <Route path="/driver-assignments" element={<DriverAssignments />} />
         <Route path="/driver-timesheets" element={<DriverTimesheets />} />
         <Route path="/admin" element={<Navigate to="/admin/integrations" replace />} />
-        <Route path="/admin/staging" element={<Navigate to="/admin/imports" replace />} />
         <Route path="/admin/imports" element={<StagingQueue masterOnly />} />
         <Route path="/admin/integrations" element={<AdminIntegrationSyncControls />} />
         <Route path="/admin/order-intake" element={<OrderIntakeMappingAdmin />} />
