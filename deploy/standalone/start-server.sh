@@ -8,6 +8,7 @@ API_ROOT="$PARENT/API"
 ENV_FILE="$WEB_ROOT/.env.standalone"
 COMPOSE_FILE="$WEB_ROOT/deploy/standalone/docker-compose.yml"
 LOCAL_COMPOSE_FILE="$WEB_ROOT/deploy/standalone/docker-compose.local.yml"
+HOST_COMPOSE_FILE="$WEB_ROOT/deploy/standalone/docker-compose.host.yml"
 
 command -v git >/dev/null || { echo "git is required on the SLH server."; exit 1; }
 command -v curl >/dev/null || { echo "curl is required on the SLH server."; exit 1; }
@@ -102,10 +103,15 @@ echo "Web: $WEB_BEFORE -> $WEB_AFTER"
 echo "API: $API_BEFORE -> $API_AFTER"
 
 mkdir -p "$WEB_ROOT/backup" "$WEB_ROOT/archive"
-COMPOSE_ARGS=(--env-file "$ENV_FILE" -f "$COMPOSE_FILE")
-if [[ -f "$LOCAL_COMPOSE_FILE" ]]; then
-  echo "Using host-specific Compose override: $LOCAL_COMPOSE_FILE"
-  COMPOSE_ARGS+=(-f "$LOCAL_COMPOSE_FILE")
+if [[ -f "$HOST_COMPOSE_FILE" ]]; then
+  echo "Using host-pinned Compose file: $HOST_COMPOSE_FILE"
+  COMPOSE_ARGS=(--env-file "$ENV_FILE" -f "$HOST_COMPOSE_FILE")
+else
+  COMPOSE_ARGS=(--env-file "$ENV_FILE" -f "$COMPOSE_FILE")
+  if [[ -f "$LOCAL_COMPOSE_FILE" ]]; then
+    echo "Using host-specific Compose override: $LOCAL_COMPOSE_FILE"
+    COMPOSE_ARGS+=(-f "$LOCAL_COMPOSE_FILE")
+  fi
 fi
 
 echo "Validating Docker Compose configuration..."
