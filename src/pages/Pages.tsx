@@ -4,7 +4,7 @@ import { MasterDataExportButton } from '../components/MasterDataExportButton';
 import { SourceEmailEvidenceDrawer } from '../components/SourceEmailEvidenceDrawer';
 import { MasterDataCsvImport } from './MasterDataCsvImport';
 import * as XLSX from 'xlsx';
-import { api, type Customer, type CustomerContact, type DiagnosticsTables, type Driver, type DriverAssignment, type FleetStatus, type Load, type LoadDispatch, type MarketContact, type ReturnLoadSuggestions, type Site, type StageBatchRequest, type StagedImport, type Telemetry, type Trailer, type TransportOrder, type Vehicle } from '../lib/api';
+import { api, request, type Customer, type CustomerContact, type DiagnosticsTables, type Driver, type DriverAssignment, type FleetStatus, type Load, type LoadDispatch, type MarketContact, type ReturnLoadSuggestions, type Site, type StageBatchRequest, type StagedImport, type Telemetry, type Trailer, type TransportOrder, type Vehicle } from '../lib/api';
 import { useAccessToken } from '../lib/auth';
 import { useApi } from '../lib/useApi';
 import { allocateRun, createRun, getRunDispatch, getRunRoute, listRuns, updateRunStatus, updateRunStops } from '../api/runs';
@@ -332,6 +332,7 @@ export function StagingQueue({ ordersOnly = false, masterOnly = false }: { order
   const [message, setMessage] = useState<string>();
   const [requestingOrders, setRequestingOrders] = useState(false);
   const [sourceEvidenceId, setSourceEvidenceId] = useState<string>();
+  const [masterImportBusy, setMasterImportBusy] = useState(false);
 
   async function review(item: StagedImport, approved: boolean) {
     setReviewing(item.id);
@@ -369,6 +370,21 @@ export function StagingQueue({ ordersOnly = false, masterOnly = false }: { order
       setMessage(exception instanceof Error ? exception.message : 'Orders could not be requested from Microsoft Graph.');
     } finally {
       setRequestingOrders(false);
+    }
+  }
+
+  async function reloadGeofenceSeed() {
+    if (!window.confirm('Reload the approved SLH Falcon geofence seed? Existing matching geofences will be updated rather than duplicated.')) return;
+    setMasterImportBusy(true);
+    setMessage(undefined);
+    try {
+      const result = await request<{ supplied: number; inserted: number; updated: number; siteMatched: number }>('/api/v1/geofences/import-slh-seed', await token(), { method: 'POST' });
+      setMessage(`${result.supplied} geofences checked · ${result.inserted} inserted · ${result.updated} updated · ${result.siteMatched} linked to Sites.`);
+      await refresh();
+    } catch (exception) {
+      setMessage(exception instanceof Error ? exception.message : 'SLH geofence seed import failed.');
+    } finally {
+      setMasterImportBusy(false);
     }
   }
 
@@ -462,7 +478,13 @@ export function StagingQueue({ ordersOnly = false, masterOnly = false }: { order
       </div>
     </div>
 
-    {!ordersOnly && <div style={{ marginBottom: 18 }}><MasterDataCsvImport onCommitted={() => void refresh()} /></div>}
+    {!ordersOnly && <div className="admin-card" style={{ marginBottom: 18 }}>
+      <div className="title-row" style={{ marginBottom: 10 }}>
+        <div><p className="eyebrow">Master Data import controls</p><h2>Import into staging</h2><p className="hint">All Master Data import actions live here. Imported records remain subject to the staging/review rules below unless the source is an approved system seed.</p></div>
+        <button disabled={masterImportBusy || Boolean(reviewing)} onClick={() => void reloadGeofenceSeed()}>{masterImportBusy ? 'Loading geofences…' : 'Reload approved geofence seed'}</button>
+      </div>
+      <MasterDataCsvImport onCommitted={() => void refresh()} />
+    </div>}
 
     {ordersOnly
       ? <div className="planner-toolbar staging-filter"><label>Orders for planning date <input type="date" value={planningDate} onChange={event => { setPlanningDate(event.target.value); setSelected(undefined); }} /></label><strong>{data?.length || 0} order{data?.length === 1 ? '' : 's'} awaiting review</strong><span>{clearForApproval} clear for approval · {Math.max((data?.length || 0) - clearForApproval, 0)} need review</span>{message && <span className="notice inline-notice">{message}</span>}</div>
