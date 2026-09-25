@@ -7,6 +7,7 @@ API_ROOT="$PARENT/API"
 [[ -d "$API_ROOT" ]] || API_ROOT="$PARENT/slh-tms-v2-api"
 ENV_FILE="$WEB_ROOT/.env.standalone"
 COMPOSE_FILE="$WEB_ROOT/deploy/standalone/docker-compose.yml"
+LOCAL_COMPOSE_FILE="$WEB_ROOT/deploy/standalone/docker-compose.local.yml"
 
 command -v git >/dev/null || { echo "git is required on the SLH server."; exit 1; }
 command -v curl >/dev/null || { echo "curl is required on the SLH server."; exit 1; }
@@ -101,16 +102,22 @@ echo "Web: $WEB_BEFORE -> $WEB_AFTER"
 echo "API: $API_BEFORE -> $API_AFTER"
 
 mkdir -p "$WEB_ROOT/backup" "$WEB_ROOT/archive"
+COMPOSE_ARGS=(--env-file "$ENV_FILE" -f "$COMPOSE_FILE")
+if [[ -f "$LOCAL_COMPOSE_FILE" ]]; then
+  echo "Using host-specific Compose override: $LOCAL_COMPOSE_FILE"
+  COMPOSE_ARGS+=(-f "$LOCAL_COMPOSE_FILE")
+fi
+
 echo "Validating Docker Compose configuration..."
-"$DOCKER_BIN" compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" config >/dev/null
+"$DOCKER_BIN" compose "${COMPOSE_ARGS[@]}" config >/dev/null
 
 echo "Building, migrating and starting SLH TMS V2..."
-if ! "$DOCKER_BIN" compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --build; then
+if ! "$DOCKER_BIN" compose "${COMPOSE_ARGS[@]}" up -d --build; then
   echo
   echo "SLH TMS deployment failed before API health became available." >&2
-  "$DOCKER_BIN" compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" ps || true
-  "$DOCKER_BIN" compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" logs migration --tail=160 || true
-  "$DOCKER_BIN" compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" logs sql --tail=120 || true
+  "$DOCKER_BIN" compose "${COMPOSE_ARGS[@]}" ps || true
+  "$DOCKER_BIN" compose "${COMPOSE_ARGS[@]}" logs migration --tail=160 || true
+  "$DOCKER_BIN" compose "${COMPOSE_ARGS[@]}" logs sql --tail=120 || true
   exit 1
 fi
 
@@ -133,8 +140,8 @@ if [[ "$ready" != "true" ]]; then
   echo "Update completed but the API did not become healthy." >&2
   echo "Web version: $WEB_AFTER" >&2
   echo "API version: $API_AFTER" >&2
-  "$DOCKER_BIN" compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" ps
-  "$DOCKER_BIN" compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" logs api --tail=120 || true
+  "$DOCKER_BIN" compose "${COMPOSE_ARGS[@]}" ps
+  "$DOCKER_BIN" compose "${COMPOSE_ARGS[@]}" logs api --tail=120 || true
   exit 1
 fi
 
@@ -145,4 +152,4 @@ echo "API version: $API_AFTER"
 echo "Local portal: http://127.0.0.1:$PORT"
 echo "Authentication: Microsoft Entra"
 echo "API health: $HEALTH"
-"$DOCKER_BIN" compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" ps
+"$DOCKER_BIN" compose "${COMPOSE_ARGS[@]}" ps
