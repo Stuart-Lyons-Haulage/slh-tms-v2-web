@@ -38,6 +38,9 @@ type Payload = Record<string, unknown> & {
   overnightRoute?: boolean;
   wave?: number | string;
   routeTiming?: string;
+  planningWindow?: string;
+  suggestedPlanningWindow?: string;
+  runsOvernight?: boolean;
   jobType?: string;
   driverInstructions?: string;
   plannerReady?: boolean;
@@ -255,6 +258,22 @@ export function OrderReviewBulk({ date }: { date: string }) {
   const [draft, setDraft] = useState<Payload>();
   const [sourceEmailStagingId, setSourceEmailStagingId] = useState<string>();
   const [requestingOrders, setRequestingOrders] = useState(false);
+  const [customers, setCustomers] = useState<Array<{ code: string; name: string; active: boolean }>>([]);
+  const [sites, setSites] = useState<Array<{ id: string; name: string; driverTextName?: string; externalCode: string; active: boolean }>>([]);
+
+  useEffect(() => {
+    let active = true;
+    void token().then((authToken) => Promise.all([api.customers(authToken), api.sites(authToken)]))
+      .then(([customerRows, siteRows]) => {
+        if (!active) return;
+        setCustomers(customerRows.filter((row) => row.active));
+        setSites(siteRows.filter((row) => row.active));
+      })
+      .catch(() => {
+        // Keep imported text editable if master-data loading is temporarily unavailable.
+      });
+    return () => { active = false; };
+  }, [token]);
 
   const queue = useApi(useCallback(async () =>
     request<StagingQueuePage>(
@@ -562,7 +581,7 @@ export function OrderReviewBulk({ date }: { date: string }) {
         const payload = isEditing && draft ? draft : row.payload;
         const sourceEvidence = resolveSourceEvidence(row.payload);
         const sourceLink = sourceEvidence.webLink;
-        const hasSourceIdentity = Boolean(sourceEvidence.messageId || sourceEvidence.internetMessageId || sourceLink);
+        const hasSourceIdentity = Boolean(sourceEvidence.messageId || sourceEvidence.internetMessageId || sourceLink || row.payload.sourceAttachmentName);
         const statusClass = blocked ? "blocked" : reviewFlag ? "review" : "ready";
         const statusText = blocked ? blocked : reviewFlag ? `Check: ${reviewFlag}` : "Ready to approve";
         const routeScore = row.payload.orderIntakeRouteConfidenceScore;
@@ -608,14 +627,36 @@ export function OrderReviewBulk({ date }: { date: string }) {
 
           {isEditing && <div className="bulk-order-editor">
             <div className="bulk-editor-grid">
-              <label>Customer<input value={text(payload.customerCode)} onChange={(event) => setDraft((current) => ({ ...(current || payload), customerCode: event.target.value }))} /></label>
+              <label>Customer<select value={text(payload.customerCode)} onChange={(event) => setDraft((current) => ({ ...(current || payload), customerCode: event.target.value }))}>
+                {text(payload.customerCode) && !customers.some((customer) => customer.code === text(payload.customerCode)) && <option value={text(payload.customerCode)}>Imported: {text(payload.customerCode)}</option>}
+                <option value="">Select customer…</option>
+                {customers.map((customer) => <option key={customer.code} value={customer.code}>{customer.code} · {customer.name}</option>)}
+              </select></label>
               <label>Customer PO / ref<input value={text(payload.customerPo)} onChange={(event) => setDraft((current) => ({ ...(current || payload), customerPo: event.target.value }))} /></label>
               <label>TMS order reference<input value={text(payload.poNumber)} onChange={(event) => setDraft((current) => ({ ...(current || payload), poNumber: event.target.value }))} /></label>
               <label>Collection date<input type="date" value={text(payload.collectionDate)} onChange={(event) => setDraft((current) => ({ ...(current || payload), collectionDate: event.target.value }))} /></label>
               <label>Delivery date<input type="date" value={text(payload.deliveryDate)} onChange={(event) => setDraft((current) => ({ ...(current || payload), deliveryDate: event.target.value }))} /></label>
               <label>Pallets<input type="number" min="0" value={numberText(payload.pallets)} onChange={(event) => setDraft((current) => ({ ...(current || payload), pallets: event.target.value }))} /></label>
-              <label>Collection site<input value={text(payload.sellerName)} onChange={(event) => setDraft((current) => ({ ...(current || payload), sellerName: event.target.value }))} /></label>
-              <label>Destination<input value={text(payload.stallNumber)} onChange={(event) => setDraft((current) => ({ ...(current || payload), stallNumber: event.target.value }))} /></label>
+              <label>Collection site<select value={text(payload.sellerName)} onChange={(event) => setDraft((current) => ({ ...(current || payload), sellerName: event.target.value }))}>
+                {text(payload.sellerName) && !sites.some((site) => site.name === text(payload.sellerName) || site.driverTextName === text(payload.sellerName)) && <option value={text(payload.sellerName)}>Imported: {text(payload.sellerName)}</option>}
+                <option value="">Select collection site…</option>
+                {sites.map((site) => <option key={"collection-" + site.id} value={site.name}>{site.name}{site.driverTextName ? " · " + site.driverTextName : ""}</option>)}
+              </select></label>
+              <label>Destination<select value={text(payload.stallNumber)} onChange={(event) => setDraft((current) => ({ ...(current || payload), stallNumber: event.target.value }))}>
+                {text(payload.stallNumber) && !sites.some((site) => site.name === text(payload.stallNumber) || site.driverTextName === text(payload.stallNumber)) && <option value={text(payload.stallNumber)}>Imported: {text(payload.stallNumber)}</option>}
+                <option value="">Select destination…</option>
+                {sites.map((site) => <option key={"destination-" + site.id} value={site.name}>{site.name}{site.driverTextName ? " · " + site.driverTextName : ""}</option>)}
+              </select></label>
+              <label>Wave<select value={text(payload.wave)} onChange={(event) => setDraft((current) => ({ ...(current || payload), wave: event.target.value === "" ? undefined : Number(event.target.value), planningWindow: event.target.value === "1" ? "AM" : event.target.value === "3" ? "PM" : payload.planningWindow, suggestedPlanningWindow: event.target.value === "1" ? "AM" : event.target.value === "3" ? "PM" : payload.suggestedPlanningWindow, routeTiming: event.target.value === "3" ? "Overnight" : event.target.value === "1" ? "SameDay" : payload.routeTiming, overnightRoute: event.target.value === "3", runsOvernight: event.target.value === "3" }))}>
+                <option value="">Not specified</option>
+                <option value="1">Wave 1 · AM</option>
+                <option value="3">Wave 3 · PM / overnight</option>
+              </select></label>
+              <label>Planning window<select value={text(payload.planningWindow || payload.suggestedPlanningWindow)} onChange={(event) => setDraft((current) => ({ ...(current || payload), planningWindow: event.target.value, suggestedPlanningWindow: event.target.value, routeTiming: event.target.value === "PM" ? "Overnight" : "SameDay", overnightRoute: event.target.value === "PM", runsOvernight: event.target.value === "PM" }))}>
+                <option value="">Auto-detect</option>
+                <option value="AM">AM</option>
+                <option value="PM">PM / overnight</option>
+              </select></label>
               <label>Requested time<input value={text(payload.requestedTime)} onChange={(event) => setDraft((current) => ({ ...(current || payload), requestedTime: event.target.value }))} /></label>
               <label className="checkbox-field"><span>Overnight route</span><input type="checkbox" checked={payload.overnightRoute === true} onChange={(event) => setDraft((current) => ({ ...(current || payload), overnightRoute: event.target.checked, routeTiming: event.target.checked ? "Overnight" : "SameDay", requestedTime: event.target.checked ? (text(payload.requestedTime) || "17:00") : payload.requestedTime }))} /></label>
               <label>Job type<input value={text(payload.jobType)} onChange={(event) => setDraft((current) => ({ ...(current || payload), jobType: event.target.value }))} /></label>
