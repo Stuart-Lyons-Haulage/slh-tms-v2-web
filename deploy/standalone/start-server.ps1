@@ -6,6 +6,7 @@ $ApiRoot = Join-Path $Parent "API"
 if (-not (Test-Path $ApiRoot)) { $ApiRoot = Join-Path $Parent "slh-tms-v2-api" }
 $EnvFile = Join-Path $WebRoot ".env.standalone"
 $ComposeFile = Join-Path $WebRoot "deploy\standalone\docker-compose.yml"
+$LocalComposeFile = Join-Path $WebRoot "deploy\standalone\docker-compose.local.yml"
 
 function Require-Command([string]$Name) {
     if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) { throw "$Name is required on the SLH server." }
@@ -59,17 +60,23 @@ Write-Host "API: $apiBefore -> $apiAfter"
 New-Item -ItemType Directory -Force -Path (Join-Path $WebRoot "backup") | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $WebRoot "archive") | Out-Null
 
+$composeArgs = @("--env-file", $EnvFile, "-f", $ComposeFile)
+if (Test-Path $LocalComposeFile) {
+    Write-Host "Using host-specific Compose override: $LocalComposeFile"
+    $composeArgs += @("-f", $LocalComposeFile)
+}
+
 Write-Host "Validating Docker Compose configuration..."
-docker compose --env-file $EnvFile -f $ComposeFile config | Out-Null
+docker compose @composeArgs config | Out-Null
 
 Write-Host "Building, migrating and starting SLH TMS V2..."
-docker compose --env-file $EnvFile -f $ComposeFile up -d --build
+docker compose @composeArgs up -d --build
 if ($LASTEXITCODE -ne 0) {
     Write-Host ""
     Write-Host "SLH TMS deployment failed before API health became available." -ForegroundColor Red
-    docker compose --env-file $EnvFile -f $ComposeFile ps
-    docker compose --env-file $EnvFile -f $ComposeFile logs migration --tail=160
-    docker compose --env-file $EnvFile -f $ComposeFile logs sql --tail=120
+    docker compose @composeArgs ps
+    docker compose @composeArgs logs migration --tail=160
+    docker compose @composeArgs logs sql --tail=120
     throw "Docker Compose deployment failed."
 }
 
@@ -92,8 +99,8 @@ if (-not $ready) {
     Write-Host "Update completed but the API did not become healthy." -ForegroundColor Red
     Write-Host "Web version: $webAfter"
     Write-Host "API version: $apiAfter"
-    docker compose --env-file $EnvFile -f $ComposeFile ps
-    docker compose --env-file $EnvFile -f $ComposeFile logs api --tail=120
+    docker compose @composeArgs ps
+    docker compose @composeArgs logs api --tail=120
     throw "V2 containers started, but API health did not become ready at $health."
 }
 
@@ -104,4 +111,4 @@ Write-Host "API version: $apiAfter"
 Write-Host "Local portal: http://127.0.0.1:$port"
 Write-Host "Authentication: Microsoft Entra"
 Write-Host "API health: $health"
-docker compose --env-file $EnvFile -f $ComposeFile ps
+docker compose @composeArgs ps
