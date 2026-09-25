@@ -159,7 +159,8 @@ export type TachoMasterStatus = { configured: boolean; connected: boolean; share
 export type TachoMasterSync = { configured: boolean; connected?: boolean; sourceDrivers?: number; matched: number; unmatched?: number; syncedAtUtc?: string; missingSettings?: string[]; message: string };
 export type DeliveryEta = DeliveryEtaDto;
 export type DeliveryEtas = DeliveryEtasDto;
-export type IntegrationStatus = { roadTech: { configured: boolean; connected: boolean; latestEventUtc?: string }; azureMaps: { configured: boolean }; azureSms: { configured: boolean }; textBee?: { configured: boolean; dutyPhoneLabel?: string; missingSettings?: string[] }; fleetio?: { configured: boolean; missingSettings?: string[] }; tachoMaster?: { configured: boolean; missingSettings?: string[] }; sageHr: { configured: boolean }; emailIntake: { configured: boolean; lastReceivedUtc?: string }; batchIntake: { configured: boolean; endpoint: string } };
+export type IntegrationStatus = { roadTech: { configured: boolean; connected: boolean; latestEventUtc?: string; tracking?: { configured: boolean }; tacho?: { configured: boolean; sharedCredentials?: boolean; missingSettings?: string[] } }; azureMaps: { configured: boolean }; azureSms: { configured: boolean }; textBee?: { configured: boolean; dutyPhoneLabel?: string; missingSettings?: string[] }; fleetio?: { configured: boolean; missingSettings?: string[] }; samsara?: { configured: boolean; missingSettings?: string[] }; tachoMaster?: { configured: boolean; missingSettings?: string[] }; sageHr: { configured: boolean }; infoMailboxGraph?: { enabled: boolean; configured: boolean; mailbox: string; lastAttemptUtc?: string; lastSuccessUtc?: string; lastError?: string; lastMessagesSeen: number; lastMessagesIngested: number }; emailIntake: { configured: boolean; lastReceivedUtc?: string }; batchIntake: { configured: boolean; endpoint: string } };
+export type IntakePipelineHealth = { status: string; source: string; evidenceEmails: number; orderRecords: number; pendingReview: number; failed: number; lastEmailReceivedUtc?: string; lastOrderStagedUtc?: string; graph: { enabled: boolean; configured: boolean; mailbox: string; lastAttemptUtc?: string; lastSuccessUtc?: string; lastError?: string; lastMessagesSeen: number; lastMessagesIngested: number; stale: boolean }; checkedAtUtc: string };
 export type FleetioStatus = { configured: boolean; connected: boolean; sampleVehicleCount: number; missingSettings?: string[]; message: string };
 export type FleetioSync = { sourceVehicleCount: number; tmsVehicleCount: number; updated: number; created?: number; missingInFleetio: number; syncedAtUtc: string; connected?: boolean; message?: string };
 export type FleetioVehicleAlignment = { configured: boolean; connected: boolean; matched: number; unmatchedFleetio: number; missingInFleetio: number; missingSettings?: string[]; message: string; records: Array<{ tmsVehicleId?: string; tmsRegistration?: string; tmsFleetNumber?: string; tmsAbbreviation?: string; fleetioId?: string; fleetioRegistration?: string; fleetioName?: string; fleetioFleetNumber?: string; fleetioStatus?: string; status: 'Matched' | 'MissingInFleetio' | 'UnmatchedFleetio' }> };
@@ -304,6 +305,8 @@ export interface TmsApi {
   fleetioVehicleAlignment(token?: string): Promise<FleetioVehicleAlignment>;
   syncFleetioVehicles(token?: string): Promise<FleetioSync>;
   integrationStatus(token?: string): Promise<IntegrationStatus>;
+  intakeHealth(token?: string): Promise<IntakePipelineHealth>;
+  pollMailboxNow(token?: string): Promise<{ message: string; lastAttemptUtc?: string; lastSuccessUtc?: string; lastMessagesSeen: number; lastMessagesIngested: number }>;
   diagnosticsTables(token?: string): Promise<DiagnosticsTables>;
   syncSageHrDrivers(token?: string): Promise<SageHrSync>;
   customerCommunications(token?: string, status?: string, purpose?: string, take?: number): Promise<CustomerCommunication[]>;
@@ -364,6 +367,8 @@ export const api: TmsApi = {
   fleetioVehicleAlignment: token => request<FleetioVehicleAlignment>('/api/v1/integrations/fleetio/vehicle-alignment', token),
   syncFleetioVehicles: token => request<FleetioSync>('/api/v1/integrations/fleetio/sync-assets-resilient', token, { method: 'POST' }),
   integrationStatus: token => request<IntegrationStatus>('/api/v1/integrations/status', token),
+  intakeHealth: token => request<IntakePipelineHealth>('/api/v1/health/intake', token),
+  pollMailboxNow: token => request<{ message: string; lastAttemptUtc?: string; lastSuccessUtc?: string; lastMessagesSeen: number; lastMessagesIngested: number }>('/api/v1/health/intake/poll', token, { method: 'POST' }),
   diagnosticsTables: token => request<DiagnosticsTables>('/api/v1/diagnostics/tables', token),
   syncSageHrDrivers: token => request<SageHrSync>('/api/v1/integrations/sage-hr/sync-drivers', token, { method: 'POST' }),
   customerCommunications: (token, status = 'PendingReview', purpose, take = 100) => request<CustomerCommunication[]>(`/api/v1/customer-communications?${new URLSearchParams({ ...(status ? { status } : {}), ...(purpose ? { purpose } : {}), take: String(take) })}`, token),
