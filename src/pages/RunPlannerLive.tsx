@@ -14,6 +14,7 @@ type Allocation = { loadId: string; loadReference?: string; pallets: number };
 type PlanningOrder = {
   id: string;
   reference: string;
+  lineNote?: string;
   customerCode: string;
   orderedPallets: number;
   plannedPallets: number;
@@ -62,7 +63,6 @@ type PlanningMovement = {
   outstandingPallets: number;
   orders: PlanningOrder[];
 };
-type OrderCluster = { key: OrderClusterKey; label: string; note: string; movements: PlanningMovement[]; pallets: number };
 
 const blankLine = (): RunLine => ({ key: crypto.randomUUID(), collectionSite: "", deliverySite: "", pallets: "", note: "" });
 const blankRun = (key: string): RunDraft => ({
@@ -157,18 +157,6 @@ function clusterForOrder(order: PlanningOrder, sites: Site[], marketNames: strin
   return "other";
 }
 
-function orderTypeLabel(order: PlanningOrder, sites: Site[], marketNames: string[]) {
-  const evidence = `${order.source || ""} ${order.collection} ${order.destination}`;
-  if (/\bback\s*load\b/i.test(evidence)) return "Backload";
-  if (clusterForOrder(order, sites, marketNames) === "markets" || /\bmarket\b/i.test(evidence)) return "Market";
-  if (/\btransfer\b/i.test(evidence)) return "Transfer";
-  if (/\breturn(?:s)?\b/i.test(evidence)) return "Return";
-  if (/\bpre[-\s]?load\b/i.test(evidence)) return "Preload";
-  const source = String(order.source || "").trim();
-  if (source && source.length <= 24 && !/mail|email|import|parser|workbook|csv/i.test(source)) return source;
-  return "Delivery";
-}
-
 function movementKey(order: PlanningOrder, sites: Site[], marketNames: string[]) {
   const collection = normalise(plannerSiteName(sites, order.collection));
   const destination = normalise(plannerSiteName(sites, order.destination));
@@ -182,22 +170,22 @@ function lineOrderIds(line: RunLine) {
   return line.orderIds?.length ? line.orderIds : line.orderId ? [line.orderId] : [];
 }
 
+function orderLineNote(order: PlanningOrder) {
+  return order.lineNote?.trim() || `Ref: ${order.reference}`;
+}
+
+function mergedOrderLineNote(existing: string, orders: PlanningOrder[]) {
+  const evidence = [...new Set(orders.map(orderLineNote).filter(Boolean))].join(" · ");
+  if (!existing.trim()) return evidence;
+  if (!evidence || existing.includes(evidence)) return existing;
+  const missing = evidence.split(" · ").filter(part => part && !existing.includes(part));
+  return missing.length ? `${existing.trim()} · ${missing.join(" · ")}` : existing;
+}
+
 function validPallets(value: string) {
   const pallets = Number(value);
   return Number.isInteger(pallets) && pallets >= 0 ? pallets : undefined;
 }
-
-const CLUSTER_DEFINITIONS: Array<{ key: OrderClusterKey; label: string; note: string }> = [
-  { key: "south-to-north", label: "South → North", note: "Northbound work originating in London, South East or South West" },
-  { key: "northbound", label: "Northbound", note: "Other work whose destination is in the North" },
-  { key: "southbound", label: "Southbound", note: "Work heading into London, South East or South West" },
-  { key: "markets", label: "Markets", note: "Market work kept together regardless of direction" },
-  { key: "south-local", label: "South / Local", note: "South-origin work remaining within the southern regions" },
-  { key: "midlands", label: "Midlands", note: "Work whose destination is in the Midlands" },
-  { key: "east", label: "East", note: "Work whose destination is in the East" },
-  { key: "west-wales", label: "West / Wales", note: "Work whose destination is in West / Wales" },
-  { key: "other", label: "Other / Region not mapped", note: "Orders needing Site Master region or market mapping" },
-];
 
 export function RunPlannerLive({ planningDate }: { planningDate?: string } = {}) {
   const token = useAccessToken();
@@ -211,7 +199,6 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
   const [activeKey, setActiveKey] = useState(runs[0].key);
   const [busyKey, setBusyKey] = useState<string>();
   const [message, setMessage] = useState<string>();
-  const [query, setQuery] = useState("");
   const [periodFilter, setPeriodFilter] = useState<PeriodFilter>("ALL");
   const saveTimers = useRef<Record<string, number>>({});
   const mutationCounter = useRef(0);
@@ -351,8 +338,7 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
 
   const visible = useMemo(() => effectiveOrders
     .filter((order) => order.outstandingPallets > 0)
-    .filter((order) => !query.trim() || [order.reference, order.customerCode, order.collection, order.destination, order.source].some((value) => String(value || "").toLowerCase().includes(query.toLowerCase())))
-    .sort((left, right) => left.collection.localeCompare(right.collection) || left.destination.localeCompare(right.destination) || left.reference.localeCompare(right.reference)), [effectiveOrders, query]);
+    .sort((left, right) => left.collection.localeCompare(right.collection) || left.destination.localeCompare(right.destination) || left.reference.localeCompare(right.reference)), [effectiveOrders]);
 
   const movements = useMemo(() => {
     const grouped = new Map<string, PlanningMovement>();
@@ -369,11 +355,6 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
     }
     return [...grouped.values()].sort((a, b) => a.collection.localeCompare(b.collection) || a.destination.localeCompare(b.destination));
   }, [marketNames, sites, visible]);
-
-  const orderClusters = useMemo<OrderCluster[]>(() => CLUSTER_DEFINITIONS.map((definition) => {
-    const clusterMovements = movements.filter((movement) => clusterForOrder(movement.orders[0], sites, marketNames) === definition.key);
-    return { ...definition, movements: clusterMovements, pallets: clusterMovements.reduce((total, movement) => total + movement.outstandingPallets, 0) };
-  }).filter((cluster) => cluster.movements.length > 0), [marketNames, movements, sites]);
 
   const active = runs.find((run) => run.key === activeKey) || runs[0];
   const visibleRuns = useMemo(
