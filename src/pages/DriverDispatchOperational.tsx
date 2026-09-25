@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { BackloadMatchNotifications } from "../components/BackloadMatchNotifications";
-import { CustomerLoadPlanActions } from "../components/CustomerLoadPlanActions";
 import { DispatchBoard } from "../components/dispatch/DispatchBoard";
 import { DispatchResourceQuickAdd } from "../components/dispatch/DispatchResourceQuickAdd";
 import "../authoritative-dispatch.css";
@@ -27,7 +26,6 @@ export function DriverDispatchOperational() {
       planningDate={dispatchDate}
       onPlanningDateChange={setDispatchDate}
       extraActions={<>
-        <CustomerLoadPlanActions date={dispatchDate} />
         <DispatchResourceQuickAdd onSaved={() => setDispatchRevision(value => value + 1)} />
       </>}
     />

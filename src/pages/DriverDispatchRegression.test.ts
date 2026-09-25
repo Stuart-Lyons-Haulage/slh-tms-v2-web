@@ -60,7 +60,7 @@ describe("Driver Dispatch UI contract", () => {
   });
 
   it("keeps driver search, sync and customer exports on the routed Driver Dispatch surface", () => {
-    expect(operationalSource).toContain("CustomerLoadPlanActions");
+    expect(operationalSource).not.toContain("CustomerLoadPlanActions");
     expect(filterSource).toContain('aria-label="Search drivers"');
     expect(authoritativeSource).toContain("Sync Drivers");
     expect(authoritativeSource).toContain("syncDispatchDrivers");

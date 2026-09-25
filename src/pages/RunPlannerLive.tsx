@@ -5,7 +5,7 @@ import { signalPlanningChange, subscribePlanningChanges } from "../lib/planningE
 import { startVisiblePolling } from "../lib/visiblePolling";
 import { RunJobSuggestions } from "../components/RunJobSuggestions";
 import "../simple-planner.css";
-import { createRun, listRuns, updateRunStops } from '../api/runs';
+import { createRun, listRuns, updateRunStatus, updateRunStops } from '../api/runs';
 import { planningDeliveryLocation } from "../lib/planningLocations";
 
 type Period = "" | "AM" | "PM";
@@ -568,7 +568,13 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
     try {
       const access = await token();
       await Promise.all(ids.map((orderId) => allocate(orderId, run.loadId!, 0, access)));
-      await syncStops(run.loadId, remaining, access);
+      if (remaining.some(item => lineOrderIds(item).length > 0)) {
+        await syncStops(run.loadId, remaining, access);
+      } else {
+        // Removing the final movement removes the planning run. Persist a cancellation
+        // tombstone so Dispatch and audit recovery cannot continue to show the old run.
+        await updateRunStatus(run.loadId, "Cancelled", access);
+      }
       signalPlanningChange();
       setMessage("Movement removed from the run and its remaining pallets returned to Pallet Order.");
       void refreshControl().catch(() => undefined);
