@@ -32,4 +32,12 @@ describe("Order Review source email evidence", () => {
     expect(controlSource).toContain('searchParams.get("sourceEmail") === "1"');
     expect(controlSource).toContain("SourceEmailEvidenceDrawer");
   });
+
+  it("lets a planner approve one selectable order and shows the backend failure reason", () => {
+    expect(reviewSource).toContain("approveRow(row)");
+    expect(reviewSource).toContain('ids: [row.item.id]');
+    expect(reviewSource).toContain("acknowledgeReviewFlags: true");
+    expect(reviewSource).toContain("approvalFailureDetail(result)");
+    expect(reviewSource).toContain('{rowBusy ? "Working…" : "Approve"}');
+  });
 });
