@@ -211,23 +211,13 @@ export function GeofenceOperational() {
     finally { setSaving(false); }
   }
 
-  async function reloadSeed() {
-    if (!window.confirm('Reload the 53 SLH Falcon geofences supplied on 17 August? Existing matching geofences will be updated, not duplicated.')) return;
-    setSaving(true); setError(undefined); setNotice(undefined);
-    try {
-      const result = await request<{ supplied: number; inserted: number; updated: number; siteMatched: number }>('/api/v1/geofences/import-slh-seed', await token(), { method: 'POST' });
-      setNotice(`${result.supplied} SLH geofences checked: ${result.inserted} inserted, ${result.updated} updated, ${result.siteMatched} site matches.`); await load();
-    } catch (e) { setError(e instanceof Error ? e.message : 'SLH geofence reload failed.'); }
-    finally { setSaving(false); }
-  }
-
   const latest = data?.latestGeofenceHit;
   const confirmed = data?.latestConfirmedHit;
 
   return <section>
     <div className="title-row">
       <div><p className="eyebrow">RoadTech → geofence → Live Runs</p><h2>Geofence integrity</h2><p className="hint">Geofence-to-Site links use canonical SITE### records. Choosing a Linked Site saves that relationship immediately.</p></div>
-      <div className="title-actions"><button onClick={() => void load()} disabled={loading}>Refresh status</button><button className="primary" onClick={() => void syncAllSites()} disabled={saving}>{saving ? 'Syncing…' : 'Sync Sites'}</button><button onClick={() => void reloadSeed()} disabled={saving}>Reload SLH geofences</button></div>
+      <div className="title-actions"><button onClick={() => void load()} disabled={loading}>Refresh status</button><button className="primary" onClick={() => void syncAllSites()} disabled={saving}>{saving ? 'Syncing…' : 'Sync Sites'}</button></div>
     </div>
 
     {error && <p className="notice" style={{ borderColor: '#b42318' }}>{error}</p>}
