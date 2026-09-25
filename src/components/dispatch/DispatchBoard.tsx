@@ -52,7 +52,7 @@ type MessageState = {
 };
 
 const filterValues: DispatchFilter[] = ["all", "unallocated", "backloads", "warnings", "skills-mismatch"];
-const employmentFilterValues: DispatchEmploymentFilter[] = ["all", "employed", "agency", "casual", "subcontractor"];
+const employmentFilterValues: DispatchEmploymentFilter[] = ["all", "employed", "agency", "casual", "subcontractor", "unmatched"];
 
 function fleetioWarning(status?: string): string | undefined {
   const value = status?.trim();
