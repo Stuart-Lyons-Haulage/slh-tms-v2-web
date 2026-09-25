@@ -104,8 +104,15 @@ mkdir -p "$WEB_ROOT/backup" "$WEB_ROOT/archive"
 echo "Validating Docker Compose configuration..."
 "$DOCKER_BIN" compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" config >/dev/null
 
-echo "Building and starting SLH TMS V2..."
-"$DOCKER_BIN" compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --build
+echo "Building, migrating and starting SLH TMS V2..."
+if ! "$DOCKER_BIN" compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --build; then
+  echo
+  echo "SLH TMS deployment failed before API health became available." >&2
+  "$DOCKER_BIN" compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" ps || true
+  "$DOCKER_BIN" compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" logs migration --tail=160 || true
+  "$DOCKER_BIN" compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" logs sql --tail=120 || true
+  exit 1
+fi
 
 PORT="$(env_value TMS_HTTP_PORT)"
 PORT="${PORT:-8080}"
