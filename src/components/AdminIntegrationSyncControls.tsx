@@ -134,13 +134,19 @@ export function AdminIntegrationSyncControls() {
   const trackingState = roadTech ? roadTechState(roadTech) : undefined;
 
   return <section className="panel" style={{ marginBottom: 18 }}>
-    <div className="title-row">
+    <div className="title-row admin-integration-heading">
       <div>
         <p className="eyebrow">Admin · API feeds</p>
         <h2>API Feeds & Integrations</h2>
         <p className="hint">This is the single TMS source for external API/feed health, connectivity and controlled refresh actions. Normal updates remain automatic.</p>
       </div>
-      <button onClick={() => { void loadState(); void feedHealth.refresh(); }}>Check system state</button>
+      <div className="admin-integration-actions">
+        <button onClick={() => { void loadState(); void feedHealth.refresh(); }}>Check system state</button>
+        <button onClick={() => void force('tacho')} disabled={Boolean(busy)}>{busy === 'tacho' ? 'Refreshing…' : 'Force TachoMaster'}</button>
+        <button onClick={() => void force('sage')} disabled={Boolean(busy)}>{busy === 'sage' ? 'Refreshing…' : 'Force Sage HR'}</button>
+        <button onClick={() => void force('fleetio')} disabled={Boolean(busy)}>{busy === 'fleetio' ? 'Refreshing…' : 'Force Fleetio'}</button>
+        <button className="primary" onClick={() => void force('all')} disabled={Boolean(busy)}>{busy === 'all' ? 'Refreshing all…' : 'Force refresh all systems'}</button>
+      </div>
     </div>
 
     <div className="admin-card" style={{ marginBottom: 14 }}>
@@ -221,13 +227,7 @@ export function AdminIntegrationSyncControls() {
       </article>
     </div>
 
-    <div className="actions" style={{ flexWrap: 'wrap' }}>
-      <button onClick={() => void force('tacho')} disabled={Boolean(busy)}>{busy === 'tacho' ? 'Refreshing…' : 'Force TachoMaster'}</button>
-      <button onClick={() => void force('sage')} disabled={Boolean(busy)}>{busy === 'sage' ? 'Refreshing…' : 'Force Sage HR'}</button>
-      <button onClick={() => void force('fleetio')} disabled={Boolean(busy)}>{busy === 'fleetio' ? 'Refreshing…' : 'Force Fleetio'}</button>
-      <button className="primary" onClick={() => void force('all')} disabled={Boolean(busy)}>{busy === 'all' ? 'Refreshing all…' : 'Force refresh all systems'}</button>
-    </div>
-    <p className="hint">Automatic cadence: TachoMaster every 5 minutes · Sage HR 05:30 UK daily · Fleetio hourly · DOT/Falcon continuous. Status refreshes on screen every 60 seconds.</p>
+    <p className="hint">Automatic cadence: TachoMaster every 20 minutes · Sage HR 05:30 UK daily · Fleetio hourly · DOT/Falcon continuous. Status refreshes on screen every 60 seconds.</p>
     {state && <p className="hint">Platform state: <strong>{state.status}</strong>{state.lastPlatformUpdateUtc ? ` · last update ${new Date(state.lastPlatformUpdateUtc).toLocaleString('en-GB')}` : ''}</p>}
     {message && <p className="notice inline-notice">{message}</p>}
   </section>;
