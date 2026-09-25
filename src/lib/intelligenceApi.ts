@@ -27,6 +27,20 @@ type SystemSyncState = {
   providers: Array<{ name: string; configured: boolean; state: string; lastUpdatedUtc?: string; ageMinutes?: number }>;
 };
 
+type IntakePipelineHealth = {
+  graph?: {
+    enabled: boolean;
+    configured: boolean;
+    mailbox: string;
+    lastAttemptUtc?: string;
+    lastSuccessUtc?: string;
+    lastError?: string;
+    lastMessagesSeen: number;
+    lastMessagesIngested: number;
+    stale: boolean;
+  };
+};
+
 function colourForProviderState(state: string): FreshnessSource['state'] {
   if (state === 'current') return 'green';
   if (state === 'pending') return 'amber';
@@ -45,8 +59,34 @@ function providerCadence(name: string, schedules: SystemSyncState['schedules']) 
   return undefined;
 }
 
-function mailboxSource(lastReceivedUtc: string | undefined, now: number): FreshnessSource {
+function mailboxSource(lastReceivedUtc: string | undefined, now: number, graph?: IntakePipelineHealth['graph']): FreshnessSource {
   const ageMinutes = lastReceivedUtc ? Math.max(0, (now - new Date(lastReceivedUtc).getTime()) / 60000) : undefined;
+  if (graph) {
+    const graphAgeMinutes = graph.lastSuccessUtc
+      ? Math.max(0, (now - new Date(graph.lastSuccessUtc).getTime()) / 60000)
+      : undefined;
+    const graphCurrent = graph.enabled && graph.configured && !graph.stale && !graph.lastError && graphAgeMinutes != null;
+    const graphState = !graph.enabled || !graph.configured || graph.stale || Boolean(graph.lastError)
+      ? 'red' as const
+      : graphCurrent ? 'green' as const : 'amber' as const;
+    const graphDetail = !graph.enabled
+      ? 'Microsoft Graph mailbox polling is disabled in the V2 API configuration.'
+      : !graph.configured
+        ? 'Microsoft Graph polling is enabled but its application credentials are incomplete.'
+        : graph.lastError
+          ? `Microsoft Graph poll failed: ${graph.lastError}`
+          : graph.lastSuccessUtc
+            ? `Microsoft Graph is polling ${graph.mailbox}; ${graph.lastMessagesIngested} new message${graph.lastMessagesIngested === 1 ? '' : 's'} staged on the last poll.`
+            : 'Microsoft Graph is configured but has not completed a successful poll yet.';
+    return {
+      name: 'Info mailbox · Microsoft Graph',
+      lastUpdatedUtc: graph.lastSuccessUtc,
+      ageMinutes: graphAgeMinutes == null ? undefined : Math.round(graphAgeMinutes * 10) / 10,
+      state: graphState,
+      cadence: 'Graph polling',
+      detail: graphDetail,
+    };
+  }
   return {
     name: 'Info mailbox',
     lastUpdatedUtc: lastReceivedUtc,
@@ -60,9 +100,10 @@ function mailboxSource(lastReceivedUtc: string | undefined, now: number): Freshn
 }
 
 async function freshness(token?: string): Promise<FreshnessResponse> {
-  const [systemState, confidence] = await Promise.all([
+  const [systemState, confidence, intake] = await Promise.all([
     request<SystemSyncState>('/api/v2/system-sync/state', token),
     request<ConfidenceResponse>('/api/v2/operations/confidence', token).catch(() => null),
+    request<IntakePipelineHealth>('/api/v2/health/intake', token).catch(() => null),
   ]);
   const now = Date.now();
   const providers = systemState.providers.map<FreshnessSource>((provider) => {
@@ -84,7 +125,7 @@ async function freshness(token?: string): Promise<FreshnessResponse> {
   });
 
   const mailbox = confidence
-    ? mailboxSource(confidence.emailIntake.lastReceivedUtc, now)
+    ? mailboxSource(confidence.emailIntake.lastReceivedUtc, now, intake?.graph)
     : { name: 'Info mailbox', state: 'red' as const, cadence: 'event-driven', detail: 'Mailbox receipt evidence could not be checked.' };
 
   return {

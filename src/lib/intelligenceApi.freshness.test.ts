@@ -45,6 +45,19 @@ describe("system feed health", () => {
           emailIntake: { lastReceivedUtc: isoMinutesAgo(120) },
         } as never;
       }
+      if (url === "/api/v2/health/intake") {
+        return {
+          graph: {
+            enabled: true,
+            configured: true,
+            mailbox: "info@lyonshaulage.com",
+            lastSuccessUtc: isoMinutesAgo(1),
+            lastMessagesSeen: 1,
+            lastMessagesIngested: 1,
+            stale: false,
+          },
+        } as never;
+      }
       throw new Error(`Unexpected request ${url}`);
     });
 
@@ -57,6 +70,8 @@ describe("system feed health", () => {
     expect(byName.get("Sage HR")?.state).toBe("green");
     expect(byName.get("Fleetio")?.state).toBe("green");
     expect(byName.get("Sage HR")?.ageMinutes).toBe(600);
+    expect(byName.get("Info mailbox · Microsoft Graph")?.state).toBe("green");
+    expect(byName.get("Info mailbox · Microsoft Graph")?.detail).toContain("1 new message staged");
   });
 
   it("does not call an event-driven mailbox feed failed simply because no order email arrived in the last hour", async () => {
