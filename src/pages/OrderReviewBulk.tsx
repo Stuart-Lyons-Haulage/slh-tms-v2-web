@@ -242,6 +242,7 @@ export function OrderReviewBulk({ date }: { date: string }) {
   const [editingId, setEditingId] = useState<string>();
   const [draft, setDraft] = useState<Payload>();
   const [sourceEmailStagingId, setSourceEmailStagingId] = useState<string>();
+  const [requestingOrders, setRequestingOrders] = useState(false);
 
   const queue = useApi(useCallback(async () =>
     request<StagingQueuePage>(
@@ -283,6 +284,22 @@ export function OrderReviewBulk({ date }: { date: string }) {
     setEditingId(undefined);
     setDraft(undefined);
     setSourceEmailStagingId(undefined);
+  }
+
+  async function requestOrders() {
+    setRequestingOrders(true);
+    setNotice(undefined);
+    try {
+      const result = await api.pollMailboxNow(await token());
+      setQueuePage(1);
+      setSelectedIds(new Set());
+      await queue.refresh();
+      setNotice(`${result.message} ${result.lastMessagesIngested} new message${result.lastMessagesIngested === 1 ? '' : 's'} staged.`);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Graph mailbox poll failed.");
+    } finally {
+      setRequestingOrders(false);
+    }
   }
 
   function toggleRow(id: string) {
@@ -428,6 +445,10 @@ export function OrderReviewBulk({ date }: { date: string }) {
   }
 
   return <section className="panel order-selection-panel">
+    <div className="title-row">
+      <div><p className="eyebrow">Microsoft Graph intake</p><h2>Order Review</h2><p className="hint">Request the Info mailbox now, then review captured orders before approval.</p></div>
+      <button type="button" className="primary" onClick={() => void requestOrders()} disabled={requestingOrders || busy || Boolean(busyId)}>{requestingOrders ? "Requesting orders…" : "Request orders now"}</button>
+    </div>
     <div className="review-metrics" style={{ marginTop: 2 }}>
       <article><span>Waiting</span><strong>{datedRows.length}</strong><small>Pending on {date}</small></article>
       <article><span>Clean</span><strong>{cleanRows.length}</strong><small>Can be selected together</small></article>
