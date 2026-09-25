@@ -33,16 +33,16 @@ const coreNavigation: NavItem[] = [
   ['/orders', 'Order Entry'],
   ['/staging', 'Order Review'],
   ['/', 'Planner Builder'],
-  ['/pallet-control', 'Pallet Order'],
-  ['/driver-dispatch', 'Driver Dispatch'],
+  ['/pallet-control', 'Pallets'],
+  ['/driver-dispatch', 'Dispatch'],
   ['/driver-timesheets', 'Timesheets'],
   ['/master-data', 'Master Data'],
-  ['/night-outs', 'Invoice / Job History'],
 ];
 
 const complianceNavigation: NavItem[] = [
   ['/compliance', 'Compliance'],
   ['/driver-assignments', 'Driver History'],
+  ['/night-outs', 'Invoice / Job History'],
 ];
 
 const adminNavigation: NavItem[] = [
