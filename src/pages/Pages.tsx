@@ -16,7 +16,7 @@ const marketOrder = ['Western', 'Spit', 'Covent'];
 const stagingStatus = (value: string | number | undefined) => typeof value === 'number' ? stagingStatuses[value] || String(value) : value || 'PendingReview';
 const statusClass = (value: string | number | undefined) => stagingStatus(value).toLowerCase();
 const localDateInput = () => { const today = new Date(); return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`; };
-const masterStagingTypes = ['vehicle', 'driver', 'trailer', 'site', 'customer', 'customercontact', 'marketcontact', 'fuelprice', 'fuelcard', 'geofence'] as const;
+const masterStagingTypes: readonly string[] = ['vehicle', 'driver', 'trailer', 'site', 'customer', 'customercontact', 'marketcontact', 'fuelprice', 'fuelcard', 'geofence'];
 
 export function Dashboard() {
   const token = useAccessToken(); const [date, setDate] = useState(new Date().toISOString().slice(0, 10)); const staging = useApi(useCallback(async () => api.staging(await token(), ''), [token])); const loads = useApi(useCallback(async () => listRuns(date, await token()), [date, token])); const orders = useApi(useCallback(async () => api.orders(date, date, await token()), [date, token])); const fleet = useApi(useCallback(async () => api.fleetStatus(await token()), [token])); const etaApi = useApi(useCallback(async () => api.deliveryEtas(date, await token()), [date, token])); const assignments = useApi(useCallback(async () => api.driverAssignments(date, date, await token()), [date, token]));
