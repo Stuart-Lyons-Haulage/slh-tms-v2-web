@@ -12,6 +12,7 @@ const DriverAssignments = lazy(() => import('./pages/Pages').then(module => ({ d
 const Orders = lazy(() => import('./pages/Pages').then(module => ({ default: module.Orders })));
 const StagingQueue = lazy(() => import('./pages/Pages').then(module => ({ default: module.StagingQueue })));
 const DriverDispatchOperational = lazy(() => import('./pages/DriverDispatchOperational').then(module => ({ default: module.DriverDispatchOperational })));
+const Admin = lazy(() => import('./pages/Pages').then(module => ({ default: module.Admin })));
 
 import { apiScope, canUseMicrosoftAuthentication, isApplicationAuthenticated, localTestAuthEnabled, localTestUserName, useAccessToken } from './lib/auth';
 import { connectPlanningEventStream } from './lib/planningEvents';
@@ -28,6 +29,7 @@ const coreNavigation: NavItem[] = [
   ['/pallet-control', 'Pallet Order'],
   ['/driver-dispatch', 'Driver Dispatch'],
   ['/master-data', 'Master Data'],
+  ['/admin', 'Admin'],
 ];
 
 const complianceNavigation: NavItem[] = [
@@ -119,6 +121,7 @@ function Shell() {
         <Route path="/pallet-control" element={<PalletPlanningControl />} />
         <Route path="/driver-dispatch" element={<DriverDispatchOperational />} />
         <Route path="/master-data" element={<MasterDataHub />} />
+        <Route path="/admin" element={<Admin />} />
         <Route path="/drivers" element={<MasterDataHub initialSection="drivers" />} />
         <Route path="/fleet-assets" element={<MasterDataHub initialSection="vehicles" />} />
         <Route path="/fuel-cards" element={<MasterDataHub initialSection="fuel-cards" />} />
