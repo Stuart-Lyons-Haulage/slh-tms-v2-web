@@ -5,7 +5,6 @@ import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation } from 're
 const PlannerEnhanced = lazy(() => import('./pages/PlannerEnhanced').then(module => ({ default: module.PlannerEnhanced })));
 const PalletPlanningControl = lazy(() => import('./pages/PalletPlanningControl').then(module => ({ default: module.PalletPlanningControl })));
 const MasterDataHub = lazy(() => import('./pages/MasterDataHub').then(module => ({ default: module.MasterDataHub })));
-const RoadrunnerSiteReview = lazy(() => import('./pages/RoadrunnerSiteReview').then(module => ({ default: module.RoadrunnerSiteReview })));
 const DashboardOperational = lazy(() => import('./pages/DashboardOperational').then(module => ({ default: module.DashboardOperational })));
 const DailyCompliance = lazy(() => import('./pages/DailyCompliance').then(module => ({ default: module.DailyCompliance })));
 const JobInvoiceHistory = lazy(() => import('./pages/JobInvoiceHistory').then(module => ({ default: module.JobInvoiceHistory })));
@@ -15,7 +14,6 @@ const StagingQueue = lazy(() => import('./pages/Pages').then(module => ({ defaul
 const DriverDispatchOperational = lazy(() => import('./pages/DriverDispatchOperational').then(module => ({ default: module.DriverDispatchOperational })));
 const DriverTimesheets = lazy(() => import('./pages/DriverTimesheets').then(module => ({ default: module.DriverTimesheets })));
 const AdminIntegrationSyncControls = lazy(() => import('./components/AdminIntegrationSyncControls').then(module => ({ default: module.AdminIntegrationSyncControls })));
-const AdminHub = lazy(() => import('./pages/AdminHub').then(module => ({ default: module.AdminHub })));
 const OrderIntakeMappingAdmin = lazy(() => import('./pages/OrderIntakeMappingAdmin').then(module => ({ default: module.OrderIntakeMappingAdmin })));
 const MobileOperations = lazy(() => import('./pages/MobileOperations').then(module => ({ default: module.MobileOperations })));
 
@@ -46,11 +44,9 @@ const complianceNavigation: NavItem[] = [
 ];
 
 const adminNavigation: NavItem[] = [
-  ['/admin', 'Admin Home'],
-  ['/admin/integrations', 'Integrations'],
+  ['/admin/integrations', 'API Feeds'],
   ['/admin/order-intake', 'Order Intake Rules'],
-  ['/admin/staging', 'Import Reviews'],
-  ['/master-data/roadrunner-review', 'RoadRunner Review'],
+  ['/admin/imports', 'Imports'],
 ];
 
 function pathActive(current: string, path: string) {
@@ -191,7 +187,6 @@ function Shell() {
         <Route path="/pallet-control" element={<PalletPlanningControl />} />
         <Route path="/driver-dispatch" element={<DriverDispatchOperational />} />
         <Route path="/master-data" element={<MasterDataHub />} />
-        <Route path="/master-data/roadrunner-review" element={<RoadrunnerSiteReview />} />
         <Route path="/drivers" element={<MasterDataHub initialSection="drivers" />} />
         <Route path="/fleet-assets" element={<MasterDataHub initialSection="vehicles" />} />
         <Route path="/fuel-cards" element={<MasterDataHub initialSection="fuel-cards" />} />
@@ -203,8 +198,9 @@ function Shell() {
         <Route path="/night-outs" element={<JobInvoiceHistory />} />
         <Route path="/driver-assignments" element={<DriverAssignments />} />
         <Route path="/driver-timesheets" element={<DriverTimesheets />} />
-        <Route path="/admin" element={<AdminHub />} />
-        <Route path="/admin/staging" element={<StagingQueue />} />
+        <Route path="/admin" element={<Navigate to="/admin/integrations" replace />} />
+        <Route path="/admin/staging" element={<Navigate to="/admin/imports" replace />} />
+        <Route path="/admin/imports" element={<StagingQueue masterOnly />} />
         <Route path="/admin/integrations" element={<AdminIntegrationSyncControls />} />
         <Route path="/admin/order-intake" element={<OrderIntakeMappingAdmin />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
