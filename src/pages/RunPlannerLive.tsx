@@ -284,6 +284,18 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
 
   const summary = useMemo(() => effectiveOrders.reduce((totals, order) => ({ ordered: totals.ordered + order.orderedPallets, planned: totals.planned + order.plannedPallets, outstanding: totals.outstanding + order.outstandingPallets }), { ordered: 0, planned: 0, outstanding: 0 }), [effectiveOrders]);
 
+  // Planner location suggestions are scoped to the live orders for the selected
+  // date. The full Sites master remains available elsewhere, but should not
+  // swamp the route builder with unrelated delivery or collection locations.
+  const liveCollectionSiteIds = useMemo(() => new Set(effectiveOrders
+    .map(order => siteFor(sites, order.collection)?.id)
+    .filter((id): id is string => Boolean(id))), [effectiveOrders, sites]);
+  const liveDeliverySiteIds = useMemo(() => new Set(effectiveOrders
+    .map(order => siteFor(sites, order.destination)?.id)
+    .filter((id): id is string => Boolean(id))), [effectiveOrders, sites]);
+  const collectionSites = useMemo(() => sites.filter(site => liveCollectionSiteIds.has(site.id)), [liveCollectionSiteIds, sites]);
+  const deliverySites = useMemo(() => sites.filter(site => liveDeliverySiteIds.has(site.id)), [liveDeliverySiteIds, sites]);
+
   const visibleRuns = useMemo(
     () => periodFilter === "ALL" ? runs : runs.filter((run) => run.period === periodFilter || !run.period),
     [periodFilter, runs],
@@ -491,8 +503,19 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
     </div>
 
     {message && <p className="notice inline-notice simple-planner-notice">{message}</p>}
-    <datalist id="planner-site-options">
-      {[...sites]
+    <datalist id="planner-collection-site-options">
+      {[...collectionSites]
+        .filter(site => site.active !== false)
+        .sort((left, right) => left.name.localeCompare(right.name))
+        .flatMap(site => {
+          const aliases = (site.aliases || "").split(/[,;|]/).map(value => value.trim()).filter(Boolean);
+          const searchValues = [...new Set([site.name, site.driverTextName, site.externalCode, ...aliases].filter((value): value is string => Boolean(value?.trim())))];
+          return searchValues.map((value, index) =>
+            <option key={`${site.id}-${index}`} value={value}>{[site.name, site.externalCode, site.collectionAddress].filter(Boolean).join(" · ")}</option>);
+        })}
+    </datalist>
+    <datalist id="planner-delivery-site-options">
+      {[...deliverySites]
         .filter(site => site.active !== false)
         .sort((left, right) => left.name.localeCompare(right.name))
         .flatMap(site => {
@@ -517,9 +540,9 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
               const refs = lineOrderIds(line).map((id) => effectiveOrders.find((order) => order.id === id)?.reference).filter(Boolean);
               return <div className="simple-run-line" key={line.key} title={refs.length > 1 ? `${refs.length} source orders: ${refs.join(", ")}` : refs[0]}>
                 <span className="simple-line-number">{lineIndex + 1}</span>
-                <input list="planner-site-options" autoComplete="off" value={line.collectionSite} readOnly={lineOrderIds(line).length > 0} onChange={(event) => updateLine(run.key, line.key, { collectionSite: event.target.value })} onBlur={(event) => canonicaliseSiteEntry(run.key, line.key, "collectionSite", event.currentTarget.value)} placeholder="Start typing collection site…" />
+                <input list="planner-collection-site-options" autoComplete="off" value={line.collectionSite} readOnly={lineOrderIds(line).length > 0} onChange={(event) => updateLine(run.key, line.key, { collectionSite: event.target.value })} onBlur={(event) => canonicaliseSiteEntry(run.key, line.key, "collectionSite", event.currentTarget.value)} placeholder="Start typing collection site…" />
                 <input className="simple-pallet-input" type="number" min="0" inputMode="numeric" value={line.pallets} onChange={(event) => scheduleQuantity(run, line, event.target.value)} placeholder="0" />
-                <input list="planner-site-options" autoComplete="off" value={line.deliverySite} readOnly={lineOrderIds(line).length > 0} onChange={(event) => updateLine(run.key, line.key, { deliverySite: event.target.value })} onBlur={(event) => canonicaliseSiteEntry(run.key, line.key, "deliverySite", event.currentTarget.value)} placeholder="Start typing delivery site…" />
+                <input list="planner-delivery-site-options" autoComplete="off" value={line.deliverySite} readOnly={lineOrderIds(line).length > 0} onChange={(event) => updateLine(run.key, line.key, { deliverySite: event.target.value })} onBlur={(event) => canonicaliseSiteEntry(run.key, line.key, "deliverySite", event.currentTarget.value)} placeholder="Start typing delivery site…" />
                 <input value={line.note} onChange={(event) => updateLine(run.key, line.key, { note: event.target.value })} onBlur={(event) => void persistLineNote(run, line, event.currentTarget.value)} placeholder={refs.length > 1 ? `${refs.length} orders consolidated` : "Facility / load-line note"} />
                 <button type="button" className="simple-clear-line" aria-label={`Clear line ${lineIndex + 1}`} disabled={busyKey === `${run.key}:${line.key}`} onClick={(event) => { event.stopPropagation(); void clearLine(run, line); }}>×</button>
               </div>;

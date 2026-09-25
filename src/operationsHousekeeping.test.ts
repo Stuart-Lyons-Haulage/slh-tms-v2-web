@@ -80,8 +80,10 @@ describe("operations housekeeping contract", () => {
 
   it("keeps Planner Builder full-width and leaves order selection to Pallet Order", () => {
     expect(runBuilder).not.toContain('className="simple-order-pool"');
-    expect(runBuilder).toContain('datalist id="planner-site-options"');
-    expect(runBuilder).toContain('list="planner-site-options"');
+    expect(runBuilder).toContain('datalist id="planner-collection-site-options"');
+    expect(runBuilder).toContain('datalist id="planner-delivery-site-options"');
+    expect(runBuilder).toContain('list="planner-collection-site-options"');
+    expect(runBuilder).toContain('list="planner-delivery-site-options"');
     expect(runBuilder).toContain("Use Pallet Order on the second screen to allocate work");
     expect(runBuilder).toContain("orderLineNote(order)");
     expect(runBuilder).toContain("mergedOrderLineNote");
