@@ -20,6 +20,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Validate standalone Docker Compose
+        run: docker compose --env-file .env.standalone.example -f deploy/standalone/docker-compose.yml config > /dev/null
+
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
