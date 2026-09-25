@@ -390,7 +390,7 @@ export function StagingQueue({ ordersOnly = false }: { ordersOnly?: boolean } = 
     return { collection: String(collection || '—'), delivery: String(delivery || '—'), pallets: String(pallets ?? '—') };
   };
 
-  const orderReadiness = useMemo(() => new Map((data || []).filter(item => item.entityType === 'order').map(item => {
+  const orderReadiness = new Map((data || []).filter(item => item.entityType === 'order').map(item => {
     const value = parseStagingPayload(item);
     const summary = orderSummary(item);
     const warnings = Array.isArray(value.intakeWarnings) ? value.intakeWarnings.filter(Boolean).map(String) : [];
@@ -415,7 +415,7 @@ export function StagingQueue({ ordersOnly = false }: { ordersOnly?: boolean } = 
                 ? 'Intake confidence requires planner review.'
                 : 'Review the source evidence before approval.');
     return [item.id, { ...summary, ready, reason }] as const;
-  })), [data]);
+  }));
 
   const clearForApproval = (data || []).filter(item => orderReadiness.get(item.id)?.ready).length;
   const pendingCounts = (data || []).filter(item => stagingStatus(item.status) === 'PendingReview').reduce<Record<string, number>>((counts, item) => ({ ...counts, [item.entityType]: (counts[item.entityType] || 0) + 1 }), {});
