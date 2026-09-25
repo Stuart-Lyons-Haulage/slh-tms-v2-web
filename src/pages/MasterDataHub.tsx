@@ -6,9 +6,7 @@ import { FuelCardsOperational } from './FuelCardsOperational';
 import { MarketsMasterClean } from './MarketsMasterClean';
 import { MasterDataOperational, type MasterDataTab } from './MasterDataOperational';
 import { GeofenceOperational } from './GeofenceOperational';
-import { MasterDataCsvImport } from './MasterDataCsvImport';
 import { MasterDataDuplicateReviewPanel } from '../components/MasterDataDuplicateReviewPanel';
-import { NavLink } from 'react-router-dom';
 
 type MasterSection = MasterDataTab | 'fuel-cards' | 'markets' | 'fuel-prices';
 type DuplicateEntity = 'sites' | 'drivers' | 'vehicles' | 'trailers' | 'markets';
@@ -41,15 +39,11 @@ export function MasterDataHub({ initialSection = 'drivers' }: { initialSection?:
 
   return <section>
     <div className="panel master-section-panel" style={{ marginBottom: 18 }}>
-      <p className="hint">SQL is the single operational master. SQL is authoritative for TMS master-data writes; imports and reviews must reconcile into these governed records.</p>
+      <p className="hint">SQL is the single operational master. Maintain governed records here; file imports and staging approvals are handled under Admin → Imports.</p>
       <div className="master-section-tabs horizontal-tabs" role="tablist" aria-label="Master data sections">
         {sections.map(item => <button key={item.key} role="tab" aria-selected={section === item.key} className={section === item.key ? 'primary' : ''} onClick={() => setSection(item.key)}>{item.label}</button>)}
       </div>
     </div>
-
-
-    {section !== 'drivers' && <MasterDataCsvImport />}
-
 
     {duplicateReviewEntity && <MasterDataDuplicateReviewPanel entityType={duplicateReviewEntity} />}
 
@@ -58,10 +52,6 @@ export function MasterDataHub({ initialSection = 'drivers' }: { initialSection?:
       {section === 'vehicles' && <FleetMasterUnified kind="vehicles" />}
       {section === 'trailers' && <FleetMasterUnified kind="trailers" />}
       {section === 'sites' && <>
-        <div className="panel roadrunner-review-link-panel" style={{ marginBottom: 18 }}>
-          <div><p className="eyebrow">RoadRunner identity governance</p><h2>RoadRunner Site Review</h2><p className="hint">Review imported RoadRunner identities, link them to active canonical Sites, selectively accept fields, or create a new SITE### record.</p></div>
-          <NavLink className="primary roadrunner-review-link" to="/master-data/roadrunner-review">Open RoadRunner review</NavLink>
-        </div>
         <MasterDataOperational initialTab="sites" showCategoryButtons={false} showHeading={false} />
         <div className="panel" style={{ marginTop: 18, marginBottom: 18 }}>
           <p className="eyebrow">Site execution evidence</p>
