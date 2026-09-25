@@ -254,12 +254,12 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
           const allocation = order?.allocations.find((item) => item.loadId === load.id && item.pallets > 0);
           if (!order || !allocation) return [];
           seenOrderIds.add(order.id);
-          return [{ key: `${load.id}-${order.id}`, orderId: order.id, collectionSite: plannerSiteName(nextSites, order.collection), deliverySite: plannerSiteName(nextSites, order.destination), pallets: String(allocation.pallets), note: stop.plannerNote || "" }];
+          return [{ key: `${load.id}-${order.id}`, orderId: order.id, collectionSite: plannerSiteName(nextSites, order.collection), deliverySite: plannerSiteName(nextSites, order.destination), pallets: String(allocation.pallets), note: stop.plannerNote || orderLineNote(order) }];
         });
       const unsequencedLines = nextControl.orders.flatMap((order) => {
         if (seenOrderIds.has(order.id)) return [];
         const allocation = order.allocations.find((item) => item.loadId === load.id && item.pallets > 0);
-        return allocation ? [{ key: `${load.id}-${order.id}`, orderId: order.id, collectionSite: plannerSiteName(nextSites, order.collection), deliverySite: plannerSiteName(nextSites, order.destination), pallets: String(allocation.pallets), note: load.stops.find((stop) => stop.orderId === order.id && /^deliver/i.test(stop.name))?.plannerNote || "" }] : [];
+        return allocation ? [{ key: `${load.id}-${order.id}`, orderId: order.id, collectionSite: plannerSiteName(nextSites, order.collection), deliverySite: plannerSiteName(nextSites, order.destination), pallets: String(allocation.pallets), note: load.stops.find((stop) => stop.orderId === order.id && /^deliver/i.test(stop.name))?.plannerNote || orderLineNote(order) }] : [];
       });
       const lines = consolidateLines([...sequencedLines, ...unsequencedLines], ordersById);
       return {
@@ -496,9 +496,9 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
       const mergedIds = [...new Set([...lineOrderIds(existingLine), ...orderIds])];
       const mergedAllocations = { ...(existingLine.orderAllocations || {}), ...initialAllocations };
       const mergedTotal = Object.values(mergedAllocations).reduce((sum, value) => sum + Math.max(value, 0), 0);
-      nextLines = active.lines.map((line) => line.key === existingLine.key ? { ...line, orderIds: mergedIds, orderAllocations: mergedAllocations, pallets: String(mergedTotal) } : line);
+      nextLines = active.lines.map((line) => line.key === existingLine.key ? { ...line, orderIds: mergedIds, orderAllocations: mergedAllocations, pallets: String(mergedTotal), note: mergedOrderLineNote(line.note, movement.orders) } : line);
     } else {
-      const line: RunLine = { key: crypto.randomUUID(), orderId: orderIds[0], orderIds, orderAllocations: initialAllocations, collectionSite: movement.collection, deliverySite: movement.destination, pallets: String(movement.outstandingPallets), note: "" };
+      const line: RunLine = { key: crypto.randomUUID(), orderId: orderIds[0], orderIds, orderAllocations: initialAllocations, collectionSite: movement.collection, deliverySite: movement.destination, pallets: String(movement.outstandingPallets), note: mergedOrderLineNote("", movement.orders) };
       const blankIndex = active.lines.findIndex((item) => !item.orderId && !item.collectionSite && !item.deliverySite && !item.pallets);
       nextLines = blankIndex >= 0 ? active.lines.map((item, index) => index === blankIndex ? line : item) : [...active.lines, line];
     }
@@ -587,10 +587,14 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
     </div>
 
     {message && <p className="notice inline-notice simple-planner-notice">{message}</p>}
+    <datalist id="planner-site-options">
+      {[...sites].filter(site => site.active !== false).sort((left, right) => left.name.localeCompare(right.name)).map(site =>
+        <option key={site.id} value={site.name}>{[site.externalCode, site.driverTextName, site.collectionAddress].filter(Boolean).join(" · ")}</option>)}
+    </datalist>
 
     <div className="simple-planner-layout">
       <div className="simple-run-builder">
-        <div className="simple-section-heading"><div><p className="eyebrow">Run builder</p><h2>{visibleRuns.length} run{visibleRuns.length === 1 ? "" : "s"}</h2></div><small>AM is daytime work. PM / O/N covers routes that continue past midnight. Same collection/delivery movements are consolidated.</small></div>
+        <div className="simple-section-heading"><div><p className="eyebrow">Run builder</p><h2>{visibleRuns.length} run{visibleRuns.length === 1 ? "" : "s"}</h2></div><small>Use Pallet Order on the second screen to allocate work. This builder stays focused on route sequence, locations and notes.</small></div>
         {visibleRuns.map((run) => {
           const index = runs.indexOf(run);
           const saving = busyKey === run.key || busyKey?.startsWith(`${run.key}:`);
@@ -603,36 +607,21 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
               const refs = lineOrderIds(line).map((id) => effectiveOrders.find((order) => order.id === id)?.reference).filter(Boolean);
               return <div className="simple-run-line" key={line.key} title={refs.length > 1 ? `${refs.length} source orders: ${refs.join(", ")}` : refs[0]}>
                 <span className="simple-line-number">{lineIndex + 1}</span>
-                <input value={line.collectionSite} readOnly={lineOrderIds(line).length > 0} onChange={(event) => updateLine(run.key, line.key, { collectionSite: event.target.value })} placeholder="Collection" />
+                <input list="planner-site-options" value={line.collectionSite} readOnly={lineOrderIds(line).length > 0} onChange={(event) => updateLine(run.key, line.key, { collectionSite: event.target.value })} placeholder="Type collection site…" />
                 <input className="simple-pallet-input" type="number" min="0" inputMode="numeric" value={line.pallets} onChange={(event) => scheduleQuantity(run, line, event.target.value)} placeholder="0" />
-                <input value={line.deliverySite} readOnly={lineOrderIds(line).length > 0} onChange={(event) => updateLine(run.key, line.key, { deliverySite: event.target.value })} placeholder="Delivery" />
+                <input list="planner-site-options" value={line.deliverySite} readOnly={lineOrderIds(line).length > 0} onChange={(event) => updateLine(run.key, line.key, { deliverySite: event.target.value })} placeholder="Type delivery site…" />
                 <input value={line.note} onChange={(event) => updateLine(run.key, line.key, { note: event.target.value })} onBlur={(event) => void persistLineNote(run, line, event.currentTarget.value)} placeholder={refs.length > 1 ? `${refs.length} orders consolidated` : "Facility / load-line note"} />
                 <button type="button" className="simple-clear-line" aria-label={`Clear line ${lineIndex + 1}`} disabled={busyKey === `${run.key}:${line.key}`} onClick={(event) => { event.stopPropagation(); void clearLine(run, line); }}>×</button>
               </div>;
             })}</div>
-            <div className="simple-run-footer"><div className="simple-line-actions"><button type="button" onClick={(event) => { event.stopPropagation(); updateRun(run.key, (current) => ({ ...current, lines: [...current.lines, blankLine()] })); }}>+ Add line</button></div><small>{saving ? "Saving…" : run.loadId ? "✓ Auto-saved" : "Choose an order to start this run"}</small></div>
+            <div className="simple-run-footer"><div className="simple-line-actions"><button type="button" onClick={(event) => { event.stopPropagation(); updateRun(run.key, (current) => ({ ...current, lines: [...current.lines, blankLine()] })); }}>+ Add line</button></div><small>{saving ? "Saving…" : run.loadId ? "✓ Auto-saved" : "Create the run, then allocate orders from Pallet Order"}</small></div>
             {load && activeKey === run.key && <RunJobSuggestions lines={run.lines} orders={effectiveOrders} sites={sites} remainingCapacity={Math.max((load.totalPalletSpaces ?? 26) - runTotal(run), 0)} busy={poolBlocked} onAdd={(orderId) => { const order = effectiveOrders.find((item) => item.id === orderId); if (order) void addOrder(order); }} />}
           </article>;
         })}
         <button className="simple-add-run" type="button" onClick={() => { const draft = newDraft(); setRuns((current) => [...current, draft]); setActiveKey(draft.key); }}>+ Add another run</button>
       </div>
 
-      <aside className="simple-order-pool">
-        <div className="simple-order-header"><div><p className="eyebrow">Orders to plan</p><h2>Available now</h2></div><strong>{movements.length}</strong></div>
-        <input className="simple-order-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search order, site or customer…" />
-        <p className="simple-order-help">Matching collection → delivery orders are merged into one planning movement. Original order references remain underneath for audit. Any unplanned balance remains here and in Pallet Order.</p>
-        <div className="simple-order-list">
-          {orderClusters.map((cluster) => <section key={cluster.key} style={{ display: "grid", gap: 8, marginBottom: 14 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-end", padding: "8px 2px 4px", borderBottom: "1px solid var(--border, #d0d7de)" }}><div><strong style={{ display: "block" }}>{cluster.label}</strong><small title={cluster.note}>{cluster.movements.length} movement{cluster.movements.length === 1 ? "" : "s"}</small></div><div style={{ textAlign: "right" }}><strong style={{ display: "block", fontSize: "1.15rem" }}>{cluster.pallets}</strong><small>pallets remaining</small></div></div>
-            {cluster.movements.map((movement) => <button key={movement.key} className="simple-order-card" type="button" disabled={poolBlocked} onClick={() => void addMovement(movement)} title={movement.orders.map((order) => order.reference).join(", ")}>
-              <span><small>{orderTypeLabel(movement.orders[0], sites, marketNames)} · Collection{movement.orders.length > 1 ? ` · ${movement.orders.length} orders` : ""}</small><strong>{movement.collection}</strong></span>
-              <span className="simple-order-pallets"><strong>{movement.outstandingPallets}</strong><small>of {movement.orderedPallets}</small></span>
-              <span><small>Delivery</small><strong>{movement.destination}</strong></span>
-            </button>)}
-          </section>)}
-          {!movements.length && <p>All current orders are fully planned.</p>}
-        </div>
-      </aside>
+
     </div>
   </section>;
 }
