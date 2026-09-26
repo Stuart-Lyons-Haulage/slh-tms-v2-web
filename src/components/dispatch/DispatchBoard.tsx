@@ -330,13 +330,10 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
       }
       if (!readiness.canDispatch) throw new Error(readiness.explanation || "Dispatch readiness did not pass.");
 
-      if (!snapshot.samsaraConfigured) {
-        setNotice("Dispatch checks passed, but Samsara is not configured. The run is allocated and ready for route export.");
-        return;
-      }
-      const result = await sendRunToSamsara(effectiveSelection.runId, access);
       await refresh();
-      setNotice(result.message);
+      setNotice(snapshot.samsaraConfigured
+        ? "Dispatch checks passed. The run is allocated and ready; use Send to Samsara when the plan is final."
+        : "Dispatch checks passed. The run is allocated and ready for route export.");
     } catch (exception) {
       const reason = exception instanceof Error ? exception.message : "Dispatch could not be prepared.";
       setFailures(current => current.some(failure => failure.driverId === driver.driverId && failure.reason === reason)
@@ -381,6 +378,27 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
         setError(`No runs were exported to Samsara. ${batchFailures.length} run${batchFailures.length === 1 ? '' : 's'} need attention.`);
     } finally {
       setAction(undefined);
+    }
+  }
+
+  async function handleSamsaraSingle(driver: DispatchDriverDto, selection: DispatchAllocationSelection) {
+    if (!selection.runId || !snapshot?.samsaraConfigured) return;
+    setBusyDriverId(driver.driverId);
+    setNotice(undefined);
+    setFailures(current => current.filter(failure => failure.driverId !== driver.driverId));
+    try {
+      const result = await sendRunToSamsara(selection.runId, await token());
+      await refresh();
+      setNotice(result.message);
+    } catch (exception) {
+      const reason = exception instanceof Error ? exception.message : "The run could not be sent to Samsara.";
+      setFailures(current => [...current.filter(failure => failure.driverId !== driver.driverId), {
+        driverId: driver.driverId,
+        runId: selection.runId,
+        reason
+      }]);
+    } finally {
+      setBusyDriverId(undefined);
     }
   }
 
@@ -513,7 +531,7 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
               busy={busyDriverId === driver.driverId}
               onSelectionChange={changeSelection}
               onDispatch={(row, selection) => void prepareDispatch(row, selection)}
-              onSamsaraAndDispatch={(row, selection) => void prepareDispatch(row, selection)}
+               onSamsaraAndDispatch={(row, selection) => void handleSamsaraSingle(row, selection)}
               onUnassign={(row, selection) => void handleUnassign(row, selection)}
             />)}
           </tbody>
@@ -522,6 +540,6 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
       </div>
     </div>
 
-     <p className="smart-dispatch-footnote">Select work and press Dispatch to validate, allocate and export the route to Samsara. The Planner owns the built-run Lock Plan step. Regular 11h daily rest is the default; choose Reduced rest (9h) only when the planner intends to use that concession. Trailer continuity follows the driver's last-used trailer unless the selected run contains a planner trailer-swap instruction. Samsara updates the same external run rather than creating duplicates. Unassign remains audited after the plan is locked.</p>
+     <p className="smart-dispatch-footnote">Select work and press Dispatch to validate and allocate the run. When the plan is final, use Send to Samsara for the explicit route export. The Planner owns the built-run Lock Plan step. Regular 11h daily rest is the default; choose Reduced rest (9h) only when the planner intends to use that concession. Trailer continuity follows the driver's last-used trailer unless the selected run contains a planner trailer-swap instruction. Samsara updates the same external run rather than creating duplicates. Unassign remains audited after the plan is locked.</p>
   </section>;
 }
