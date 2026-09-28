@@ -374,9 +374,20 @@ export function StagingQueue({ ordersOnly = false, masterOnly = false }: { order
     setSavingEdit(true);
     setMessage(undefined);
     try {
+      const amendedPayload = { ...editingPayload };
+      const collection = String(amendedPayload.collectionSiteName ?? amendedPayload.collectionSite ?? amendedPayload.collectionLocation ?? amendedPayload.sellerName ?? '').trim();
+      const delivery = String(amendedPayload.deliverySiteName ?? amendedPayload.deliverySite ?? amendedPayload.deliveryLocation ?? amendedPayload.stallNumber ?? '').trim();
+      const temperature = String(amendedPayload.temperature ?? amendedPayload.temperatureRequirement ?? amendedPayload.temperatureC ?? amendedPayload.temp ?? '').trim();
+      const orderType = String(amendedPayload.orderType ?? amendedPayload.jobType ?? amendedPayload.palletType ?? '').trim();
+      const notes = String(amendedPayload.notes ?? amendedPayload.orderNotes ?? amendedPayload.driverInstructions ?? '').trim();
+      if (collection) Object.assign(amendedPayload, { collectionSite: collection, collectionLocation: collection, sellerName: collection });
+      if (delivery) Object.assign(amendedPayload, { deliverySite: delivery, deliveryLocation: delivery, stallNumber: delivery });
+      if (temperature) amendedPayload.temperatureRequirement = temperature;
+      if (orderType) amendedPayload.jobType = orderType;
+      if (notes) amendedPayload.driverInstructions = notes;
       await request(`/api/v1/staging/${selected.id}/payload`, await token(), {
         method: 'PUT',
-        body: JSON.stringify({ payload: editingPayload, note: 'Planner amended the order in Order Review before approval.' })
+        body: JSON.stringify({ payload: amendedPayload, note: 'Planner amended the order in Order Review before approval.' })
       });
       setEditingPayload(undefined);
       setSelected(undefined);
