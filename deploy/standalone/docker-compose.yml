@@ -113,7 +113,7 @@ services:
       Integrations__InfoMailboxGraph__Mailbox: "${INFO_MAILBOX_ADDRESS:-info@lyonshaulage.com}"
       Integrations__InfoMailboxGraph__PollIntervalSeconds: "${INFO_MAILBOX_POLL_SECONDS:-60}"
       Integrations__InfoMailboxGraph__InitialLookbackHours: "${INFO_MAILBOX_INITIAL_LOOKBACK_HOURS:-48}"
-      Integrations__InfoMailboxGraph__OverlapMinutes: "${INFO_MAILBOX_OVERLAP_MINUTES:-30}"
+      Integrations__InfoMailboxGraph__OverlapMinutes: "${INFO_MAILBOX_OVERLAP_MINUTES:-1440}"
     volumes:
       - type: bind
         source: "${ARCHIVE_HOST_PATH:-../../archive}"

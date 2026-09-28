@@ -112,6 +112,7 @@ type DriverDispatchStatus = {
 };
 type MessageMode = "initial" | "amendment" | "update";
 type MessageState = { load: DispatchLoad; text: string; routeMinutes: number; acknowledgeUnverified: boolean; mode: MessageMode };
+type OperationalHistoryItem = { id: string; entityType: string; entityId: string; eventType: string; actor?: string; payloadJson: string; occurredAtUtc: string };
 type DispatchReadiness = {
   canDispatch: boolean;
   explanation?: string;
@@ -339,6 +340,7 @@ export function DriverDispatch() {
   const [statusError, setStatusError] = useState<string>();
   const [filters, setFilters] = useState<Filters>(() => emptyFilters());
   const [message, setMessage] = useState<MessageState>();
+  const [historyLoad, setHistoryLoad] = useState<DispatchLoad>();
   const [showDriverTools, setShowDriverTools] = useState(false);
   const [driverToolBusy, setDriverToolBusy] = useState(false);
   const [driverToolNotice, setDriverToolNotice] = useState<string>();
@@ -593,6 +595,7 @@ export function DriverDispatch() {
             applySavedAllocation={applySavedAllocation}
             applyUnassignedAllocation={applyUnassignedAllocation}
             openMessage={setMessage}
+            openHistory={setHistoryLoad}
           />)}</tbody>
         </table>
       </div>
@@ -608,6 +611,7 @@ export function DriverDispatch() {
         await refresh();
       }}
     />}
+    {historyLoad && <OperationalHistoryDialog load={historyLoad} token={token} close={() => setHistoryLoad(undefined)} />}
     <p className="hint"><Link to="/planner">Back to Planner</Link></p>
   </section>;
 }
@@ -634,7 +638,7 @@ function BuiltRunsQueue({ loads }: { loads: DispatchLoad[] }) {
   </div>;
 }
 
-function DispatchRow({ driver, data, status, calculatedStart, showGroup, token, applySavedAllocation, applyUnassignedAllocation, openMessage }: {
+function DispatchRow({ driver, data, status, calculatedStart, showGroup, token, applySavedAllocation, applyUnassignedAllocation, openMessage, openHistory }: {
   driver: DispatchDriver;
   data: Workbench;
   status?: DriverDispatchStatus;
@@ -644,6 +648,7 @@ function DispatchRow({ driver, data, status, calculatedStart, showGroup, token, 
   applySavedAllocation: (saved: DispatchLoad, driverId: string, previousLoadId?: string) => void;
   applyUnassignedAllocation: (loadId: string, driverId: string) => void;
   openMessage: (state: MessageState) => void;
+  openHistory: (load: DispatchLoad) => void;
 }) {
   const initial = data.loads.find(load => load.id === driver.assignedLoadId);
   const suggestedLoad = driver.suggestedRunId ? data.loads.find(load => load.id === driver.suggestedRunId) : undefined;
@@ -950,6 +955,7 @@ function DispatchRow({ driver, data, status, calculatedStart, showGroup, token, 
         {compliance.warnings.length > 0 && <div className="dispatch-compliance-banner warning" role="status">Compliance warning: {compliance.warnings.join(" · ")}</div>}
         {compliance.errors.length > 0 && <div className="dispatch-compliance-banner error" role="alert">Assignment blocked: {compliance.errors.join(" · ")}</div>}
         <div className="dispatch-buttons">
+          {selected && <button type="button" onClick={() => openHistory(selected)} disabled={busy}>History</button>}
           {selected && (effectiveStatus === "Sent Awaiting Response" || effectiveStatus === "Confirmed")
             ? <>
                 <button type="button" onClick={() => void prepareAmendment()} disabled={busy || driver.onLeave}>{busy ? "Working…" : "Amendment"}</button>
@@ -1026,6 +1032,39 @@ function MessageDialog({ state, token, close, sent }: { state: MessageState; tok
         <button type="button" onClick={close} disabled={busy}>Cancel</button>
         <button className="primary" type="button" onClick={() => void send()} disabled={busy || !text.trim()}>{busy ? "Sending…" : sendLabel}</button>
       </div>
+    </div>
+  </div>;
+}
+
+function OperationalHistoryDialog({ load, token, close }: { load: DispatchLoad; token: () => Promise<string>; close: () => void }) {
+  const [items, setItems] = useState<OperationalHistoryItem[]>();
+  const [error, setError] = useState<string>();
+
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        const result = await request<{ events: OperationalHistoryItem[] }>(`/api/v1/operational-history/load/${encodeURIComponent(load.id)}`, await token());
+        if (active) setItems(result.events);
+      } catch (exception) {
+        if (active) setError(exception instanceof Error ? exception.message : "Operational history could not be loaded.");
+      }
+    })();
+    return () => { active = false; };
+  }, [load.id, token]);
+
+  return <div className="dispatch-modal-backdrop" role="dialog" aria-modal="true">
+    <div className="dispatch-modal">
+      <div className="title-row"><div><p className="eyebrow">Operational trail</p><h2>{load.reference}</h2><p className="hint">Dispatch, driver-message, return-load and completion events recorded against this run.</p></div><button type="button" onClick={close}>Close</button></div>
+      {error && <p className="notice inline-notice">{error}</p>}
+      {!items && !error && <p className="hint">Loading history…</p>}
+      {items && !items.length && <p className="hint">No operational events have been recorded for this run yet.</p>}
+      {items && items.length > 0 && <div style={{ maxHeight: 440, overflowY: "auto" }}>{items.slice().reverse().map(item => {
+        let payload = item.payloadJson;
+        try { payload = JSON.stringify(JSON.parse(item.payloadJson), null, 2); } catch { /* preserve non-JSON evidence */ }
+        return <article className="history-item" key={item.id}><strong>{item.eventType}</strong><small>{new Date(item.occurredAtUtc).toLocaleString("en-GB")} · {item.actor || "system"}</small><pre style={{ whiteSpace: "pre-wrap", margin: "8px 0 0" }}>{payload}</pre></article>;
+      })}</div>}
+      <div className="dispatch-modal-actions"><button type="button" onClick={close}>Close</button></div>
     </div>
   </div>;
 }
