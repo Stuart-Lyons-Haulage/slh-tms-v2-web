@@ -123,6 +123,7 @@ export type DriverTimesheetDay = {
   restType?: string;
   payUnits?: string;
   evidence?: { tachoDutyCount: number; roadTechMovementCount: number; firstVehicleIdentifiers: string[]; lastVehicleIdentifiers: string[] };
+  nightOutEvidence?: { assessment: string; restCommencedUtc?: string; restCommencedLatitude?: number; restCommencedLongitude?: number; nextDutyStartUtc?: string; sameVehicle: boolean };
 };
 export type DriverTimesheetDriver = {
   driverId: string;
