@@ -29,7 +29,7 @@
 .bulk-selection-count strong { color: #073a5a; }
 .order-review-explainer { margin: 0; padding: 10px 12px; border: 1px solid #e5c879; border-radius: 9px; background: #fff9e9; color: #695119; }
 .bulk-order-list { display: grid; gap: 8px; max-height: 760px; overflow: auto; padding-right: 3px; }
-.bulk-order-row { display: grid; grid-template-columns: auto minmax(180px, 1.05fr) minmax(230px, 1.45fr) 72px minmax(160px, .95fr) auto; gap: 11px; align-items: center; padding: 12px 13px; border: 1px solid #d7e3e6; border-radius: 9px; background: #fff; }
+.bulk-order-row { display: grid; grid-template-columns: auto minmax(180px, 1.05fr) minmax(230px, 1.45fr) 72px minmax(145px, 1fr) minmax(160px, .95fr) auto; gap: 11px; align-items: center; padding: 12px 13px; border: 1px solid #d7e3e6; border-radius: 9px; background: #fff; }
 .bulk-order-row.selectable:hover { border-color: #77b9b4; background: #f8fcfb; }
 .bulk-order-row.selected { border-color: #0c7c76; background: #edf9f7; box-shadow: inset 3px 0 0 #0c7c76; }
 .bulk-order-row.held { background: #fafafa; color: #73828a; }
@@ -42,6 +42,7 @@
 .bulk-order-ref strong { color: #073a5a; }
 .bulk-order-pallets { text-align: center; }
 .bulk-order-pallets strong { font-size: 1.2rem; }
+.bulk-order-planning strong { font-size: .9rem; }
 .bulk-order-status { justify-self: end; display: inline-flex; align-items: center; min-height: 28px; padding: 4px 9px; border-radius: 999px; font-size: .76rem; font-weight: 800; text-align: center; }
 .bulk-order-status.ready { background: #e5f5e5; color: #247126; }
 .bulk-order-status.review { background: #fff1cf; color: #805900; }
@@ -62,7 +63,7 @@
 
 @media (max-width: 1100px) {
   .order-date-strip { grid-template-columns: repeat(11, minmax(82px, 1fr)); }
-  .bulk-order-row { grid-template-columns: auto minmax(160px, 1fr) minmax(210px, 1.3fr) 70px minmax(150px, .8fr); }
+  .bulk-order-row { grid-template-columns: auto minmax(160px, 1fr) minmax(210px, 1.3fr) 70px minmax(135px, .9fr) minmax(150px, .8fr); }
   .bulk-order-actions { grid-column: 2 / -1; justify-content: flex-start; }
   .bulk-order-status { justify-self: start; }
   .bulk-editor-grid { grid-template-columns: repeat(2, minmax(150px, 1fr)); }

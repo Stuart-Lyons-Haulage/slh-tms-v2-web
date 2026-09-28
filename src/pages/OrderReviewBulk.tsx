@@ -41,6 +41,12 @@ type Payload = Record<string, unknown> & {
   planningWindow?: string;
   suggestedPlanningWindow?: string;
   runsOvernight?: boolean;
+  temperature?: string;
+  temperatureC?: string | number;
+  temp?: string | number;
+  temperatureRequirement?: string;
+  palletType?: string;
+  orderType?: string;
   jobType?: string;
   driverInstructions?: string;
   plannerReady?: boolean;
@@ -169,6 +175,19 @@ function needsDriverReference(payload: Payload) {
     .map((value) => text(value).toLowerCase())
     .join(" ");
   return /\b(crate|crates|tray|trays|trolley|trolleys)\b/.test(haystack);
+}
+
+function planningWindow(payload: Payload) {
+  return text(payload.planningWindow || payload.suggestedPlanningWindow)
+    || (payload.overnightRoute === true || payload.runsOvernight === true ? "PM / overnight" : "AM / PM not set");
+}
+
+function temperature(payload: Payload) {
+  return text(payload.temperature || payload.temperatureRequirement || payload.temperatureC || payload.temp) || "Temp not set";
+}
+
+function orderType(payload: Payload) {
+  return text(payload.orderType || payload.palletType || payload.jobType || text(payload.driverInstructions).match(/\b(backhaul|backload|trolleys?|crates?)\b/i)?.[0]) || "Type not set";
 }
 
 function isPmOvernightCarryIn(payload: Payload, planningDate: string) {
@@ -600,6 +619,7 @@ export function OrderReviewBulk({ date }: { date: string }) {
           <span className="bulk-order-ref"><strong>{displayReference(row.payload)}</strong><small>{text(row.payload.poNumber) || "TMS reference missing"}</small></span>
           <span><strong>{text(row.payload.customerCode) || "Customer missing"}</strong><small>{text(row.payload.sellerName) || "Collection site missing"} → {text(row.payload.stallNumber) || "Destination missing"}</small></span>
           <span className="bulk-order-pallets"><strong>{isBackhaul(row.payload) && palletCount(row.payload) <= 0 ? "—" : palletCount(row.payload)}</strong><small>{isBackhaul(row.payload) && palletCount(row.payload) <= 0 ? "backhaul" : "pallets"}</small></span>
+          <span className="bulk-order-planning"><strong>{planningWindow(row.payload)}</strong><small>{temperature(row.payload)} · {orderType(row.payload)}</small></span>
           <span className={`bulk-order-status ${statusClass}`}>{statusText}</span>
           <div className="bulk-order-actions">
             {hasSourceIdentity && <button type="button" className="source-email-review-button" onClick={() => setSourceEmailStagingId(row.item.id)} disabled={busy || Boolean(busyId)}>Review source email</button>}
@@ -657,6 +677,8 @@ export function OrderReviewBulk({ date }: { date: string }) {
                 <option value="AM">AM</option>
                 <option value="PM">PM / overnight</option>
               </select></label>
+              <label>Temperature<input value={text(payload.temperature || payload.temperatureRequirement || payload.temperatureC || payload.temp)} onChange={(event) => setDraft((current) => ({ ...(current || payload), temperatureRequirement: event.target.value, temperature: event.target.value }))} placeholder="e.g. chilled / ambient / +2°C" /></label>
+              <label>Order type<input value={text(payload.orderType || payload.palletType || payload.jobType)} onChange={(event) => setDraft((current) => ({ ...(current || payload), orderType: event.target.value, jobType: event.target.value }))} placeholder="e.g. backhaul, trolleys, crates" /></label>
               <label>Requested time<input value={text(payload.requestedTime)} onChange={(event) => setDraft((current) => ({ ...(current || payload), requestedTime: event.target.value }))} /></label>
               <label className="checkbox-field"><span>Overnight route</span><input type="checkbox" checked={payload.overnightRoute === true} onChange={(event) => setDraft((current) => ({ ...(current || payload), overnightRoute: event.target.checked, routeTiming: event.target.checked ? "Overnight" : "SameDay", requestedTime: event.target.checked ? (text(payload.requestedTime) || "17:00") : payload.requestedTime }))} /></label>
               <label>Job type<input value={text(payload.jobType)} onChange={(event) => setDraft((current) => ({ ...(current || payload), jobType: event.target.value }))} /></label>
