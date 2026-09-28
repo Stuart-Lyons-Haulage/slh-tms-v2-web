@@ -57,7 +57,7 @@ describe("Driver Dispatch UI contract", () => {
     expect(authoritativeSource).toContain("checkDispatchReadiness(effectiveSelection.runId");
     expect(authoritativeSource).toContain("await syncSamsaraMappings(planningDate, access)");
     expect(authoritativeSource).toContain("sendRunToSamsara(selection.runId, access)");
-    expect(authoritativeSource).toContain("Download Samsara CSV");
+    expect(authoritativeSource).toContain("onDownloadSamsaraCsv");
     expect(authoritativeSource).toContain("use Send to Samsara for the explicit route export");
     expect(authoritativeSource).not.toContain("sendDriverMessage(");
     expect(authoritativeSource).not.toContain("<DispatchMessageDialog");
