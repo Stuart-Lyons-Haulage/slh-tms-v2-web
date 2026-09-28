@@ -77,17 +77,16 @@ export function MarketsMasterClean() {
         <div><p className="eyebrow">Master data</p><h1>Markets &amp; senders</h1></div>
         <div className="title-actions"><button onClick={() => void contacts.refresh()}>Refresh</button><MasterDataExportButton section="markets" label="Markets" rows={(rows) as unknown as Record<string, unknown>[]} /></div>
       </div>
-      <p className="intro">Market orders use this list for sellers, stall details, salesman and sender dropdowns. Choose a market below to work with one list at a time.</p>
+      <p className="intro">Market orders use this list for sellers, stall details and salesman. Senders are maintained independently and can be used across markets. Choose a market below to work with one list at a time.</p>
 
       {editing && draft && <div className="crm-modal-backdrop" role="dialog" aria-modal="true" aria-label="Edit market Master Data" onMouseDown={event => { if (event.target === event.currentTarget && !saving) { setEditing(undefined); setDraft(undefined); } }}>
         <div className="crm-modal">
-          <div className="crm-modal-header"><div><p className="eyebrow">Market Master Data record</p><h2>{editing.name}</h2><p className="hint">Maintain the canonical seller/sender, stand, salesman and market identity here.</p></div><button type="button" disabled={saving} onClick={() => { setEditing(undefined); setDraft(undefined); }}>Close</button></div>
+          <div className="crm-modal-header"><div><p className="eyebrow">Market Master Data record</p><h2>{editing.name}</h2><p className="hint">Maintain the canonical seller, stand, salesman and market identity here.</p></div><button type="button" disabled={saving} onClick={() => { setEditing(undefined); setDraft(undefined); }}>Close</button></div>
           <div className="crm-modal-body"><section><h3>Market details</h3><div className="crm-form-grid">
             <label>Market<input value={draft.market} onChange={event => setDraft({ ...draft, market: event.target.value })} /></label>
-            <label>Seller / sender<input value={draft.name} onChange={event => setDraft({ ...draft, name: event.target.value })} /></label>
+            <label>{activeMarket === "Sender" ? "Sender" : "Seller"}<input value={draft.name} onChange={event => setDraft({ ...draft, name: event.target.value })} /></label>
             <label>Stall / stand<input value={draft.standOrLocation || ""} onChange={event => setDraft({ ...draft, standOrLocation: event.target.value })} /></label>
             <label>Salesman<input value={draft.salesman || ""} onChange={event => setDraft({ ...draft, salesman: event.target.value })} /></label>
-            <label>Sender<input value={draft.sender || ""} onChange={event => setDraft({ ...draft, sender: event.target.value })} /></label>
             <label className="checkbox-label"><input type="checkbox" checked={draft.active} onChange={event => setDraft({ ...draft, active: event.target.checked })} /> Active</label>
           </div></section></div>
           <div className="crm-modal-actions"><button type="button" className="primary" disabled={saving || !clean(draft.market) || !clean(draft.name)} onClick={() => void saveMarketContact()}>{saving ? "Saving…" : "Save Master Data record"}</button><button type="button" disabled={saving} onClick={() => { setEditing(undefined); setDraft(undefined); }}>Cancel</button></div>
@@ -108,8 +107,8 @@ export function MarketsMasterClean() {
       {!contacts.loading && !contacts.error && visibleRows.length === 0 && <div className="state">No records are available for this market.</div>}
       {!contacts.loading && !contacts.error && visibleRows.length > 0 && <div className="master-table-wrap">
         <table className="master-table">
-          <thead><tr>{activeMarket === ALL_MARKETS && <th>Market</th>}<th>{activeMarket === "Sender" ? "Sender" : "Seller / sender"}</th><th>Stall / stand</th><th>Salesman</th><th>Sender</th><th>Active</th><th>Action</th></tr></thead>
-          <tbody>{visibleRows.map(row => <tr key={row.id}>{activeMarket === ALL_MARKETS && <td>{row.market}</td>}<td>{row.name || "—"}</td><td>{row.standOrLocation || "—"}</td><td>{row.salesman || "—"}</td><td>{row.sender || "—"}</td><td>{row.active ? "Yes" : "No"}</td><td><button type="button" onClick={() => { setEditing(row); setDraft({ ...row }); setMessage(undefined); }}>Edit</button></td></tr>)}</tbody>
+          <thead><tr>{activeMarket === ALL_MARKETS && <th>Market</th>}<th>{activeMarket === "Sender" ? "Sender" : "Seller"}</th><th>Stall / stand</th><th>Salesman</th><th>Active</th><th>Action</th></tr></thead>
+          <tbody>{visibleRows.map(row => <tr key={row.id}>{activeMarket === ALL_MARKETS && <td>{row.market}</td>}<td>{row.name || "—"}</td><td>{row.standOrLocation || "—"}</td><td>{row.salesman || "—"}</td><td>{row.active ? "Yes" : "No"}</td><td><button type="button" onClick={() => { setEditing(row); setDraft({ ...row }); setMessage(undefined); }}>Edit</button></td></tr>)}</tbody>
         </table>
       </div>}
 

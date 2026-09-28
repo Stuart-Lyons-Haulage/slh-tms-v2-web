@@ -15,7 +15,7 @@ const fallbackColumns: Record<MasterExportSection, string[]> = {
   trailers: ["id", "trailerNumber", "type", "standardCapacity", "euroCapacity", "active"],
   "fuel-cards": ["id", "registration", "fleetNumber", "abbreviation", "cabMobile", "fuelProvider", "fuelPin", "shellCard", "bpRedCard", "bpPlainCard", "notes", "active"],
   sites: ["id", "externalCode", "name", "driverTextName", "collectionAddress", "collectionInstructions", "mapLink", "latitude", "longitude", "aliases", "operationalRegion", "active"],
-  markets: ["id", "market", "name", "standOrLocation", "salesman", "sender", "active"],
+  markets: ["id", "market", "name", "standOrLocation", "salesman", "active"],
   "fuel-prices": ["id", "weekCommencing", "provider", "pricePencePerLitre", "isPricingMaximum", "source", "notes", "createdAtUtc"],
 };
 
