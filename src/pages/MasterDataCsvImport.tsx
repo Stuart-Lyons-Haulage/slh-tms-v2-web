@@ -38,7 +38,7 @@ type UploadState = {
 };
 
 const MASTER_IMPORT_CHUNK_SIZE = 25;
-const MASTER_ACCEPT = ".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel";
+const MASTER_ACCEPT = ".csv,.xlsx,.xls,.xlsm,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,application/vnd.ms-excel.sheet.macroEnabled.12";
 
 const identityFields: Record<MasterEntity, string[]> = {
   driver: ["employeeNumber", "tachoMasterDriverId", "tachoCardNumber", "displayName"],
@@ -156,7 +156,7 @@ export async function applyMasterDataInChunks(
   return aggregate;
 }
 
-function isWorkbookFile(file:File){const n=file.name.toLowerCase();return n.endsWith(".xlsx")||n.endsWith(".xls");}
+function isWorkbookFile(file:File){const n=file.name.toLowerCase();return n.endsWith(".xlsx")||n.endsWith(".xls")||n.endsWith(".xlsm");}
 function isCsvFile(file:File){return file.name.toLowerCase().endsWith(".csv");}
 function isRoadrunnerHeaders(headers:string[]){
   const h=new Set(headers.map(v=>key(v)));
@@ -198,7 +198,7 @@ export function MasterDataCsvImport({ onCommitted }: { onCommitted?: () => void 
   async function chooseFile(event:ChangeEvent<HTMLInputElement>){
     const file=event.target.files?.[0]; setUpload({fileName:""}); setMessage(undefined); setError(undefined); setEntityOverride("");
     if(!file)return;
-    if(!isWorkbookFile(file)&&!isCsvFile(file)){setError("Choose a CSV, XLS or XLSX master-data file.");return;}
+    if(!isWorkbookFile(file)&&!isCsvFile(file)){setError("Choose a CSV, XLS, XLSX or XLSM master-data file.");return;}
     try{
       if(isWorkbookFile(file)){
         setUpload({file,fileName:file.name,kind:"workbook"});
@@ -278,11 +278,11 @@ export function MasterDataCsvImport({ onCommitted }: { onCommitted?: () => void 
     <div className="title-row"><div>
       <p className="eyebrow">Canonical Master Data import</p>
       <h2>Import and enrich Master Data</h2>
-      <p className="hint">One governed import point for CSV, XLS and XLSX. Files are routed to the correct master register. Roadrunner site files enrich missing address/postcode/GPS and retain the Roadrunner identity without creating duplicate sites. Existing populated master values are preserved unless the authoritative SLH workbook explicitly updates them.</p>
+      <p className="hint">One governed import point for CSV, XLS, XLSX and XLSM. Files are routed to the correct master register. Roadrunner site files enrich missing address/postcode/GPS and retain the Roadrunner identity without creating duplicate sites. Existing populated master values are preserved unless the authoritative SLH workbook explicitly updates them.</p>
     </div></div>
 
     <div className="master-csv-controls">
-      <label>Master data file<input type="file" accept={MASTER_ACCEPT} onChange={event=>void chooseFile(event)} /></label>
+    <label>Master data file<input type="file" accept={MASTER_ACCEPT} onChange={event=>void chooseFile(event)} /></label>
       {upload.fileName&&<strong>{upload.fileName}</strong>}
     </div>
 
