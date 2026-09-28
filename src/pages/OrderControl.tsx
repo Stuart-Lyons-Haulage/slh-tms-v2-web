@@ -11,6 +11,15 @@ import { UndatedOrderReviewQueue } from "./UndatedOrderReviewQueue";
 
 type OrderControlTab = "review" | "live";
 type NwfRepairResponse = { repaired: number; message: string };
+type ApprovedOrderRow = {
+  id: string;
+  status: string;
+  source?: string;
+  receivedAtUtc: string;
+  reviewedAtUtc?: string;
+  reviewedBy?: string;
+  payloadJson: string;
+};
 
 type CachedEmailRecord = {
   evidenceId: string;
@@ -77,6 +86,43 @@ function formatShortDateTime(value?: string) {
 
 function refreshVisibleReviewData() {
   window.dispatchEvent(new Event(SILENT_API_REFRESH_EVENT));
+}
+
+function ApprovedOrdersList({ date, token }: { date: string; token: ReturnType<typeof useAccessToken> }) {
+  const [rows, setRows] = useState<ApprovedOrderRow[]>([]);
+  const [error, setError] = useState<string>();
+
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        const authToken = await token();
+        const [approved, promoted] = await Promise.all([
+          request<ApprovedOrderRow[]>(`/api/v1/staging?status=Approved&entityType=order&take=200`, authToken),
+          request<ApprovedOrderRow[]>(`/api/v1/staging?status=Promoted&entityType=order&take=200`, authToken),
+        ]);
+        if (!active) return;
+        setRows([...approved, ...promoted]);
+        setError(undefined);
+      } catch (reason) {
+        if (active) setError(reason instanceof Error ? reason.message : "Approved orders could not be loaded.");
+      }
+    })();
+    return () => { active = false; };
+  }, [date, token]);
+
+  const datedRows = rows.map((row) => {
+    try { return { row, payload: JSON.parse(row.payloadJson) as Record<string, unknown> }; }
+    catch { return { row, payload: {} as Record<string, unknown> }; }
+  }).filter(({ payload }) => payload.collectionDate === date || payload.deliveryDate === date)
+    .sort((left, right) => right.row.receivedAtUtc.localeCompare(left.row.receivedAtUtc));
+
+  return <section className="panel" style={{ marginBottom: 18 }}>
+    <div className="title-row"><div><p className="eyebrow">Order audit</p><h2>Approved / promoted orders</h2><p className="hint">Read-only list of orders that passed review for {date}.</p></div><strong>{datedRows.length} order{datedRows.length === 1 ? "" : "s"}</strong></div>
+    {error && <p className="review-error">{error}</p>}
+    {!error && datedRows.length === 0 && <div className="state">No approved or promoted orders are recorded for this date.</div>}
+    {datedRows.length > 0 && <div style={{ overflowX: "auto" }}><table className="master-table"><thead><tr><th>Status</th><th>Customer</th><th>Reference</th><th>Collection</th><th>Delivery</th><th>Pallets</th><th>Approved by</th><th>Approved at</th></tr></thead><tbody>{datedRows.map(({ row, payload }) => <tr key={row.id}><td>{row.status}</td><td>{String(payload.customerCode ?? "")}</td><td>{String(payload.customerPo ?? payload.poNumber ?? "")}</td><td>{String(payload.collectionSite ?? payload.sellerName ?? "")}</td><td>{String(payload.deliverySite ?? payload.stallNumber ?? "")}</td><td>{String(payload.pallets ?? "")}</td><td>{row.reviewedBy || "—"}</td><td>{formatShortDateTime(row.reviewedAtUtc || row.receivedAtUtc)}</td></tr>)}</tbody></table></div>}
+  </section>;
 }
 
 function OrderIntakeCacheRecovery({ date }: { date: string }) {
@@ -248,13 +294,13 @@ export function OrderControl({ initialTab = "review" }: { initialTab?: OrderCont
           <label className="dashboard-date">Date <input type="date" value={selectedDate} onChange={(event) => updateDate(event.target.value)} /></label>
           <div role="tablist" aria-label="Order control view" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button type="button" className={tab === "review" ? "primary" : ""} onClick={() => setTab("review")} role="tab" aria-selected={tab === "review"}>Waiting for review</button>
-            <button type="button" className={tab === "live" ? "primary" : ""} onClick={() => setTab("live")} role="tab" aria-selected={tab === "live"}>Approved / live loads</button>
+            <button type="button" className={tab === "live" ? "primary" : ""} onClick={() => setTab("live")} role="tab" aria-selected={tab === "live"}>Approved / promoted orders</button>
           </div>
         </div>
       </div>
       {repairNotice && <p className="notice inline-notice" style={{ marginBottom: 0 }}>{repairNotice}</p>}
     </section>
-    {tab === "review" ? <><OrderIntakeCacheRecovery date={selectedDate} /><UndatedOrderReviewQueue /><OrderReviewBulk date={selectedDate} /></> : <JobsOperational date={selectedDate} />}
+    {tab === "review" ? <><OrderIntakeCacheRecovery date={selectedDate} /><UndatedOrderReviewQueue /><OrderReviewBulk date={selectedDate} /></> : <><ApprovedOrdersList date={selectedDate} token={token} /><JobsOperational date={selectedDate} /></>}
     {sourceEmailStagingId && <SourceEmailEvidenceDrawer stagingId={sourceEmailStagingId} onClose={closeSourceEmail} />}
   </>;
 }
