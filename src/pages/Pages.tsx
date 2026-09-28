@@ -427,7 +427,9 @@ export function StagingQueue({ ordersOnly = false, masterOnly = false }: { order
             receivedFromUtc: `${addDays(planningDate, -2)}T00:00:00Z`,
             minimumPlanningDate: planningDate,
             maximumPlanningDate: planningDate,
-            refreshUnamendedPending: false,
+            // Replace stale unamended review candidates, but never revive an
+            // already-promoted order; the API protects promoted PO references.
+            refreshUnamendedPending: true,
             maxMessages: 500
           })
         }

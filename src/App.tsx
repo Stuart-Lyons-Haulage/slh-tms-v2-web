@@ -80,6 +80,7 @@ function Shell() {
   const authenticated = localTestAuthEnabled || entraAuthenticated;
   const [open, setOpen] = useState(false);
   const [pendingOrderReviews, setPendingOrderReviews] = useState(0);
+  const [pendingOrderReviewDates, setPendingOrderReviewDates] = useState('');
   const location = useLocation();
   const activeAccount = instance.getActiveAccount() || accounts[0];
 
@@ -116,6 +117,7 @@ function Shell() {
   useEffect(() => {
     if (!authenticated) {
       setPendingOrderReviews(0);
+      setPendingOrderReviewDates('');
       return;
     }
 
@@ -123,7 +125,21 @@ function Shell() {
     const refreshPendingOrderReviews = async () => {
       try {
         const rows = await api.staging(await accessToken(), 'PendingReview', 'order', 200);
-        if (!stopped) setPendingOrderReviews(rows.length);
+        if (!stopped) {
+          const dates = rows.reduce<Record<string, number>>((counts, row) => {
+            let payload: Record<string, unknown> = {};
+            try { payload = row.payloadJson ? JSON.parse(row.payloadJson) as Record<string, unknown> : {}; } catch { /* keep the notification usable if one source payload is malformed */ }
+            const value = String(payload.collectionDate || payload.deliveryDate || '').slice(0, 10);
+            if (/^\d{4}-\d{2}-\d{2}$/.test(value)) counts[value] = (counts[value] || 0) + 1;
+            return counts;
+          }, {});
+          const dateSummary = Object.entries(dates)
+            .sort(([left], [right]) => left.localeCompare(right))
+            .map(([date, count]) => `${new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short' }).format(new Date(`${date}T12:00:00`))}: ${count}`)
+            .join(' · ');
+          setPendingOrderReviews(rows.length);
+          setPendingOrderReviewDates(dateSummary);
+        }
       } catch (error) {
         console.warn('Pending order review count could not be refreshed.', error);
       }
@@ -165,7 +181,7 @@ function Shell() {
           to={path}
           end={path === '/'}
           aria-label={hasPendingOrders ? `${label}, ${pendingLabel} waiting for review` : label}
-          title={hasPendingOrders ? `${pendingLabel} order${pendingOrderReviews === 1 ? '' : 's'} waiting for review` : undefined}
+          title={hasPendingOrders ? `${pendingLabel} order${pendingOrderReviews === 1 ? '' : 's'} waiting for review${pendingOrderReviewDates ? ` · ${pendingOrderReviewDates}` : ''}` : undefined}
         >
           <span>{label}</span>
           {hasPendingOrders && <span className="nav-order-review-count" aria-hidden="true">{pendingLabel}</span>}
