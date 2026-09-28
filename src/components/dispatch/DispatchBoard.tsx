@@ -5,7 +5,7 @@ import "../../smart-dispatch.css";
 import { ComplianceWarningBanner } from "./ComplianceWarningBanner";
 import { DispatchDriverRow } from "./DispatchDriverRow";
 import { DispatchFilters } from "./DispatchFilters";
-import { allocateDispatchRun, checkDispatchReadiness, getAvailableTimes, getSmartDispatch, sendRunToSamsara, syncDispatchDrivers, unassignDispatchRun } from "./dispatchApi";
+import { allocateDispatchRun, checkDispatchReadiness, downloadSamsaraCsv, getAvailableTimes, getSmartDispatch, sendRunToSamsara, syncDispatchDrivers, syncSamsaraMappings, unassignDispatchRun } from "./dispatchApi";
 import {
   applyAvailableTimes,
   applyAvailableTime,
@@ -357,6 +357,8 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
       const batchFailures: DispatchLockFailure[] = [];
       let exported = 0;
 
+      await syncSamsaraMappings(planningDate, access);
+
       for (const load of samsaraExportCandidates) {
         try {
           await sendRunToSamsara(load.id, access);
@@ -387,11 +389,34 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
     setNotice(undefined);
     setFailures(current => current.filter(failure => failure.driverId !== driver.driverId));
     try {
-      const result = await sendRunToSamsara(selection.runId, await token());
+      const access = await token();
+      await syncSamsaraMappings(planningDate, access);
+      const result = await sendRunToSamsara(selection.runId, access);
       await refresh();
       setNotice(result.message);
     } catch (exception) {
       const reason = exception instanceof Error ? exception.message : "The run could not be sent to Samsara.";
+      setFailures(current => [...current.filter(failure => failure.driverId !== driver.driverId), {
+        driverId: driver.driverId,
+        runId: selection.runId,
+        reason
+      }]);
+    } finally {
+      setBusyDriverId(undefined);
+    }
+  }
+
+  async function handleSamsaraCsv(driver: DispatchDriverDto, selection: DispatchAllocationSelection) {
+    if (!selection.runId) return;
+    const reference = snapshot?.runs.find(run => run.runId === selection.runId)?.reference || selection.runId;
+    setBusyDriverId(driver.driverId);
+    setNotice(undefined);
+    setFailures(current => current.filter(failure => failure.driverId !== driver.driverId));
+    try {
+      await downloadSamsaraCsv(selection.runId, reference, await token());
+      setNotice(`${reference} Samsara CSV downloaded.`);
+    } catch (exception) {
+      const reason = exception instanceof Error ? exception.message : "The Samsara CSV could not be generated.";
       setFailures(current => [...current.filter(failure => failure.driverId !== driver.driverId), {
         driverId: driver.driverId,
         runId: selection.runId,
@@ -466,7 +491,7 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
         <strong>Samsara route export</strong>
         <span>{snapshot.samsaraConfigured
           ? `${samsaraExportCandidates.length} allocated unsent run${samsaraExportCandidates.length === 1 ? '' : 's'} ready · ${Object.keys(snapshot.samsaraDispatch).length} already sent`
-          : 'Samsara dispatch is not available from the current API/runtime configuration.'}</span>
+          : snapshot.samsaraConnectionMessage || 'Samsara API is unavailable. CSV fallback remains available on each allocated run.'}</span>
       </div>
       <button
         className="smart-action primary"
@@ -532,6 +557,7 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
               onSelectionChange={changeSelection}
               onDispatch={(row, selection) => void prepareDispatch(row, selection)}
                onSamsaraAndDispatch={(row, selection) => void handleSamsaraSingle(row, selection)}
+              onDownloadSamsaraCsv={(row, selection) => void handleSamsaraCsv(row, selection)}
               onUnassign={(row, selection) => void handleUnassign(row, selection)}
             />)}
           </tbody>
