@@ -40,6 +40,8 @@ export type SamsaraDispatchState = {
 type SamsaraDispatchStatusResponse = {
   planningDate: string;
   configured: boolean;
+  connected: boolean;
+  connectionMessage?: string;
   runs: SamsaraDispatchState[];
 };
 
@@ -103,6 +105,7 @@ export async function getSmartDispatch(
   statuses: Record<string, DispatchDriverStatusDto>;
   visibility: DispatchVisibilitySnapshot;
   samsaraConfigured: boolean;
+  samsaraConnectionMessage?: string;
   samsaraDispatch: Record<string, SamsaraDispatchState>;
 }> {
   const encoded = encodeURIComponent(planningDate);
@@ -114,7 +117,13 @@ export async function getSmartDispatch(
     getDispatchVisibility(planningDate, token),
     getDispatchHistory(planningDate, token).catch(() => [] as DispatchHistoryItem[]),
     request<SamsaraDispatchStatusResponse>(`/api/v1/integrations/samsara/dispatch/status?date=${encoded}`, token)
-      .catch(() => ({ planningDate, configured: false, runs: [] } as SamsaraDispatchStatusResponse))
+      .catch(() => ({
+        planningDate,
+        configured: false,
+        connected: false,
+        connectionMessage: "Samsara connection status could not be checked.",
+        runs: []
+      } as SamsaraDispatchStatusResponse))
   ]);
   const visibilityByDriver = new Map(visibility.drivers.map(item => [item.driverId, item]));
   const historyByDriver = new Map(history.map(item => [item.driverId, item]));
@@ -155,7 +164,8 @@ export async function getSmartDispatch(
     equipment,
     statuses: Object.fromEntries(statusResponse.drivers.map(status => [status.driverId, status])),
     visibility,
-    samsaraConfigured: samsaraStatus.configured,
+    samsaraConfigured: samsaraStatus.configured && samsaraStatus.connected,
+    samsaraConnectionMessage: samsaraStatus.connectionMessage,
     samsaraDispatch: Object.fromEntries(samsaraStatus.runs.map(item => [item.runId, item]))
   };
 }
@@ -188,6 +198,15 @@ export async function checkDispatchReadiness(
   }, 90000);
 }
 
+export async function syncSamsaraMappings(planningDate: string, token: string): Promise<void> {
+  await request(
+    `/api/v1/integrations/samsara/dispatch/mappings/sync?date=${encodeURIComponent(planningDate)}`,
+    token,
+    { method: "POST" },
+    60000
+  );
+}
+
 export async function sendRunToSamsara(runId: string, token: string): Promise<SamsaraDispatchResult> {
   return request<SamsaraDispatchResult>(
     `/api/v1/integrations/samsara/dispatch/${encodeURIComponent(runId)}`,
@@ -195,6 +214,29 @@ export async function sendRunToSamsara(runId: string, token: string): Promise<Sa
     { method: "POST" },
     90000
   );
+}
+
+export async function downloadSamsaraCsv(runId: string, reference: string, token: string): Promise<void> {
+  const response = await fetch(`${apiBaseUrl}/api/v1/integrations/samsara/dispatch/${encodeURIComponent(runId)}/csv`, {
+    headers: {
+      Accept: "text/csv",
+      Authorization: `Bearer ${token}`
+    }
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({})) as { message?: string };
+    throw new Error(payload.message || `Samsara CSV export failed (${response.status}).`);
+  }
+
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `SLH-${reference.replace(/[^a-z0-9_-]+/gi, "-")}-Samsara.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 export async function unassignDispatchRun(runId: string, token: string): Promise<void> {
