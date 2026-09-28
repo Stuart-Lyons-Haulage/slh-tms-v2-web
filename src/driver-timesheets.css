@@ -26,6 +26,14 @@
 .timesheet-agency-summary article span{font-size:11px;color:#667085}
 .timesheet-agency-summary .review-text{color:#9a6700;font-weight:800}
 .timesheet-table-wrap{overflow:auto;border:1px solid #d7dde5;border-radius:8px;background:#fff}
+.timesheet-driver-list{display:grid;gap:8px}
+.timesheet-driver-card{border:1px solid #d7dde5;border-radius:8px;background:#fff;overflow:hidden}
+.timesheet-driver-summary{width:100%;display:grid;grid-template-columns:minmax(220px,2fr) repeat(4,minmax(100px,1fr)) auto;gap:12px;align-items:center;text-align:left;border:0;border-bottom:1px solid #e7ebef;border-radius:0;background:#fff;padding:11px 12px;color:#17324d}
+.timesheet-driver-summary:hover{background:#f8fafc}
+.timesheet-driver-summary span{display:grid;gap:2px}
+.timesheet-driver-summary small{color:#667085}
+.timesheet-unmatched-list{display:grid;gap:5px;margin-top:8px}
+.timesheet-unmatched-list details{padding:6px 8px;background:#fff;border:1px solid #ead9a1;border-radius:6px;color:#425466}
 .timesheet-table{width:100%;min-width:1500px;border-collapse:collapse}
 .timesheet-table th{position:sticky;top:94px;z-index:2;background:#f3f6f9;color:#425466;text-align:left;white-space:nowrap}
 .timesheet-table td{vertical-align:top}
@@ -37,4 +45,4 @@
 .timesheet-status.open{background:#eaf2ff;color:#1d4f91}
 .timesheet-status.partial{background:#eef1f5;color:#475467}
 .timesheet-note{font-size:10px!important;line-height:1.2;max-width:220px!important}
-@media(max-width:900px){.timesheet-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.timesheet-toolbar{align-items:stretch}.timesheet-toolbar label{width:100%}.timesheet-toolbar input{width:100%;box-sizing:border-box}.timesheet-export-actions{justify-content:flex-start}.timesheet-filter-row{align-items:stretch;flex-direction:column}.timesheet-section-tabs{overflow-x:auto}.timesheet-source-strip{display:grid;gap:4px}}
+@media(max-width:900px){.timesheet-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.timesheet-toolbar{align-items:stretch}.timesheet-toolbar label{width:100%}.timesheet-toolbar input{width:100%;box-sizing:border-box}.timesheet-export-actions{justify-content:flex-start}.timesheet-filter-row{align-items:stretch;flex-direction:column}.timesheet-section-tabs{overflow-x:auto}.timesheet-source-strip{display:grid;gap:4px}.timesheet-driver-summary{grid-template-columns:1fr 1fr;gap:7px}.timesheet-driver-summary strong:last-child{grid-column:2;text-align:right}}

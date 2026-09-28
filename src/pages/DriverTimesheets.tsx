@@ -86,51 +86,34 @@ function evidenceClass(status: string) {
 }
 
 function DriverRows({ drivers }: { drivers: DriverTimesheetDriver[] }) {
-  return <div className="timesheet-table-wrap">
-    <table className="timesheet-table">
-      <thead>
-        <tr>
-          <th>Date</th>
-          <th>Driver</th>
-          <th>Start</th>
-          <th>First move</th>
-          <th>Finish</th>
-          <th>Last move</th>
-          <th>Duty</th>
-          <th>Drive</th>
-          <th>Other work</th>
-          <th>Break / rest</th>
-          <th>Vehicle</th>
-          <th>Run</th>
-          <th>Evidence</th>
-        </tr>
-      </thead>
-      <tbody>
-        {drivers.flatMap(driver => driver.days.map(day =>
-          <tr key={`${driver.driverId}-${day.date}`}>
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  return <div className="timesheet-driver-list">
+    {drivers.map(driver => <article className="timesheet-driver-card" key={driver.driverId}>
+      <button type="button" className="timesheet-driver-summary" onClick={() => setExpanded(current => ({ ...current, [driver.driverId]: !current[driver.driverId] }))} aria-expanded={expanded[driver.driverId] === true}>
+        <span><strong>{driver.driverName}</strong><small>{driver.employeeNumber}{driver.agencyName ? ` · ${driver.agencyName}` : ''}</small></span>
+        <span>{driver.daysWorked} day{driver.daysWorked === 1 ? '' : 's'}</span>
+        <span>{hhmm(driver.dutySpanMinutes)} duty</span>
+        <span>{hhmm(driver.driveMinutes)} driving</span>
+        <span className={`timesheet-status ${driver.status === 'Confirmed' ? 'confirmed' : 'review'}`}>{driver.reviewDays ? `${driver.reviewDays} review` : 'Ready'}</span>
+        <strong>{expanded[driver.driverId] ? 'Hide ▴' : 'Details ▾'}</strong>
+      </button>
+      {expanded[driver.driverId] && <div className="timesheet-table-wrap">
+        <table className="timesheet-table">
+          <thead><tr><th>Date</th><th>Sign on / first move</th><th>Sign off / last move</th><th>Duty</th><th>Drive</th><th>Other work</th><th>Break / rest</th><th>Vehicle</th><th>Run</th><th>Night out / rest</th><th>Review / evidence</th><th>Pay units</th></tr></thead>
+          <tbody>{driver.days.map(day => <tr key={`${driver.driverId}-${day.date}`}>
             <td><strong>{formatDate(day.date)}</strong></td>
-            <td>
-              <strong>{driver.driverName}</strong>
-              <small>{driver.employeeNumber}{driver.agencyName ? ` · ${driver.agencyName}` : ''}</small>
-            </td>
-            <td>{formatTime(day.startUtc)}<small>Tacho {formatTime(day.tachoStartUtc)}</small></td>
-            <td>{formatTime(day.firstMovementUtc)}{day.startVarianceMinutes != null && <small>{Math.abs(day.startVarianceMinutes)} min variance</small>}</td>
-            <td>{formatTime(day.finishUtc)}<small>Tacho {formatTime(day.tachoEndUtc)}</small></td>
-            <td>{formatTime(day.lastMovementUtc)}{day.finishVarianceMinutes != null && <small>{Math.abs(day.finishVarianceMinutes)} min variance</small>}</td>
-            <td><strong>{hhmm(day.dutySpanMinutes)}</strong></td>
-            <td>{hhmm(day.driveMinutes)}</td>
-            <td>{hhmm(day.workMinutes)}</td>
+            <td>{formatTime(day.startUtc)}<small>First move {formatTime(day.firstMovementUtc)}</small></td>
+            <td>{formatTime(day.finishUtc)}<small>Last move {formatTime(day.lastMovementUtc)}</small></td>
+            <td><strong>{hhmm(day.dutySpanMinutes)}</strong></td><td>{hhmm(day.driveMinutes)}</td><td>{hhmm(day.workMinutes)}</td>
             <td>{hhmm(day.restMinutes)}<small>{day.breakCount ? `${day.breakCount} break${day.breakCount === 1 ? '' : 's'}` : ''}</small></td>
-            <td>{day.vehicles.length ? day.vehicles.join(', ') : '—'}</td>
-            <td>{day.runs.length ? day.runs.join(', ') : <span className="timesheet-no-route">No allocated route</span>}</td>
-            <td>
-              <span className={`timesheet-status ${evidenceClass(day.status)}`}>{day.status}</span>
-              {day.notes.length > 0 && <small className="timesheet-note" title={day.notes.join(' ')}>{day.notes[0]}</small>}
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+            <td>{day.vehicles.length ? day.vehicles.join(', ') : '—'}</td><td>{day.runs.length ? day.runs.join(', ') : <span className="timesheet-no-route">No allocated run</span>}</td>
+            <td><span className={`timesheet-status ${day.nightOutStatus?.startsWith('Confirmed') ? 'confirmed' : day.nightOutStatus === 'Possible Night Out' ? 'review' : 'partial'}`}>{day.nightOutStatus || 'No Night Out'}</span><small>{day.restDurationMinutes != null ? `${hhmm(day.restDurationMinutes)} · ${day.restType || 'rest evidence'}` : ''}</small></td>
+            <td><span className={`timesheet-status ${evidenceClass(day.status)}`}>{day.status}</span><small className="timesheet-note">{(day.reviewReasons?.length ? day.reviewReasons : day.notes).join(' · ')}</small><small>Evidence: {day.evidence?.tachoDutyCount ?? 0} Tacho / {day.evidence?.roadTechMovementCount ?? 0} RoadTech</small></td>
+            <td>{day.payUnits || '—'}</td>
+          </tr>)}</tbody>
+        </table>
+      </div>}
+    </article>)}
   </div>;
 }
 
@@ -143,12 +126,11 @@ function SectionSummary({ drivers, section }: { drivers: DriverTimesheetDriver[]
     review: drivers.reduce((sum, driver) => sum + driver.reviewDays, 0)
   }), [drivers]);
 
+  const nights = drivers.reduce((sum, driver) => sum + driver.days.filter(day => day.nightOutStatus?.startsWith('Confirmed')).length, 0);
+  const reduced = drivers.reduce((sum, driver) => sum + driver.days.filter(day => day.nightOutStatus === 'Confirmed Night Out - Reduced Rest').length, 0);
+  const possible = drivers.reduce((sum, driver) => sum + driver.days.filter(day => day.nightOutStatus === 'Possible Night Out').length, 0);
   return <div className="timesheet-metrics">
-    <article><span>{section} drivers</span><strong>{totals.drivers}</strong></article>
-    <article><span>Shifts evidenced</span><strong>{totals.shifts}</strong></article>
-    <article><span>Duty total</span><strong>{hhmm(totals.duty)}</strong></article>
-    <article><span>Driving total</span><strong>{hhmm(totals.drive)}</strong></article>
-    <article className={totals.review ? 'attention' : ''}><span>Needs review</span><strong>{totals.review}</strong></article>
+    {section === 'Employed' ? <><article><span>Drivers worked</span><strong>{totals.drivers}</strong></article><article><span>Paid days</span><strong>{totals.shifts}</strong></article><article><span>Night outs</span><strong>{nights}</strong></article><article><span>Reduced rests</span><strong>{reduced}</strong></article><article className={possible || totals.review ? 'attention' : ''}><span>Possible / review</span><strong>{possible + totals.review}</strong></article></> : <><article><span>Agency drivers</span><strong>{totals.drivers}</strong></article><article><span>Shifts evidenced</span><strong>{totals.shifts}</strong></article><article><span>Duty total</span><strong>{hhmm(totals.duty)}</strong></article><article><span>Driving total</span><strong>{hhmm(totals.drive)}</strong></article><article className={totals.review ? 'attention' : ''}><span>Needs review</span><strong>{totals.review}</strong></article></>}
   </div>;
 }
 
@@ -190,16 +172,36 @@ export function DriverTimesheets() {
       'Date', 'Driver', 'Employee Number', 'Employment Type', 'Agency', 'Start', 'First Vehicle Movement',
       'Finish', 'Last Vehicle Movement', 'Duty HH:MM', 'Duty Hours Decimal', 'Driving HH:MM', 'Driving Hours Decimal',
       'Other Work HH:MM', 'Availability HH:MM', 'Break/Rest HH:MM', 'Vehicle(s)', 'Run(s)', 'Route Allocated',
-      'Evidence Status', 'Start Variance Minutes', 'Finish Variance Minutes', 'Notes'
+      'Evidence Status', 'Review Reasons', 'Night Out Status', 'Rest Duration Minutes', 'Rest Type', 'Pay Units', 'Start Variance Minutes', 'Finish Variance Minutes', 'Notes'
     ];
     const rows = drivers.flatMap(driver => driver.days.map(day => [
       day.date, driver.driverName, driver.employeeNumber, driver.employmentType, driver.agencyName,
       formatDateTime(day.startUtc), formatDateTime(day.firstMovementUtc), formatDateTime(day.finishUtc), formatDateTime(day.lastMovementUtc),
       hhmm(day.dutySpanMinutes), decimalHours(day.dutySpanMinutes), hhmm(day.driveMinutes), decimalHours(day.driveMinutes),
       hhmm(day.workMinutes), hhmm(day.availableMinutes), hhmm(day.restMinutes), day.vehicles.join('; '), day.runs.join('; '),
-      day.routeAllocated ? 'Yes' : 'No', day.status, day.startVarianceMinutes, day.finishVarianceMinutes, day.notes.join(' | ')
+      day.routeAllocated ? 'Yes' : 'No', day.status, (day.reviewReasons || []).join(' | '), day.nightOutStatus || 'No Night Out', day.restDurationMinutes, day.restType, day.payUnits, day.startVarianceMinutes, day.finishVarianceMinutes, day.notes.join(' | ')
     ]));
     downloadCsv(`slh-${section.toLowerCase()}-timesheets-${from}-to-${to}`, [header, ...rows]);
+  };
+
+  const payrollExport = () => {
+    const employed = sourceDrivers.filter(driver => driver.employmentType === 'Employed');
+    const agency = sourceDrivers.filter(driver => driver.employmentType === 'Agency');
+    const summaryHeader = ['Section', 'Driver', 'Agency', 'Employee Number', 'Days / Shifts', 'Duty Hours', 'Driving Hours', 'Night Outs', 'Reduced Rests', 'Possible Night Outs', 'Needs Review'];
+    const summaryRows = [...employed, ...agency].map(driver => [driver.employmentType, driver.driverName, driver.agencyName || '', driver.employeeNumber, driver.daysWorked, decimalHours(driver.dutySpanMinutes), decimalHours(driver.driveMinutes), driver.days.filter(day => day.nightOutStatus?.startsWith('Confirmed')).length, driver.days.filter(day => day.nightOutStatus === 'Confirmed Night Out - Reduced Rest').length, driver.days.filter(day => day.nightOutStatus === 'Possible Night Out').length, driver.reviewDays]);
+    const dailyHeader = ['Section', 'Date', 'Driver', 'Agency', 'Sign On', 'First Move', 'Sign Off', 'Last Move', 'Duty Hours', 'Driving Hours', 'Other Work Hours', 'Break/Rest Hours', 'Vehicle', 'Run', 'Night Out Status', 'Rest Type', 'Review / Evidence', 'Pay Units'];
+    const dailyRows = [...employed, ...agency].flatMap(driver => driver.days.map(day => [driver.employmentType, day.date, driver.driverName, driver.agencyName || '', formatDateTime(day.startUtc), formatDateTime(day.firstMovementUtc), formatDateTime(day.finishUtc), formatDateTime(day.lastMovementUtc), decimalHours(day.dutySpanMinutes), decimalHours(day.driveMinutes), decimalHours(day.workMinutes), decimalHours(day.restMinutes), day.vehicles.join('; '), day.runs.join('; '), day.nightOutStatus || 'No Night Out', day.restType || '', [...(day.reviewReasons || []), ...(day.notes || [])].join(' | '), day.payUnits || '']));
+    const nightRows = dailyRows.filter(row => String(row[14]).includes('Night Out')).map(row => [row[1], row[2], row[3], row[14], row[15], row[17]]);
+    const unmatchedRows = (report.data?.unmatchedDuties || []).filter(item => item.date >= from && item.date <= to).map(item => [item.date, item.driverName, item.memberCode, item.cardNumber || '', item.employeeNumber || '', item.vehicle || '', formatDateTime(item.dutyStartUtc), formatDateTime(item.dutyEndUtc), item.suggestedDriverMasterMatches.map(match => `${match.driverName} (${match.employeeNumber})`).join(' | '), item.reviewReason]);
+    const sections: unknown[][] = [
+      ['SLH TMS PAYROLL / TIMESHEET EXPORT', `${from} to ${to}`],
+      [], ['EMPLOYED SUMMARY'], summaryHeader, ...summaryRows.filter(row => row[0] === 'Employed'),
+      [], ['AGENCY SUMMARY'], summaryHeader, ...summaryRows.filter(row => row[0] === 'Agency'),
+      [], ['DAILY DETAIL'], dailyHeader, ...dailyRows,
+      [], ['NIGHT OUTS'], ['Date', 'Driver', 'Agency', 'Status', 'Rest Type', 'Pay Units'], ...nightRows,
+      [], ['UNMATCHED TACHO DUTIES / EXCEPTIONS'], ['Date', 'Tacho Name', 'Member Code', 'Card Number', 'Employee Number', 'Vehicle', 'Duty Start', 'Duty End', 'Suggested Driver Master Matches', 'Review Reason'], ...unmatchedRows
+    ];
+    downloadCsv(`slh-payroll-timesheets-${from}-to-${to}`, sections);
   };
 
   const summaryExport = () => {
@@ -229,6 +231,7 @@ export function DriverTimesheets() {
         <p className="hint">TachoMaster duty evidence reconciled to RoadTech historical vehicle movement. Employed drivers must match the active Sage HR roster; everyone else is kept out of the employed payroll section.</p>
       </div>
       <div className="timesheet-export-actions">
+        <button onClick={payrollExport} disabled={!sourceDrivers.length}>Export payroll pack CSV</button>
         <button onClick={summaryExport} disabled={!drivers.length}>Export summary CSV</button>
         <button className="primary" onClick={detailedExport} disabled={!drivers.length}>Export detailed CSV</button>
       </div>
@@ -253,7 +256,8 @@ export function DriverTimesheets() {
     </div>
 
     {report.data?.summary.unmatchedTachoDuties ? <div className="notice warn">
-      {report.data.summary.unmatchedTachoDuties} TachoMaster duty record{report.data.summary.unmatchedTachoDuties === 1 ? '' : 's'} could not be matched to Driver Master and are excluded until the identity link is resolved.
+      <strong>{report.data.summary.unmatchedTachoDuties} unmatched TachoMaster duty record{report.data.summary.unmatchedTachoDuties === 1 ? '' : 's'}</strong> remain visible for payroll consideration. No automatic Driver Master links have been made.
+      <div className="timesheet-unmatched-list">{(report.data.unmatchedDuties || []).map(item => <details key={`${item.date}-${item.memberCode}-${item.dutyStartUtc}`}><summary>{formatDate(item.date)} · {item.driverName} · member {item.memberCode} · {item.vehicle || 'vehicle unknown'}</summary><p>Card: {item.cardNumber || '—'} · Duty: {formatDateTime(item.dutyStartUtc)} → {formatDateTime(item.dutyEndUtc)}</p><small>{item.reviewReason}{item.suggestedDriverMasterMatches.length ? ` Suggested: ${item.suggestedDriverMasterMatches.map(match => `${match.driverName} (${match.employeeNumber})`).join(', ')}` : ''}</small></details>)}</div>
     </div> : null}
 
     {report.data && <div className="timesheet-source-strip">

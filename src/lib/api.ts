@@ -111,8 +111,15 @@ export type DriverTimesheetDay = {
   vehicles: string[];
   runs: string[];
   routeAllocated: boolean;
-  status: 'Confirmed' | 'Review' | 'Tacho only' | 'Tracker only' | 'Open duty' | 'Missing evidence' | 'No work';
+  status: string;
   notes: string[];
+  reviewReasons?: string[];
+  nightOutStatus?: 'No Night Out' | 'Possible Night Out' | 'Confirmed Night Out - Regular Rest' | 'Confirmed Night Out - Reduced Rest' | string;
+  nightOutSource?: 'Inferred' | 'Manual' | string;
+  restDurationMinutes?: number;
+  restType?: string;
+  payUnits?: string;
+  evidence?: { tachoDutyCount: number; roadTechMovementCount: number; firstVehicleIdentifiers: string[]; lastVehicleIdentifiers: string[] };
 };
 export type DriverTimesheetDriver = {
   driverId: string;
@@ -140,6 +147,7 @@ export type DriverTimesheetReport = {
   generatedAtUtc: string;
   sourceStatus: { tachoMaster: string; roadTech: string; sageHr: string };
   summary: { drivers: number; employedDrivers: number; agencyDrivers: number; reviewDrivers: number; unmatchedTachoDuties: number };
+  unmatchedDuties?: Array<{ date: string; driverName: string; memberCode: number; cardNumber?: string; employeeNumber?: string; vehicle?: string; dutyStartUtc: string; dutyEndUtc?: string; suggestedDriverMasterMatches: Array<{ driverId: string; driverName: string; employeeNumber: string }>; reviewReason: string }>;
   drivers: DriverTimesheetDriver[];
 };
 export type ReturnLoadSuggestion = { driverId: string; driverName: string; employeeNumber: string; consecutiveDays: number; previousLoadReference: string; previousPlanningDate: string; lastLocation?: string; latitude?: number; longitude?: number; suggestedLoadId?: string; suggestedLoadReference?: string; priority: number; reason: string };
