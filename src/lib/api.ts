@@ -116,6 +116,9 @@ export type DriverTimesheetDay = {
   reviewReasons?: string[];
   nightOutStatus?: 'No Night Out' | 'Possible Night Out' | 'Confirmed Night Out - Regular Rest' | 'Confirmed Night Out - Reduced Rest' | string;
   nightOutSource?: 'Inferred' | 'Manual' | string;
+  reviewDecision?: string;
+  reviewDecisionBy?: string;
+  reviewDecisionAtUtc?: string;
   restDurationMinutes?: number;
   restType?: string;
   payUnits?: string;
@@ -288,6 +291,7 @@ export interface TmsApi {
   operationsExceptions(date: string, token?: string): Promise<OperationsExceptions>;
   driverAssignments(from: string, to: string, token?: string): Promise<DriverAssignment[]>;
   driverTimesheets(from: string, to: string, token?: string): Promise<DriverTimesheetReport>;
+  reviewTimesheetNightOut(payload: { driverId: string; date: string; dutyStartUtc?: string; decision: string; reason?: string }, token?: string): Promise<{ key: string; decision: string; source: string }>;
   returnLoadSuggestions(date: string, token?: string): Promise<ReturnLoadSuggestions>;
   deliveryEtas(date: string, token?: string): Promise<DeliveryEtas>;
   sendDispatchSms(loadId: string, token?: string): Promise<DispatchSmsResponseDto>;
@@ -345,6 +349,7 @@ export const api: TmsApi = {
   operationsExceptions: (date, token) => request<OperationsExceptions>(`/api/v1/operations/exceptions?date=${encodeURIComponent(date)}`, token),
   driverAssignments: (from, to, token) => request<DriverAssignment[]>(`/api/v1/driver-assignments?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, token),
   driverTimesheets: (from, to, token) => request<DriverTimesheetReport>(`/api/v1/driver-timesheets?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, token),
+  reviewTimesheetNightOut: (payload, token) => request<{ key: string; decision: string; source: string }>('/api/v1/driver-timesheets/review', token, { method: 'POST', body: JSON.stringify(payload) }),
   returnLoadSuggestions: (date, token) => request<ReturnLoadSuggestions>(`/api/v1/planning/return-load-suggestions?date=${encodeURIComponent(date)}`, token),
   deliveryEtas: (date, token) => request<DeliveryEtas>(`/api/v1/operations/delivery-etas?date=${encodeURIComponent(date)}`, token),
   sendDispatchSms: (loadId, token) => request<DispatchSmsResponseDto>(`/api/v1/loads/${loadId}/dispatch/sms`, token, { method: 'POST' }),
