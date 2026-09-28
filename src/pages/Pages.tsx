@@ -400,6 +400,26 @@ export function StagingQueue({ ordersOnly = false, masterOnly = false }: { order
     }
   }
 
+  async function confirmSourceReview() {
+    if (!selected || selected.entityType !== 'order') return;
+    setSavingEdit(true);
+    setMessage(undefined);
+    try {
+      const amendedPayload = { ...(payload || {}), plannerReviewAcknowledged: true };
+      await request(`/api/v1/staging/${selected.id}/payload`, await token(), {
+        method: 'PUT',
+        body: JSON.stringify({ payload: amendedPayload, note: 'Planner reviewed the source email and attachments and acknowledged the remaining intake confidence/warnings before approval.' })
+      });
+      setSelected(undefined);
+      setMessage('Source review recorded. Re-check the order and approve it when the remaining operational fields are correct.');
+      await refresh();
+    } catch (exception) {
+      setMessage(exception instanceof Error ? exception.message : 'The source review could not be recorded.');
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
   async function requestOrders() {
     setRequestingOrders(true);
     setMessage(undefined);
@@ -515,10 +535,11 @@ export function StagingQueue({ ordersOnly = false, masterOnly = false }: { order
     const hasPlannerContract = Object.prototype.hasOwnProperty.call(value, 'plannerReady');
     const plannerReady = !hasPlannerContract || value.plannerReady === true || value.plannerReady === 'true';
     const confidence = String(value.intakeConfidence || '').trim().toLowerCase();
-    const confidenceReady = !confidence || confidence === 'high';
+    const manualReviewAcknowledged = value.plannerReviewAcknowledged === true || value.plannerReviewAcknowledged === 'true';
+    const confidenceReady = manualReviewAcknowledged || !confidence || confidence === 'high';
     const hasRoute = summary.collection !== '—' && summary.delivery !== '—';
     const overnightConfirmed = value.overnightRoute === true || value.runsOvernight === true || /overnight|cross[- ]?date/i.test(String(value.routeTiming || value.planningWindow || ''));
-    const actionableWarnings = warnings.filter(warning => !(overnightConfirmed && /overnight|cross[- ]?date|following day/i.test(warning)));
+    const actionableWarnings = manualReviewAcknowledged ? [] : warnings.filter(warning => !(overnightConfirmed && /overnight|cross[- ]?date|following day/i.test(warning)));
     const ready = hasRoute && hasPallets && plannerReady && confidenceReady && actionableWarnings.length === 0;
     const reason = ready
       ? overnightConfirmed ? 'Overnight route confirmed; route and quantity checks passed.' : 'Route, quantity and intake checks passed.'
@@ -582,7 +603,7 @@ export function StagingQueue({ ordersOnly = false, masterOnly = false }: { order
           <div><p className="eyebrow">Reviewing {selected.entityType}</p><h2>{String(payload?.poNumber || payload?.name || payload?.displayName || payload?.registration || payload?.externalCode || selected.id)}</h2></div>
           <div className="actions">
             {selected.entityType === 'order' && <button onClick={() => setSourceEvidenceId(selected.id)}>View email & attachments</button>}
-            {selected.entityType === 'order' && !editingPayload && <button onClick={() => setEditingPayload({ ...(payload || {}) })}>Edit order</button>}
+            {selected.entityType === 'order' && !editingPayload && <><button onClick={() => setEditingPayload({ ...(payload || {}) })}>Edit order</button><button className="primary" disabled={savingEdit || payload?.plannerReviewAcknowledged === true} onClick={() => void confirmSourceReview()}>{savingEdit ? 'Saving…' : payload?.plannerReviewAcknowledged === true ? 'Source review confirmed' : 'Confirm source review'}</button></>}
             {editingPayload && <><button className="primary" disabled={savingEdit} onClick={() => void saveOrderAmendment()}>{savingEdit ? 'Saving…' : 'Save amendment'}</button><button disabled={savingEdit} onClick={() => setEditingPayload(undefined)}>Cancel edit</button></>}
             <button onClick={() => { setEditingPayload(undefined); setSelected(undefined); }}>Close</button>
           </div>
