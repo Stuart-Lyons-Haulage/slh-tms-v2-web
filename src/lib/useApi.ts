@@ -28,10 +28,14 @@ export function useApi<T>(load: () => Promise<T>): UseApiResult<T> {
   const [loading, setLoading] = useState(!initialData);
   const requestNumber = useRef(0);
   const inFlight = useRef<Promise<void> | null>(null);
+  const inFlightLoad = useRef<(() => Promise<T>) | null>(null);
   const mounted = useRef(true);
   const hasData = useRef(Boolean(initialData));
   const refresh = useCallback(async () => {
-    if (inFlight.current) return inFlight.current;
+    // A changed dependency (for example a new timesheet date range) is a new
+    // request even when the previous request is still resolving. Reusing the
+    // old promise here leaves the new view displaying the previous range.
+    if (inFlight.current && inFlightLoad.current === load) return inFlight.current;
     const request = ++requestNumber.current;
     const operation = (async () => {
       // Once data is already rendered, refresh it in place. This avoids replacing an
@@ -67,8 +71,14 @@ export function useApi<T>(load: () => Promise<T>): UseApiResult<T> {
       }
     })();
     inFlight.current = operation;
+    inFlightLoad.current = load;
     try { await operation; }
-    finally { if (inFlight.current === operation) inFlight.current = null; }
+    finally {
+      if (inFlight.current === operation) {
+        inFlight.current = null;
+        inFlightLoad.current = null;
+      }
+    }
   }, [load]);
   useEffect(() => {
     mounted.current = true;

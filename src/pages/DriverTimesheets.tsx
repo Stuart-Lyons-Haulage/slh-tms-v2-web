@@ -85,7 +85,7 @@ function evidenceClass(status: string) {
   return 'partial';
 }
 
-function DriverRows({ drivers }: { drivers: DriverTimesheetDriver[] }) {
+function DriverRows({ drivers, onNightOutReview, busyReview }: { drivers: DriverTimesheetDriver[]; onNightOutReview: (driver: DriverTimesheetDriver, day: DriverTimesheetDriver['days'][number], decision: string) => void; busyReview?: string }) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   return <div className="timesheet-driver-list">
     {drivers.map(driver => <article className="timesheet-driver-card" key={driver.driverId}>
@@ -99,7 +99,7 @@ function DriverRows({ drivers }: { drivers: DriverTimesheetDriver[] }) {
       </button>
       {expanded[driver.driverId] && <div className="timesheet-table-wrap">
         <table className="timesheet-table">
-          <thead><tr><th>Date</th><th>Sign on / first move</th><th>Sign off / last move</th><th>Duty</th><th>Drive</th><th>Other work</th><th>Break / rest</th><th>Vehicle</th><th>Run</th><th>Night out / rest</th><th>Review / evidence</th><th>Pay units</th></tr></thead>
+          <thead><tr><th>Date</th><th>Sign on / first move</th><th>Sign off / last move</th><th>Duty</th><th>Drive</th><th>Other work</th><th>Break / rest</th><th>Vehicle</th><th>Run</th><th>Night out / rest</th><th>Review / evidence</th><th>Pay units</th><th>Actions</th></tr></thead>
           <tbody>{driver.days.map(day => <tr key={`${driver.driverId}-${day.date}`}>
             <td><strong>{formatDate(day.date)}</strong></td>
             <td>{formatTime(day.startUtc)}<small>First move {formatTime(day.firstMovementUtc)}</small></td>
@@ -107,9 +107,10 @@ function DriverRows({ drivers }: { drivers: DriverTimesheetDriver[] }) {
             <td><strong>{hhmm(day.dutySpanMinutes)}</strong></td><td>{hhmm(day.driveMinutes)}</td><td>{hhmm(day.workMinutes)}</td>
             <td>{hhmm(day.restMinutes)}<small>{day.breakCount ? `${day.breakCount} break${day.breakCount === 1 ? '' : 's'}` : ''}</small></td>
             <td>{day.vehicles.length ? day.vehicles.join(', ') : '—'}</td><td>{day.runs.length ? day.runs.join(', ') : <span className="timesheet-no-route">No allocated run</span>}</td>
-            <td><span className={`timesheet-status ${day.nightOutStatus?.startsWith('Confirmed') ? 'confirmed' : day.nightOutStatus === 'Possible Night Out' ? 'review' : 'partial'}`}>{day.nightOutStatus || 'No Night Out'}</span><small>{day.restDurationMinutes != null ? `${hhmm(day.restDurationMinutes)} · ${day.restType || 'rest evidence'}` : ''}</small></td>
+            <td><span className={`timesheet-status ${day.nightOutStatus?.startsWith('Confirmed') ? 'confirmed' : day.nightOutStatus === 'Possible Night Out' ? 'review' : 'partial'}`}>{day.nightOutStatus || 'No Night Out'}</span><small>{day.restDurationMinutes != null ? `${hhmm(day.restDurationMinutes)} · ${day.restType || 'rest evidence'}` : ''}</small>{day.nightOutSource === 'Manual' ? <small>Manual decision{day.reviewDecisionBy ? ` · ${day.reviewDecisionBy}` : ''}</small> : null}</td>
             <td><span className={`timesheet-status ${evidenceClass(day.status)}`}>{day.status}</span><small className="timesheet-note">{(day.reviewReasons?.length ? day.reviewReasons : day.notes).join(' · ')}</small><small>Evidence: {day.evidence?.tachoDutyCount ?? 0} Tacho / {day.evidence?.roadTechMovementCount ?? 0} RoadTech</small></td>
             <td>{day.payUnits || '—'}</td>
+            <td className="timesheet-actions">{day.nightOutStatus === 'Possible Night Out' ? <><button type="button" disabled={busyReview === `${driver.driverId}-${day.date}`} onClick={() => onNightOutReview(driver, day, 'Confirmed Night Out - Regular Rest')}>Confirm 11h</button><button type="button" disabled={busyReview === `${driver.driverId}-${day.date}`} onClick={() => onNightOutReview(driver, day, 'Confirmed Night Out - Reduced Rest')}>Confirm 9h</button><button type="button" disabled={busyReview === `${driver.driverId}-${day.date}`} onClick={() => onNightOutReview(driver, day, 'No Night Out')}>No night out</button></> : null}</td>
           </tr>)}</tbody>
         </table>
       </div>}
@@ -142,8 +143,19 @@ export function DriverTimesheets() {
   const [section, setSection] = useState<TimesheetSection>('Employed');
   const [search, setSearch] = useState('');
   const [reviewOnly, setReviewOnly] = useState(false);
+  const [busyReview, setBusyReview] = useState<string>();
 
   const report = useApi(useCallback(async () => api.driverTimesheets(from, to, await token()), [from, to, token]));
+  const reviewNightOut = async (driver: DriverTimesheetDriver, day: DriverTimesheetDriver['days'][number], decision: string) => {
+    const key = `${driver.driverId}-${day.date}`;
+    setBusyReview(key);
+    try {
+      await api.reviewTimesheetNightOut({ driverId: driver.driverId, date: day.date, dutyStartUtc: day.tachoStartUtc, decision, reason: `Timesheet review for ${day.date}` }, await token());
+      await report.refresh();
+    } finally {
+      setBusyReview(undefined);
+    }
+  };
   const sourceDrivers = report.data?.drivers || [];
   const drivers = sourceDrivers
     .filter(driver => driver.employmentType === section)
@@ -291,7 +303,7 @@ export function DriverTimesheets() {
               </article>;
             })}
           </div>}
-          {drivers.length ? <DriverRows drivers={drivers} /> : <div className="state">No {section.toLowerCase()} driver timesheets match this range and filter.</div>}
+          {drivers.length ? <DriverRows drivers={drivers} onNightOutReview={reviewNightOut} busyReview={busyReview} /> : <div className="state">No {section.toLowerCase()} driver timesheets match this range and filter.</div>}
         </>}
   </section>;
 }
