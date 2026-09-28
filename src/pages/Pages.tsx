@@ -469,7 +469,7 @@ export function StagingQueue({ ordersOnly = false, masterOnly = false }: { order
   const payload = selected ? parseStagingPayload(selected) : undefined;
 
   const orderSummary = (item: StagedImport) => {
-    if (item.entityType !== 'order') return { collection: '—', delivery: '—', pallets: '—' };
+    if (item.entityType !== 'order') return { collection: '—', delivery: '—', pallets: '—', temperature: '—', planningWindow: '—', orderType: '—' };
     const value = parseStagingPayload(item);
     const pick = (...keys: string[]) => keys.map(key => value[key]).find(candidate => String(candidate ?? '').trim().length > 0);
     const collection = pick('collectionSiteName', 'collectionSite', 'collectionLocation', 'originSiteName', 'originSite', 'originSiteCode', 'sellerName', 'collectFrom', 'collectionAddress');
@@ -478,9 +478,12 @@ export function StagingQueue({ ordersOnly = false, masterOnly = false }: { order
     const stall = pick('stallNumber', 'destinationCode');
     const delivery = directDelivery || (market && stall ? `${market} · ${stall}` : market || stall);
     const pallets = pick('pallets', 'palletQty', 'palletQuantity', 'quantity');
+    const temperature = pick('temperature', 'temperatureRequirement', 'temperatureC', 'temp');
+    const planningWindow = pick('planningWindow', 'suggestedPlanningWindow', 'routeTiming') || ((value.overnightRoute === true || value.runsOvernight === true) ? 'PM / overnight' : 'AM / PM not set');
+    const orderType = pick('orderType', 'palletType', 'jobType') || (String(value.driverInstructions || '').match(/\b(backhaul|backload|trolleys?|crates?)\b/i)?.[0]);
     const collectionDate = pick('collectionDate', 'collectDate', 'pickupDate', 'date');
     const deliveryDate = pick('deliveryDate', 'deliverDate', 'dropDate');
-    return { collection: String(collection || '—'), delivery: String(delivery || '—'), pallets: String(pallets ?? '—'), collectionDate: String(collectionDate || '—'), deliveryDate: String(deliveryDate || '—') };
+    return { collection: String(collection || '—'), delivery: String(delivery || '—'), pallets: String(pallets ?? '—'), temperature: String(temperature || 'Temp not set'), planningWindow: String(planningWindow || 'AM / PM not set'), orderType: String(orderType || 'Type not set'), collectionDate: String(collectionDate || '—'), deliveryDate: String(deliveryDate || '—') };
   };
 
   const masterSummary = (item: StagedImport) => {
@@ -578,6 +581,8 @@ export function StagingQueue({ ordersOnly = false, masterOnly = false }: { order
               <label>Collection point<input value={String(editingPayload.collectionSiteName ?? editingPayload.collectionSite ?? editingPayload.collectionLocation ?? '')} onChange={event => setEditingPayload(current => ({ ...(current || {}), collectionSiteName: event.target.value }))} /></label>
               <label>Delivery point<input value={String(editingPayload.deliverySiteName ?? editingPayload.deliverySite ?? editingPayload.deliveryLocation ?? '')} onChange={event => setEditingPayload(current => ({ ...(current || {}), deliverySiteName: event.target.value }))} /></label>
               <label>Pallet quantity<input type="number" min="0" value={String(editingPayload.pallets ?? editingPayload.palletQty ?? editingPayload.palletQuantity ?? '')} onChange={event => setEditingPayload(current => ({ ...(current || {}), pallets: event.target.value ? Number(event.target.value) : undefined }))} /></label>
+              <label>Temperature<input value={String(editingPayload.temperature ?? editingPayload.temperatureRequirement ?? editingPayload.temperatureC ?? editingPayload.temp ?? '')} onChange={event => setEditingPayload(current => ({ ...(current || {}), temperature: event.target.value, temperatureRequirement: event.target.value }))} placeholder="e.g. chilled / ambient / +2°C" /></label>
+              <label>Order type<input value={String(editingPayload.orderType ?? editingPayload.palletType ?? editingPayload.jobType ?? '')} onChange={event => setEditingPayload(current => ({ ...(current || {}), orderType: event.target.value, jobType: event.target.value }))} placeholder="e.g. backhaul, trolleys, crates" /></label>
               <label>Planning window<select value={String(editingPayload.planningWindow ?? '')} onChange={event => setEditingPayload(current => ({ ...(current || {}), planningWindow: event.target.value || undefined }))}><option value="">Not specified</option><option value="AM">AM</option><option value="PM">PM</option><option value="Transfer">Transfer</option><option value="Market">Market</option></select></label>
               <label className="checkbox-field"><input type="checkbox" checked={editingPayload.overnightRoute === true || editingPayload.runsOvernight === true} onChange={event => setEditingPayload(current => ({ ...(current || {}), overnightRoute: event.target.checked, runsOvernight: event.target.checked }))} /> Overnight / crosses into the next day</label>
               <label className="wide">Planner notes<textarea rows={3} value={String(editingPayload.notes ?? editingPayload.orderNotes ?? '')} onChange={event => setEditingPayload(current => ({ ...(current || {}), notes: event.target.value }))} /></label>
@@ -590,7 +595,7 @@ export function StagingQueue({ ordersOnly = false, masterOnly = false }: { order
 
       {ordersOnly ? <div className="table-wrap">
         <table className="staging-review-table">
-          <thead><tr><th>Collection date</th><th>Delivery date</th><th>Collection point</th><th>Delivery location</th><th>Pallets</th><th>Source</th><th>Readiness</th><th>Action</th></tr></thead>
+          <thead><tr><th>Collection date</th><th>Delivery date</th><th>Collection point</th><th>Delivery location</th><th>Pallets</th><th>Temp</th><th>AM / PM</th><th>Type</th><th>Source</th><th>Readiness</th><th>Action</th></tr></thead>
           <tbody>{data?.map(item => {
             const summary = orderSummary(item);
             const readiness = orderReadiness.get(item.id);
@@ -600,6 +605,9 @@ export function StagingQueue({ ordersOnly = false, masterOnly = false }: { order
               <td>{summary.collection}</td>
               <td>{summary.delivery}</td>
               <td>{summary.pallets}</td>
+              <td>{summary.temperature}</td>
+              <td>{summary.planningWindow}</td>
+              <td>{summary.orderType}</td>
               <td>{item.source || '—'}</td>
               <td>{readiness
                 ? <span className={`order-readiness ${readiness.ready ? 'clear' : 'review'}`} title={readiness.reason}><strong>{readiness.ready ? 'Clear for approval' : 'Needs review'}</strong><small>{readiness.reason}</small></span>
