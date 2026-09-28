@@ -216,6 +216,10 @@ export type OperationsExceptions = { planningDate: string; generatedAtUtc: strin
 export type DuplicateCheckRequest = { customer?: string; po?: string; purchaseOrder?: string; orderReference?: string; collectionDate?: string; deliveryDate?: string; collectionLocation?: string; deliveryLocation?: string; pallets?: number; sourceMessageId?: string; sourceAttachmentName?: string };
 export type DuplicateCheckMatch = { recordId?: string; classification?: string; reference?: string; status?: string; collectionDate?: string; deliveryDate?: string };
 export type DuplicateCheckResponse = { classification: 'New order' | 'Exact duplicate' | 'Possible duplicate' | 'Amendment/update'; confidence?: string; primaryIdentifier?: string; matchCount: number; matches: DuplicateCheckMatch[]; rule?: string };
+export type BookingReservation = { id: string; customerCode: string; bookingType: string; stableBookingKey: string; collectionDate: string; deliveryDate?: string; collectionDepot?: string; deliverySite?: string; collectionReference?: string; cratePurchaseOrder?: string; transportPurchaseOrder?: string; reservedUnits: number; unitType: string; status: string; revisionNumber: number; assignedUnits: number; allocationCount: number; sourceStagedImportId?: string; sourceMovementId?: string; updatedAtUtc: string };
+export type BookingReservationDetail = { reservation: BookingReservation; revisions: Array<Record<string, unknown>>; allocations: Array<{ id: string; transportOrderId?: string; destination?: string; units: number; unitType: string; note?: string; isActive: boolean }> };
+export type BookingCandidateOrder = { id: string; reference: string; customerCode: string; collectionDate: string; deliveryDate?: string; pallets?: number; status: string; sellerName?: string; marketName?: string; collectionReference?: string };
+export type InvoiceHistoryRecord = { record: { id: string; invoiceNumber?: string; customerCode: string; loadId?: string; transportOrderId?: string; bookingReservationId?: string; invoiceDate?: string; netAmount: number; vatAmount: number; grossAmount: number; status: string; notes?: string; updatedAtUtc: string }; lines: Array<Record<string, unknown>>; history: Array<{ eventType: string; occurredAtUtc: string; actor?: string }> };
 
 export type DriverUpdate = {
   employeeNumber?: string;
@@ -318,6 +322,16 @@ export interface TmsApi {
   assistantSnapshot(date: string, token?: string): Promise<AssistantSnapshot>;
   assistantAdvice(message: string, date: string, token?: string): Promise<AssistantAdvice>;
   fixSafeValidations(token?: string): Promise<SafeFixResult>;
+  bookingReservations(query: { from?: string; to?: string; status?: string; customerCode?: string }, token?: string): Promise<BookingReservation[]>;
+  bookingReservation(id: string, token?: string): Promise<BookingReservationDetail>;
+  bookingReservationSourceEvidence(id: string, token?: string): Promise<{ stagedPayloadJson: string; sourceEvidencePayloadJson?: string; sourceMessageId?: string; source?: string; receivedAtUtc: string }>;
+  unmatchBookingReservation(id: string, allocationId: string, reason: string, token?: string): Promise<unknown>;
+  reviseBookingReservation(id: string, payload: { collectionDate?: string; deliveryDate?: string; reservedUnits?: number; collectionDepot?: string; deliverySite?: string; collectionReference?: string; cratePurchaseOrder?: string; transportPurchaseOrder?: string; plannerNotes?: string; changeNote?: string }, token?: string): Promise<unknown>;
+  cancelBookingReservation(id: string, reason: string, token?: string): Promise<unknown>;
+  allocateBookingReservation(id: string, payload: { units: number; transportOrderId?: string; destination?: string; unitType?: string; note?: string }, token?: string): Promise<unknown>;
+  bookingCandidateOrders(id: string, token?: string): Promise<BookingCandidateOrder[]>;
+  matchBookingOrder(id: string, payload: { transportOrderId: string; units?: number; note?: string }, token?: string): Promise<unknown>;
+  invoiceHistory(query: { from?: string; to?: string; customerCode?: string; status?: string }, token?: string): Promise<InvoiceHistoryRecord[]>;
 }
 
 export const api: TmsApi = {
@@ -376,4 +390,14 @@ export const api: TmsApi = {
   assistantSnapshot: (date, token) => request<AssistantSnapshot>(`/api/v1/assistant/snapshot?date=${encodeURIComponent(date)}`, token),
   assistantAdvice: (message, date, token) => request<AssistantAdvice>('/api/v1/assistant/advice', token, { method: 'POST', body: JSON.stringify({ message, date }) }),
   fixSafeValidations: token => request<SafeFixResult>('/api/v1/assistant/fix-safe-validations', token, { method: 'POST' }),
+  bookingReservations: (query, token) => request<BookingReservation[]>(`/api/v1/booking-reservations?${new URLSearchParams(Object.entries(query).filter(([, value]) => Boolean(value)) as string[][])}`, token),
+  bookingReservation: (id, token) => request<BookingReservationDetail>(`/api/v1/booking-reservations/${id}`, token),
+  bookingReservationSourceEvidence: (id, token) => request(`/api/v1/booking-reservations/${id}/source-evidence`, token),
+  unmatchBookingReservation: (id, allocationId, reason, token) => request(`/api/v1/booking-reservations/${id}/unmatch`, token, { method: 'POST', body: JSON.stringify({ allocationId, reason }) }),
+  reviseBookingReservation: (id, payload, token) => request(`/api/v1/booking-reservations/${id}/revisions`, token, { method: 'POST', body: JSON.stringify(payload) }),
+  cancelBookingReservation: (id, reason, token) => request(`/api/v1/booking-reservations/${id}/cancel`, token, { method: 'POST', body: JSON.stringify({ reason }) }),
+  allocateBookingReservation: (id, payload, token) => request(`/api/v1/booking-reservations/${id}/allocate`, token, { method: 'POST', body: JSON.stringify(payload) }),
+  bookingCandidateOrders: (id, token) => request<BookingCandidateOrder[]>(`/api/v1/booking-reservations/${id}/candidate-orders`, token),
+  matchBookingOrder: (id, payload, token) => request(`/api/v1/booking-reservations/${id}/match-order`, token, { method: 'POST', body: JSON.stringify(payload) }),
+  invoiceHistory: (query, token) => request<InvoiceHistoryRecord[]>(`/api/v1/invoice-history?${new URLSearchParams(Object.entries(query).filter(([, value]) => Boolean(value)) as string[][])}`, token),
 };

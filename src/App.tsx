@@ -8,6 +8,7 @@ const MasterDataHub = lazy(() => import('./pages/MasterDataHub').then(module => 
 const DashboardOperational = lazy(() => import('./pages/DashboardOperational').then(module => ({ default: module.DashboardOperational })));
 const DailyCompliance = lazy(() => import('./pages/DailyCompliance').then(module => ({ default: module.DailyCompliance })));
 const JobInvoiceHistory = lazy(() => import('./pages/JobInvoiceHistory').then(module => ({ default: module.JobInvoiceHistory })));
+const BookingReservations = lazy(() => import('./pages/BookingReservations').then(module => ({ default: module.BookingReservations })));
 const DriverAssignments = lazy(() => import('./pages/Pages').then(module => ({ default: module.DriverAssignments })));
 const Orders = lazy(() => import('./pages/Pages').then(module => ({ default: module.Orders })));
 const StagingQueue = lazy(() => import('./pages/Pages').then(module => ({ default: module.StagingQueue })));
@@ -32,6 +33,7 @@ const coreNavigation: NavItem[] = [
   ['/staging', 'Order Review'],
   ['/', 'Planner Builder'],
   ['/pallet-control', 'Pallet Order'],
+  ['/bookings', 'Booking & Capacity'],
   ['/driver-dispatch', 'Dispatch'],
   ['/driver-timesheets', 'Timesheets'],
   ['/master-data', 'Master Data'],
@@ -201,6 +203,7 @@ function Shell() {
         <Route path="/orders" element={<Orders />} />
         <Route path="/staging" element={<StagingQueue ordersOnly />} />
         <Route path="/pallet-control" element={<PalletPlanningControl />} />
+        <Route path="/bookings" element={<BookingReservations />} />
         <Route path="/driver-dispatch" element={<DriverDispatchOperational />} />
         <Route path="/master-data" element={<MasterDataHub />} />
         <Route path="/drivers" element={<MasterDataHub initialSection="drivers" />} />

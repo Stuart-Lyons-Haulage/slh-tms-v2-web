@@ -22,9 +22,11 @@ type Fence = {
   geofenceAvailable: boolean;
   siteLinked: boolean;
   validationStatus: string;
+  duplicateSiteAssignment?: boolean;
+  duplicateGeofences?: { id: string; name: string }[];
 };
 
-type SiteOption = { siteId: string; siteCode: string; siteName: string; linkedGeofences: string[]; geofenceLinked: boolean; needsReview: boolean };
+type SiteOption = { siteId: string; siteCode: string; siteName: string; linkedGeofences: string[]; geofenceLinked: boolean; needsReview: boolean; activeGeofenceCount?: number; hasMultipleActiveGeofences?: boolean; activeGeofenceDetails?: { id: string; name: string }[] };
 type Hit = { geofenceName: string; vehicleIdentifier: string; enteredAtUtc: string; confirmedAtUtc?: string; exitedAtUtc?: string; loadId?: string; loadStopId?: string; dwellMinutes: number; status: string; statusReason?: string };
 type Integrity = {
   checkedAtUtc: string;
@@ -33,7 +35,7 @@ type Integrity = {
   liveRunProgressionReady: boolean;
   trackingFresh: boolean;
   trackingAgeMinutes?: number;
-  geofences: { total: number; active: number; valid: number; linked: number; unlinked: number; invalid: number };
+  geofences: { total: number; active: number; valid: number; linked: number; unlinked: number; invalid: number; reconciliation?: { activeSites: number; sitesMissingGeofence: number; duplicateSiteAssignmentGroups: number; geofencesInDuplicateSiteAssignments: number } };
   records: Fence[];
   latestTracking?: { vehicleIdentifier: string; eventTimeUtc: string; latitude: number; longitude: number; providerName: string };
   latestGeofenceHit?: Hit;
@@ -184,7 +186,9 @@ export function GeofenceOperational() {
     if (!window.confirm(`${active ? 'Restore' : 'Archive'} geofence “${row.name}”?`)) return;
     setSaving(true); setError(undefined); setNotice(undefined);
     try {
-      await request(`/api/v1/master-data-cleanup/geofences/${row.id}/${active ? 'restore' : 'archive'}`, await token(), { method: 'POST' });
+      // Archive is the reversible removal action. It keeps visit/audit history and
+      // removes the fence from active matching and duplicate checks.
+      await request(`/api/v1/operational-master-data/geofences/${row.id}/${active ? 'restore' : 'archive'}`, await token(), { method: 'POST' });
       setNotice(`Geofence ${active ? 'restored' : 'archived'}.`); await load();
     } catch (e) { setError(e instanceof Error ? e.message : 'Archive/restore failed.'); }
     finally { setSaving(false); }
@@ -229,6 +233,7 @@ export function GeofenceOperational() {
         <article className="metric"><span>Live-run progression</span><strong>{data.liveRunProgressionReady ? 'READY' : 'CHECK'}</strong><small>engine + links + fresh tracking</small></article>
         <article className="metric"><span>Active / valid</span><strong>{data.geofences.active} / {data.geofences.valid}</strong><small>{data.geofences.invalid} invalid polygon(s)</small></article>
         <article className="metric"><span>Linked to Sites</span><strong>{data.geofences.linked}</strong><small>{data.geofences.unlinked} valid but unlinked</small></article>
+        <article className="metric"><span>Multiple fences per Site</span><strong>{data.geofences.reconciliation?.duplicateSiteAssignmentGroups ?? '—'}</strong><small>{data.geofences.reconciliation?.geofencesInDuplicateSiteAssignments ?? '—'} active records involved</small></article>
         <article className="metric"><span>RoadTech age</span><strong>{data.trackingAgeMinutes == null ? '—' : `${Math.round(data.trackingAgeMinutes)}m`}</strong><small>{data.latestTracking ? `${data.latestTracking.vehicleIdentifier} · ${dt(data.latestTracking.eventTimeUtc)}` : 'No tracking event'}</small></article>
       </div>
       <div className="panel" style={{ marginBottom: 16 }}><div className="title-row"><div><p className="eyebrow">Actual progression evidence</p><h3>Latest geofence hits</h3></div></div><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))', gap: 12 }}><article><strong>Latest entry / visit</strong>{latest ? <p>{latest.geofenceName}<br/><small>{latest.vehicleIdentifier} · {dt(latest.enteredAtUtc)} · {latest.status}<br/>Run {latest.loadId || 'not linked'} · stop {latest.loadStopId || 'not linked'}</small></p> : <p className="hint">No geofence hit has been recorded yet.</p>}</article><article><strong>Latest confirmed dwell hit</strong>{confirmed ? <p>{confirmed.geofenceName}<br/><small>{confirmed.vehicleIdentifier} · confirmed {dt(confirmed.confirmedAtUtc)} · {confirmed.dwellMinutes} min<br/>Run {confirmed.loadId || 'not linked'} · stop {confirmed.loadStopId || 'not linked'}</small></p> : <p className="hint">No confirmed dwell hit has been recorded yet.</p>}</article></div></div>
@@ -258,9 +263,11 @@ export function GeofenceOperational() {
       </div>
     </div>}
 
+    {data?.geofences.reconciliation && data.geofences.reconciliation.duplicateSiteAssignmentGroups > 0 && <div className="panel" style={{ marginBottom: 16, borderColor: '#b42318' }}><h3>Sites with multiple active geofences</h3><p className="hint">Archive the incorrect fence from the table below. Archiving is reversible and retains historical visit evidence.</p><ul>{sites.filter(site => site.hasMultipleActiveGeofences).map(site => <li key={site.siteId}><strong>{site.siteCode} · {site.siteName}</strong>: {site.activeGeofenceDetails?.map(fence => fence.name).join(', ') || site.linkedGeofences.join(', ')}</li>)}</ul></div>}
+
     <div className="panel">
       <div className="title-row"><div><h3>Geofences</h3><small>{rows.length} shown</small></div><div className="title-actions"><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search geofence, Site or category…"/><label className="check-label"><input type="checkbox" checked={includeArchived} onChange={e => setIncludeArchived(e.target.checked)}/> Include archived</label></div></div>
-      {loading && !data ? <div className="state">Loading geofence data…</div> : <div style={{ overflowX: 'auto' }}><table><thead><tr><th>Geofence</th><th>Site code</th><th>Linked site</th><th>Category</th><th>Polygon</th><th>Site link</th><th>Entry confirm</th><th>Max wait</th><th>Status</th><th>Actions</th></tr></thead><tbody>{rows.map(row => <tr key={row.id}><td><strong>{row.name}</strong></td><td>{row.locationOnly ? 'Location only' : text(row.siteCode || row.siteNumber)}</td><td>{text(row.siteName)}</td><td>{text(row.category)}</td><td>{row.polygonValid ? 'Valid' : 'Invalid'}</td><td>{row.locationOnly ? 'Location only' : row.siteLinked ? row.manualOverride ? 'Manual' : 'Linked' : 'Unlinked'}</td><td>{row.pendingEntryMinutes} min</td><td>{row.maxWaitMinutes == null ? '—' : `${row.maxWaitMinutes} min`}</td><td>{row.active ? row.validationStatus : 'Archived'}</td><td style={{ whiteSpace: 'nowrap' }}><button onClick={() => { setSelected(row); setDraft({ ...row, siteNumber: row.siteCode || row.siteNumber || '' }); }}>Edit</button>{' '}<button disabled={saving} onClick={() => void setActive(row, !row.active)}>{row.active ? 'Archive' : 'Restore'}</button>{!row.active && <>{' '}<button disabled={saving} onClick={() => void deleteFence(row)} style={{ borderColor: '#b42318', color: '#b42318' }}>Delete</button></>}</td></tr>)}</tbody></table>{!rows.length && <div className="state">No geofences match this filter.</div>}</div>}
+      {loading && !data ? <div className="state">Loading geofence data…</div> : <div style={{ overflowX: 'auto' }}><table><thead><tr><th>Geofence</th><th>Site code</th><th>Linked site</th><th>Category</th><th>Polygon</th><th>Site link</th><th>Entry confirm</th><th>Max wait</th><th>Status</th><th>Actions</th></tr></thead><tbody>{rows.map(row => <tr key={row.id} style={row.duplicateSiteAssignment ? { background: '#fff1f0' } : undefined}><td><strong>{row.name}</strong>{row.duplicateSiteAssignment && <div><small style={{ color: '#b42318', fontWeight: 800 }}>Multiple active fences for this Site</small></div>}</td><td>{row.locationOnly ? 'Location only' : text(row.siteCode || row.siteNumber)}</td><td>{text(row.siteName)}</td><td>{text(row.category)}</td><td>{row.polygonValid ? 'Valid' : 'Invalid'}</td><td>{row.locationOnly ? 'Location only' : row.siteLinked ? row.manualOverride ? 'Manual' : 'Linked' : 'Unlinked'}</td><td>{row.pendingEntryMinutes} min</td><td>{row.maxWaitMinutes == null ? '—' : `${row.maxWaitMinutes} min`}</td><td>{row.active ? row.validationStatus : 'Archived'}</td><td style={{ whiteSpace: 'nowrap' }}><button onClick={() => { setSelected(row); setDraft({ ...row, siteNumber: row.siteCode || row.siteNumber || '' }); }}>Edit</button>{' '}<button disabled={saving} onClick={() => void setActive(row, !row.active)}>{row.active ? 'Archive' : 'Restore'}</button>{!row.active && <>{' '}<button disabled={saving} onClick={() => void deleteFence(row)} style={{ borderColor: '#b42318', color: '#b42318' }}>Delete</button></>}</td></tr>)}</tbody></table>{!rows.length && <div className="state">No geofences match this filter.</div>}</div>}
     </div>
   </section>;
 }

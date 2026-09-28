@@ -107,6 +107,7 @@ export function JobInvoiceHistory() {
   const orders = useApi(useCallback(async () => api.orders(from, to, await token()), [from, to, token]));
   const runs = useApi(useCallback(async () => (await listRuns(undefined, await token())).filter(run => runDateInRange(run, from, to)), [from, to, token]));
   const assignments = useApi(useCallback(async () => api.driverAssignments(from, to, await token()), [from, to, token]));
+  const invoiceRecords = useApi(useCallback(async () => api.invoiceHistory({ from, to }, await token()), [from, to, token]));
   const rows = useMemo(() => buildRows(orders.data || [], runs.data || [], assignments.data || []), [assignments.data, orders.data, runs.data]);
   const visibleRows = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -119,13 +120,14 @@ export function JobInvoiceHistory() {
   const ready = visibleRows.filter(row => row.invoiceReadiness === "Ready").length;
   const review = visibleRows.filter(row => row.invoiceReadiness === "Review").length;
   const notReady = visibleRows.filter(row => row.invoiceReadiness === "Not ready").length;
-  const loading = orders.loading || runs.loading || assignments.loading;
-  const error = orders.error || runs.error || assignments.error;
+  const loading = orders.loading || runs.loading || assignments.loading || invoiceRecords.loading;
+  const error = orders.error || runs.error || assignments.error || invoiceRecords.error;
 
   function refresh() {
     void orders.refresh();
     void runs.refresh();
     void assignments.refresh();
+    void invoiceRecords.refresh();
   }
 
   function exportCsv() {
@@ -165,7 +167,28 @@ export function JobInvoiceHistory() {
       <article className="metric"><span>Invoice ready</span><strong>{ready}</strong><small>Completed with allocation evidence</small></article>
       <article className="metric"><span>Review</span><strong>{review}</strong><small>Planned but needs final evidence</small></article>
       <article className="metric"><span>Not ready</span><strong>{notReady}</strong><small>No linked run yet</small></article>
+      <article className="metric"><span>Recorded invoices</span><strong>{invoiceRecords.data?.length || 0}</strong><small>Persisted financial trail</small></article>
     </div>
+
+    {!!invoiceRecords.data?.length && <div className="panel" style={{ overflowX: "auto" }}>
+      <h2>Recorded invoice trail</h2>
+      <p className="hint">These records are created from completed operational loads and retain the linked load, order and reservation references.</p>
+      <table>
+        <thead><tr><th>Invoice</th><th>Customer</th><th>Date</th><th>Amount</th><th>Status</th><th>Operational links</th><th>Trail</th></tr></thead>
+        <tbody>{invoiceRecords.data.map(item => {
+          const record = item.record;
+          return <tr key={record.id}>
+            <td><strong>{record.invoiceNumber || "Draft record"}</strong><br/><small>{record.id}</small></td>
+            <td>{record.customerCode}</td>
+            <td>{record.invoiceDate || "—"}</td>
+            <td><strong>{record.grossAmount.toFixed(2)}</strong><br/><small>Net {record.netAmount.toFixed(2)} · VAT {record.vatAmount.toFixed(2)}</small></td>
+            <td><span className={`status ${statusClass(record.status)}`}>{record.status}</span></td>
+            <td><small>Load {record.loadId || "—"}<br/>Order {record.transportOrderId || "—"}<br/>Booking {record.bookingReservationId || "—"}</small></td>
+            <td><strong>{item.history.length} event{item.history.length === 1 ? "" : "s"}</strong><br/><small>{item.history.at(-1)?.eventType || "No history"}<br/>{item.history.at(-1)?.occurredAtUtc ? new Date(item.history.at(-1)!.occurredAtUtc).toLocaleString("en-GB") : ""}</small></td>
+          </tr>;
+        })}</tbody>
+      </table>
+    </div>}
 
     {loading && !rows.length && <div className="state">Loading job and invoice history…</div>}
     {error && <p className="notice">{error}</p>}
