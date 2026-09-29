@@ -45,16 +45,6 @@ type SamsaraDispatchStatusResponse = {
   runs: SamsaraDispatchState[];
 };
 
-export type DispatchReadiness = {
-  canDispatch: boolean;
-  explanation?: string;
-  structuralReadiness?: {
-    classification: "Recommended" | "Unverified" | "Blocked";
-    requiresAcknowledgement: boolean;
-    checks: Array<{ passed: boolean; message: string }>;
-  };
-};
-
 export async function getDispatchVisibility(planningDate: string, token: string): Promise<DispatchVisibilitySnapshot> {
   return request<DispatchVisibilitySnapshot>(
     `/api/dispatch/driver-visibility?date=${encodeURIComponent(planningDate)}`,
@@ -184,18 +174,6 @@ export async function getAvailableTimes(
     method: "POST",
     body: JSON.stringify({ planningDate, driverIds, reducedRestDriverIds })
   });
-}
-
-export async function checkDispatchReadiness(
-  runId: string,
-  routeDrivingMinutes: number,
-  acknowledgeUnverified: boolean,
-  token: string
-): Promise<DispatchReadiness> {
-  return request<DispatchReadiness>(`/api/v1/loads/${encodeURIComponent(runId)}/dispatch-readiness`, token, {
-    method: "POST",
-    body: JSON.stringify({ routeDrivingMinutes, acknowledgeUnverified })
-  }, 90000);
 }
 
 export async function syncSamsaraMappings(planningDate: string, token: string): Promise<void> {

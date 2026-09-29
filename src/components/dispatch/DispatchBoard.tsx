@@ -1,11 +1,10 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
-import { getDriverDispatchRoute } from "../../api/runs";
 import { useAccessToken } from "../../lib/auth";
 import "../../smart-dispatch.css";
 import { ComplianceWarningBanner } from "./ComplianceWarningBanner";
 import { DispatchDriverRow } from "./DispatchDriverRow";
 import { DispatchFilters } from "./DispatchFilters";
-import { allocateDispatchRun, checkDispatchReadiness, downloadSamsaraCsv, getAvailableTimes, getSmartDispatch, sendRunToSamsara, syncDispatchDrivers, syncSamsaraMappings, unassignDispatchRun } from "./dispatchApi";
+import { allocateDispatchRun, downloadSamsaraCsv, getAvailableTimes, getSmartDispatch, sendRunToSamsara, syncDispatchDrivers, syncSamsaraMappings, unassignDispatchRun } from "./dispatchApi";
 import {
   applyAvailableTimes,
   applyAvailableTime,
@@ -23,7 +22,6 @@ import {
   type DispatchAvailableTimeMap,
   type DispatchSelectionMap
 } from "./dispatchBoardState";
-import { routeDrivingMinutes } from "./dispatchMessaging";
 import type { DispatchAllocationSelection, DispatchDriverDto, DispatchEmploymentFilter, DispatchFilter, DispatchLockFailure, DispatchRunDto } from "./types";
 
 type Props = {
@@ -314,28 +312,19 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
 
       if (lockedRunId(driver.driverId) !== effectiveSelection.runId) {
         await allocateDispatchRun(effectiveSelection.runId, driver.driverId, effectiveSelection, access);
-        setNotice(`${snapshot.runs.find(run => run.runId === effectiveSelection.runId)?.reference || "Run"} allocated to ${driver.name}. Checking route and Samsara readiness…`);
+        setNotice(`${snapshot.runs.find(run => run.runId === effectiveSelection.runId)?.reference || "Run"} allocated to ${driver.name}. Checking Tacho, Sage and Fleetio before sending to Samsara…`);
         onLocked?.();
       }
 
-      const route = await getDriverDispatchRoute(effectiveSelection.runId, access);
-      const minutes = routeDrivingMinutes(route);
-      if (!minutes) throw new Error("The run could not be routed. No HGV driving time was returned.");
-
-      let readiness = await checkDispatchReadiness(effectiveSelection.runId, minutes, false, access);
-      if (!readiness.canDispatch && readiness.structuralReadiness?.classification === "Unverified" && readiness.structuralReadiness.requiresAcknowledgement) {
-        const warnings = readiness.structuralReadiness.checks.filter(check => !check.passed).map(check => `• ${check.message}`).join("\n");
-        if (!window.confirm(`Pre-dispatch warnings:\n\n${warnings}\n\nAcknowledge and continue?`)) return;
-        readiness = await checkDispatchReadiness(effectiveSelection.runId, minutes, true, access);
-      }
-      if (!readiness.canDispatch) throw new Error(readiness.explanation || "Dispatch readiness did not pass.");
+      if (!snapshot.samsaraConfigured) throw new Error(snapshot.samsaraConnectionMessage || "Samsara is not configured, so the route was not sent.");
+      await syncSamsaraMappings(planningDate, access);
+      const result = await sendRunToSamsara(effectiveSelection.runId, access);
 
       await refresh();
-      setNotice(snapshot.samsaraConfigured
-        ? "Dispatch checks passed. The run is allocated and ready; use Send to Samsara when the plan is final."
-        : "Dispatch checks passed. The run is allocated and ready for route export.");
+      setNotice(result.message || `${snapshot.runs.find(run => run.runId === effectiveSelection.runId)?.reference || "Run"} dispatched to Samsara.`);
     } catch (exception) {
       const reason = exception instanceof Error ? exception.message : "Dispatch could not be prepared.";
+      setNotice(`Dispatch failed for ${driver.name}: ${reason}`);
       setFailures(current => current.some(failure => failure.driverId === driver.driverId && failure.reason === reason)
         ? current
         : [...current.filter(failure => failure.driverId !== driver.driverId), { driverId: driver.driverId, runId: selection.runId, reason }]);
@@ -566,6 +555,6 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
       </div>
     </div>
 
-     <p className="smart-dispatch-footnote">Select work and press Dispatch to validate and allocate the run. When the plan is final, use Send to Samsara for the explicit route export. The Planner owns the built-run Lock Plan step. Regular 11h daily rest is the default; choose Reduced rest (9h) only when the planner intends to use that concession. Trailer continuity follows the driver's last-used trailer unless the selected run contains a planner trailer-swap instruction. Samsara updates the same external run rather than creating duplicates. Unassign remains audited after the plan is locked.</p>
+     <p className="smart-dispatch-footnote">Select work and press Dispatch. Tacho supplies duty day, legal start and available hours; Sage leave and Fleetio vehicle/trailer status are checked before the allocated route is sent to Samsara. Regular 11h daily rest is the default; choose Reduced rest (9h) only when the planner intends to use that concession. Trailer continuity follows the driver's last-used trailer unless the selected run contains a planner trailer-swap instruction. Samsara updates the same external run rather than creating duplicates. Unassign remains audited after the plan is locked.</p>
   </section>;
 }

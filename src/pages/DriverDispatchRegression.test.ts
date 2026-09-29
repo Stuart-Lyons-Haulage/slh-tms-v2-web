@@ -53,12 +53,12 @@ describe("Driver Dispatch UI contract", () => {
     expect(operationalSource).not.toContain("does not currently have an allocated run");
     expect(operationalSource).not.toContain("event.preventDefault()");
     expect(operationalSource).not.toContain("event.stopPropagation()");
-    expect(authoritativeSource).toContain("getDriverDispatchRoute(effectiveSelection.runId");
-    expect(authoritativeSource).toContain("checkDispatchReadiness(effectiveSelection.runId");
+    expect(authoritativeSource).not.toContain("getDriverDispatchRoute(effectiveSelection.runId");
+    expect(authoritativeSource).not.toContain("checkDispatchReadiness(effectiveSelection.runId");
     expect(authoritativeSource).toContain("await syncSamsaraMappings(planningDate, access)");
     expect(authoritativeSource).toContain("sendRunToSamsara(selection.runId, access)");
     expect(authoritativeSource).toContain("onDownloadSamsaraCsv");
-    expect(authoritativeSource).toContain("use Send to Samsara for the explicit route export");
+    expect(authoritativeSource).toContain("allocated route is sent to Samsara");
     expect(authoritativeSource).not.toContain("sendDriverMessage(");
     expect(authoritativeSource).not.toContain("<DispatchMessageDialog");
   });
@@ -77,7 +77,7 @@ describe("Driver Dispatch UI contract", () => {
     expect(authoritativeSource).toContain("Sync Drivers");
     expect(authoritativeSource).toContain("Refresh");
     expect(authoritativeSource).toContain("Get Times");
-    expect(authoritativeSource).toContain("Lock Plan");
+    expect(authoritativeSource).toContain("Dispatch");
     expect(authoritativeCss).toContain(".smart-dispatch-board > .smart-dispatch-header");
     expect(authoritativeCss).toContain("display: flex !important");
     expect(authoritativeCss).toContain("visibility: visible !important");
@@ -88,7 +88,7 @@ describe("Driver Dispatch UI contract", () => {
     expect(rowSource).toContain('{busy ? "Allocating…" : "Dispatch"}');
     expect(authoritativeSource).toContain("allocateDispatchRun(effectiveSelection.runId, driver.driverId, effectiveSelection, access)");
     expect(authoritativeSource).not.toContain("lockDispatchPlan(");
-    expect(authoritativeSource.indexOf("lockDispatchPlan(planningDate, [{ driverId: driver.driverId, selection: effectiveSelection }], access)")).toBeLessThan(authoritativeSource.indexOf("getDriverDispatchRoute(effectiveSelection.runId"));
+    expect(authoritativeSource).toContain("await sendRunToSamsara(effectiveSelection.runId, access)");
   });
 
   it("restores the run sidebar with first collection time, first collection, final delivery and fit suggestions", () => {

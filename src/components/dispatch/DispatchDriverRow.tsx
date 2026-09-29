@@ -230,7 +230,7 @@ export function DispatchDriverRow({
         <small>Validates and locks this row, then prepares it for route export.</small>
       </>}
       {action === "dispatch" && lockedToDriver && <button className="smart-action primary" type="button" disabled={busy || blocked || status?.availabilityStatus === "Unavailable"} onClick={() => onDispatch(driver, selection)}>{busy ? "Preparing…" : "Dispatch"}</button>}
-      {lockedToDriver && selection.runId && <button className="smart-action ghost dark" type="button" disabled={busy || !samsaraConfigured} onClick={() => onSamsaraAndDispatch(driver, selection)}>{busy ? "Working…" : samsaraState ? "Update Samsara route" : "Export route to Samsara"}</button>}
+      {lockedToDriver && selection.runId && <button className="smart-action ghost dark" type="button" disabled={busy || !samsaraConfigured} onClick={() => onSamsaraAndDispatch(driver, selection)}>{busy ? "Working…" : samsaraState ? "Update Samsara route" : "Retry Samsara dispatch"}</button>}
       {lockedToDriver && selection.runId && <button className="smart-action ghost" type="button" disabled={busy} onClick={() => onDownloadSamsaraCsv(driver, selection)}>Download Samsara CSV</button>}
       {lockedToDriver && !samsaraConfigured && <small>Samsara API unavailable · CSV fallback is still available</small>}
       {samsaraState && <small title={samsaraState.routeId}>Samsara sent · {new Date(samsaraState.exportedAtUtc).toLocaleString("en-GB")}</small>}
