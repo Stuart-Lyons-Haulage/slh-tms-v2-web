@@ -312,16 +312,12 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
 
       if (lockedRunId(driver.driverId) !== effectiveSelection.runId) {
         await allocateDispatchRun(effectiveSelection.runId, driver.driverId, effectiveSelection, access);
-        setNotice(`${snapshot.runs.find(run => run.runId === effectiveSelection.runId)?.reference || "Run"} allocated to ${driver.name}. Checking Tacho, Sage and Fleetio before sending to Samsara…`);
+        setNotice(`${snapshot.runs.find(run => run.runId === effectiveSelection.runId)?.reference || "Run"} allocated to ${driver.name}. Tacho, Sage and Fleetio checks passed; allocation secured in SLH TMS.`);
         onLocked?.();
       }
 
-      if (!snapshot.samsaraConfigured) throw new Error(snapshot.samsaraConnectionMessage || "Samsara is not configured, so the route was not sent.");
-      await syncSamsaraMappings(planningDate, access);
-      const result = await sendRunToSamsara(effectiveSelection.runId, access);
-
       await refresh();
-      setNotice(result.message || `${snapshot.runs.find(run => run.runId === effectiveSelection.runId)?.reference || "Run"} dispatched to Samsara.`);
+      setNotice(`${snapshot.runs.find(run => run.runId === effectiveSelection.runId)?.reference || "Run"} allocation secured for ${driver.name}. Use Export to Samsara when the route is ready to send.`);
     } catch (exception) {
       const reason = exception instanceof Error ? exception.message : "Dispatch could not be prepared.";
       setNotice(`Dispatch failed for ${driver.name}: ${reason}`);
@@ -555,6 +551,6 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
       </div>
     </div>
 
-     <p className="smart-dispatch-footnote">Select work and press Dispatch. Tacho supplies duty day, legal start and available hours; Sage leave and Fleetio vehicle/trailer status are checked before the allocated route is sent to Samsara. Regular 11h daily rest is the default; choose Reduced rest (9h) only when the planner intends to use that concession. Trailer continuity follows the driver's last-used trailer unless the selected run contains a planner trailer-swap instruction. Samsara updates the same external run rather than creating duplicates. Unassign remains audited after the plan is locked.</p>
+    <p className="smart-dispatch-footnote">Select work and press Dispatch to secure the driver, vehicle and trailer allocation in SLH TMS. Tacho supplies duty day, legal start and available hours; Sage leave and Fleetio vehicle/trailer status are checked at allocation. Export to Samsara is a separate deliberate action after the route is ready. Regular 11h daily rest is the default; choose Reduced rest (9h) only when the planner intends to use that concession. Trailer continuity follows the driver's last-used trailer unless the selected run contains a planner trailer-swap instruction. Unassign remains audited after the plan is locked.</p>
   </section>;
 }
