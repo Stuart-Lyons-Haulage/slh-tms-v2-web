@@ -14,7 +14,7 @@ describe("MasterDataCsvImport", () => {
   });
 
   it("detects common canonical master CSV structures", () => {
-    expect(detectMasterEntity(["External Code", "Site Name", "Collection Address", "Roadrunner Code"])).toBe("site");
+    expect(detectMasterEntity(["External Code", "Site Name", "Collection Address"])).toBe("site");
     expect(detectMasterEntity(["Registration", "Fleet Number", "MOT Expiry"])).toBe("vehicle");
     expect(detectMasterEntity(["Trailer Number", "Type", "Standard Capacity"])).toBe("trailer");
     expect(detectMasterEntity(["Driver Number", "Driver Name", "Tacho Name"])).toBe("driver");
@@ -22,7 +22,7 @@ describe("MasterDataCsvImport", () => {
 
   it("maps site enrichment fields without losing canonical identity", () => {
     const parsed = parseMasterDataCsv(
-      "External Code,Site Name,Collection Address,Roadrunner Code,Latitude,Longitude\nSITE012,Aldi Goldthorpe,Commercial Road Goldthorpe S63 9BL,ALDIGOLD,53.534,-1.302\n",
+      "External Code,Site Name,Collection Address,Latitude,Longitude\nSITE012,Aldi Goldthorpe,Commercial Road Goldthorpe S63 9BL,53.534,-1.302\n",
       "site",
       "sites.csv",
     );
@@ -31,7 +31,6 @@ describe("MasterDataCsvImport", () => {
       externalCode: "SITE012",
       name: "Aldi Goldthorpe",
       collectionAddress: "Commercial Road Goldthorpe S63 9BL",
-      roadrunnerCode: "ALDIGOLD",
       latitude: 53.534,
       longitude: -1.302,
     });

@@ -1,12 +1,11 @@
 /* eslint-disable react-refresh/only-export-components */
 import { useMemo, useState, type ChangeEvent } from "react";
-import { api, apiBaseUrl, type MasterApplyResponse, type RoadrunnerSiteReconcileResponse, type StageBatchRequest } from "../lib/api";
+import { api, apiBaseUrl, type MasterApplyResponse, type StageBatchRequest } from "../lib/api";
 import { useAccessToken } from "../lib/auth";
-import { decodeRoadrunnerSiteMasterBytes, parseRoadrunnerSiteMasterCsv } from "./roadrunnerCsv";
 
 export type MasterEntity = "driver" | "vehicle" | "trailer" | "site";
 type FlatPayload = Record<string, string | number | boolean>;
-type UploadKind = "workbook" | "generic-csv" | "roadrunner-sites";
+type UploadKind = "workbook" | "generic-csv";
 
 type ParsedMasterCsv = {
   requests: StageBatchRequest[];
@@ -30,11 +29,9 @@ type UploadState = {
   kind?: UploadKind;
   detectedEntity?: MasterEntity;
   csv?: ParsedMasterCsv;
-  roadrunnerCount?: number;
   workbookPreview?: WorkbookImportResult;
   workbookCommit?: WorkbookImportResult;
   csvCommit?: MasterApplyResponse;
-  roadrunnerCommit?: RoadrunnerSiteReconcileResponse;
 };
 
 const MASTER_IMPORT_CHUNK_SIZE = 25;
@@ -61,7 +58,7 @@ const aliases: Record<string, string> = {
   trailernumber:"trailerNumber", trailerno:"trailerNumber", standardcapacity:"standardCapacity", eurocapacity:"euroCapacity", type:"type",
   externalcode:"externalCode", sitecode:"externalCode", sitename:"name", customercode:"customerCode", drivertextname:"driverTextName",
   collectionaddress:"collectionAddress", address:"collectionAddress", siteaddress:"collectionAddress", collectioninstructions:"collectionInstructions",
-  maplink:"mapLink", latitude:"latitude", longitude:"longitude", aliases:"aliases", roadrunnercode:"roadrunnerCode", operationalregion:"operationalRegion",
+  maplink:"mapLink", latitude:"latitude", longitude:"longitude", aliases:"aliases", operationalregion:"operationalRegion",
   customfield1:"customField1", customfield2:"customField2", customfield3:"customField3",
   active:"active",
 };
@@ -158,10 +155,6 @@ export async function applyMasterDataInChunks(
 
 function isWorkbookFile(file:File){const n=file.name.toLowerCase();return n.endsWith(".xlsx")||n.endsWith(".xls")||n.endsWith(".xlsm");}
 function isCsvFile(file:File){return file.name.toLowerCase().endsWith(".csv");}
-function isRoadrunnerHeaders(headers:string[]){
-  const h=new Set(headers.map(v=>key(v)));
-  return ["code","company","addpostcode","addtown","latitude","longitude"].every(v=>h.has(v));
-}
 function sectionCount(result:WorkbookImportResult|undefined,section:string){return result?.rows?.filter(row=>row.section===section).length??0;}
 function shortResultRows(result:WorkbookImportResult|undefined){
   return result?.rows?.filter(row=>["review","conflict","skipped","matched","updated","imported","ready","new"].includes(String(row.status).toLowerCase())).slice(0,40)??[];
@@ -205,15 +198,9 @@ export function MasterDataCsvImport({ onCommitted }: { onCommitted?: () => void 
         setMessage("Excel master-data file selected. Preview it before committing changes to the canonical master.");
         return;
       }
-      const text=decodeRoadrunnerSiteMasterBytes(await file.arrayBuffer());
+      const text=await file.text();
       const rows=parseCsvRows(text);
       const headers=rows[0]??[];
-      if(isRoadrunnerHeaders(headers)){
-        const profiles=parseRoadrunnerSiteMasterCsv(text);
-        setUpload({file,fileName:file.name,kind:"roadrunner-sites",roadrunnerCount:profiles.length});
-        setMessage(`Roadrunner Site Master detected: ${profiles.length} site rows ready to reconcile into canonical Site Master.`);
-        return;
-      }
       const detected=detectMasterEntity(headers);
       if(!detected){
         setUpload({file,fileName:file.name,kind:"generic-csv"});
@@ -231,7 +218,7 @@ export function MasterDataCsvImport({ onCommitted }: { onCommitted?: () => void 
     if(!upload.file||!isCsvFile(upload.file))return;
     setEntityOverride(entity);setError(undefined);
     try{
-      const text=decodeRoadrunnerSiteMasterBytes(await upload.file.arrayBuffer());
+      const text=await upload.file.text();
       const parsed=parseMasterDataCsv(text,entity,upload.file.name);
       setUpload(current=>({...current,kind:"generic-csv",detectedEntity:entity,csv:parsed}));
       setMessage(`${parsed.requests.length} ${entity} row(s) ready to apply.`);
@@ -256,11 +243,6 @@ export function MasterDataCsvImport({ onCommitted }: { onCommitted?: () => void 
         const written=result.rows?.filter(row=>["imported","updated","matched"].includes(String(row.status).toLowerCase())).length??0;
         const review=result.rows?.filter(row=>["review","conflict","skipped"].includes(String(row.status).toLowerCase())).length??0;
         setMessage(`${written} rows written/matched · ${review} held or skipped for review.`);
-      }else if(upload.kind==="roadrunner-sites"){
-        const text=decodeRoadrunnerSiteMasterBytes(await upload.file.arrayBuffer());
-        const result=await api.reconcileRoadrunnerSites(parseRoadrunnerSiteMasterCsv(text),await token());
-        setUpload(c=>({...c,roadrunnerCommit:result}));
-        setMessage(`${result.linked} Roadrunner sites linked/enriched · ${result.review} review · ${result.unmatched} unmatched. Existing populated Site Master values were preserved.`);
       }else{
         if(!upload.csv?.requests.length)throw new Error("Map the CSV to a master-data type first.");
         const accessToken=await token();
@@ -273,12 +255,11 @@ export function MasterDataCsvImport({ onCommitted }: { onCommitted?: () => void 
     finally{setBusy(false);}
   }
 
-  const rr=upload.roadrunnerCommit;
   return <section className="panel master-csv-import">
     <div className="title-row"><div>
       <p className="eyebrow">Canonical Master Data import</p>
       <h2>Import and enrich Master Data</h2>
-      <p className="hint">One governed import point for CSV, XLS, XLSX and XLSM. Files are routed to the correct master register. Roadrunner site files enrich missing address/postcode/GPS and retain the Roadrunner identity without creating duplicate sites. Existing populated master values are preserved unless the authoritative SLH workbook explicitly updates them.</p>
+      <p className="hint">One governed import point for CSV, XLS, XLSX and XLSM. Files are routed to the correct master register and uncertain rows remain available for review. Existing populated master values are preserved unless the authoritative SLH workbook explicitly updates them.</p>
     </div></div>
 
     <div className="master-csv-controls">
@@ -300,20 +281,9 @@ export function MasterDataCsvImport({ onCommitted }: { onCommitted?: () => void 
     <div className="actions">
       {upload.kind==="workbook"&&<button type="button" className="primary" disabled={busy} onClick={()=>void preview()}>{busy?"Checking…":"Preview Excel file"}</button>}
       <button type="button" className="primary" disabled={busy||!upload.file||(upload.kind==="workbook"&&!upload.workbookPreview)||(upload.kind==="generic-csv"&&!upload.csv?.requests.length)} onClick={()=>void commit()}>
-        {busy?"Applying…":upload.kind==="roadrunner-sites"?"Reconcile into Site Master":"Commit to Master Data"}
+        {busy?"Applying…":"Commit to Master Data"}
       </button>
     </div>
-
-    {rr&&<div className="metrics">
-      <article className="metric"><span>Received</span><strong>{rr.received}</strong><small>Roadrunner sites</small></article>
-      <article className="metric"><span>Linked / enriched</span><strong>{rr.linked}</strong><small>canonical sites</small></article>
-      <article className="metric"><span>Review</span><strong>{rr.review}</strong><small>ambiguous</small></article>
-      <article className="metric"><span>Unmatched</span><strong>{rr.unmatched}</strong><small>not auto-created</small></article>
-    </div>}
-
-    {rr?.results.some(row=>row.status!=="linked")&&<div className="master-csv-preview"><h3>Site reconciliation review</h3><table className="master-table"><thead><tr><th>Roadrunner</th><th>Company</th><th>Status</th><th>Confidence</th><th>Reason</th></tr></thead><tbody>
-      {rr.results.filter(row=>row.status!=="linked").slice(0,50).map((row,index)=><tr key={`${row.code||"rr"}-${index}`}><td>{row.code||"—"}</td><td>{row.company||"—"}</td><td>{row.status}</td><td>{row.confidence}%</td><td>{row.reason}</td></tr>)}
-    </tbody></table></div>}
 
     {latestWorkbook?.warnings?.length?<div className="notice inline-notice"><strong>Workbook warnings</strong><ul>{latestWorkbook.warnings.slice(0,10).map((warning,index)=><li key={`${warning}-${index}`}>{warning}</li>)}</ul></div>:null}
     {summarySections.length?<div className="master-csv-preview"><h3>Import summary</h3><table className="master-table"><thead><tr><th>Section</th><th>Total</th><th>Matched</th><th>Imported</th><th>Ready</th><th>Review</th><th>Skipped</th><th>New</th></tr></thead><tbody>

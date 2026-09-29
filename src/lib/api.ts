@@ -54,25 +54,6 @@ export type RoadrunnerSiteProfile = {
   vanRouteName?: string;
 };
 
-export type RoadrunnerSiteReconcileResult = {
-  code?: string;
-  company?: string;
-  status: 'linked' | 'review' | 'unmatched';
-  confidence: number;
-  reason: string;
-  siteId?: string;
-  siteCode?: string;
-  siteName?: string;
-  candidates?: Array<{ id: string; externalCode: string; name: string }>;
-};
-
-export type RoadrunnerSiteReconcileResponse = {
-  received: number;
-  linked: number;
-  review: number;
-  unmatched: number;
-  results: RoadrunnerSiteReconcileResult[];
-};
 export type MarketContact = { id: string; market: string; name: string; standOrLocation?: string; salesman?: string; sender?: string; active: boolean };
 export type FuelPrice = { id: string; weekCommencing: string; provider: string; pricePencePerLitre: number; isPricingMaximum: boolean; source?: string; notes?: string; createdAtUtc: string };
 export type StagedImport = { id: string; entityType: string; idempotencyKey: string; payloadJson: string; status: string | number; source?: string; receivedAtUtc: string; reviewedAtUtc?: string; reviewedBy?: string; reviewNote?: string };
@@ -276,7 +257,6 @@ export interface TmsApi {
   trailers(token?: string): Promise<Trailer[]>;
   sites(token?: string): Promise<Site[]>;
   updateSite(id: string, payload: SiteUpdate, token?: string): Promise<Site>;
-  reconcileRoadrunnerSites(records: RoadrunnerSiteProfile[], token?: string): Promise<RoadrunnerSiteReconcileResponse>;
   marketContacts(token?: string): Promise<MarketContact[]>;
   updateMarketContact(id: string, payload: Omit<MarketContact, 'id'>, token?: string): Promise<MarketContact>;
   fuelPrices(token?: string): Promise<FuelPrice[]>;
@@ -344,7 +324,6 @@ export const api: TmsApi = {
   trailers: token => request<Trailer[]>('/api/v1/trailers', token),
   sites: token => request<Site[]>('/api/v1/sites', token),
   updateSite: (id, payload, token) => request<Site>(`/api/v1/sites/${id}`, token, { method: 'PUT', body: JSON.stringify(payload) }),
-  reconcileRoadrunnerSites: (records, token) => request<RoadrunnerSiteReconcileResponse>('/api/v1/sites/roadrunner-master/reconcile', token, { method: 'POST', body: JSON.stringify(records) }),
   marketContacts: async token => normaliseMarketContacts(await request<MarketContact[]>('/api/v1/market-contacts', token)),
   updateMarketContact: (id, payload, token) => request<MarketContact>(`/api/v1/market-contacts/${id}`, token, { method: 'PUT', body: JSON.stringify(payload) }),
   fuelPrices: token => request<FuelPrice[]>('/api/v1/fuel-prices', token),
