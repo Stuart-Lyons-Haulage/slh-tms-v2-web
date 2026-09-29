@@ -44,8 +44,9 @@ function employmentLabel(value: string): string {
 }
 
 function dayTone(driver: DispatchDriverDto): string {
-  if (driver.needsReturn && driver.tachoData.currentDutyDay >= 5) return "red";
-  if (driver.needsReturn && driver.tachoData.currentDutyDay >= 4) return "amber";
+  const day = driver.dayNumber ?? driver.tachoData.currentDutyDay;
+  if (day >= 7) return "red";
+  if (day >= 5) return "amber";
   return "ok";
 }
 
@@ -102,6 +103,7 @@ export function DispatchDriverRow({
   const blockedText = driver.blockedReason || "Unavailable";
   const lockedToDriver = Boolean(selection.runId && lockedRunId === selection.runId);
   const dispatchStatus = status?.dispatchStatus || (lockedToDriver ? "Awaiting Dispatch" : "No Run");
+  const dispatchStatusLabel = dispatchStatus === "No Run" ? "No Route" : dispatchStatus;
   const action = dispatchActionForStatus(lockedToDriver, dispatchStatus);
   const canUnassign = canUnassignDispatchRun(lockedToDriver, dispatchStatus);
   const reducedRestSelected = selection.useReducedDailyRest === true;
@@ -124,7 +126,7 @@ export function DispatchDriverRow({
     });
   }
 
-  return <tr className={blocked ? "smart-dispatch-row blocked" : driver.needsReturn ? "smart-dispatch-row return-needed" : "smart-dispatch-row"}>
+  return <tr className={driver.onLeave ? "smart-dispatch-row on-leave" : blocked ? "smart-dispatch-row blocked" : driver.needsReturn ? "smart-dispatch-row return-needed" : "smart-dispatch-row"}>
     <td className="smart-driver-cell">
       <strong>{driver.name}</strong>
       <div className="smart-driver-meta">
@@ -134,14 +136,15 @@ export function DispatchDriverRow({
     </td>
 
     <td>
-      <span className={`smart-day ${dayTone(driver)}`}>Day {status?.projectedDayNumber || driver.tachoData.currentDutyDay}</span>
-      {driver.needsReturn && <small className="smart-inline-warning">{driver.tachoData.currentDutyDay >= 5 ? "Return priority" : "Return soon"}</small>}
+      <span className={`smart-day ${dayTone(driver)}`}>Day {status?.projectedDayNumber || driver.dayNumber || driver.tachoData.currentDutyDay}</span>
+      {driver.onLeave && <small className="smart-inline-error">{driver.leaveType || "Sage HR leave"}{driver.partDayLeave ? " · part day" : ""}</small>}
+      {!driver.onLeave && driver.needsReturn && <small className="smart-inline-warning">{(driver.dayNumber || driver.tachoData.currentDutyDay) >= 5 ? "Return priority" : "Return soon"}</small>}
     </td>
 
     <td className="smart-location-cell">
       <strong>{driver.trackingData.lastStopName || "Location unavailable"}</strong>
       {driver.trackingData.lastPositionAtUtc && <small>Position · {ukTime(driver.trackingData.lastPositionAtUtc)}</small>}
-      {!driver.trackingData.lastPositionAtUtc && driver.previousPlanningDate && driver.trackingData.lastStopName && <small>Last executed run · {driver.previousPlanningDate}</small>}
+      {!driver.trackingData.lastPositionAtUtc && driver.previousPlanningDate && driver.trackingData.lastStopName && <small>Last executed route · {driver.previousPlanningDate}</small>}
       {driver.distanceToSuggestedCollectionMiles != null && driver.suggestedRunReference &&
         <small>{driver.distanceToSuggestedCollectionMiles.toFixed(1)}mi to suggested collection · {driver.suggestedRunReference}</small>}
       {driver.suggestion && <small className={driver.needsReturn && !driver.backloadCandidate ? "smart-inline-warning" : ""}>{driver.suggestion}</small>}
@@ -157,8 +160,8 @@ export function DispatchDriverRow({
       <td><span className="smart-blocked-label">{blockedText}</span></td>
     </> : <>
       <td>
-        <select aria-label={`Run for ${driver.name}`} value={selection.runId} onChange={event => changeRun(event.target.value)} disabled={lockedToDriver && dispatchStatus !== "No Run"}>
-          <option value="">Run…</option>
+        <select aria-label={`Route for ${driver.name}`} value={selection.runId} onChange={event => changeRun(event.target.value)} disabled={lockedToDriver && dispatchStatus !== "No Run"}>
+          <option value="">Route…</option>
           {legalRuns.map(run => <option key={run.runId} value={run.runId}>
             {run.reference}{run.runId === driver.suggestedRunId ? driver.backloadCandidate ? " · Backload candidate" : " · Suggested" : ""}
           </option>)}
@@ -211,14 +214,14 @@ export function DispatchDriverRow({
           <span style={{ width: `${Math.min(100, Math.max(0, availableTime.weeklyWorkingTimeUsed / 60 * 100))}%` }} />
         </div>
         {selection.plannedStartTime && <small>Plan start · {ukTime(selection.plannedStartTime)}</small>}
-        {restChoiceStale && <small className="smart-inline-warning">Rest choice changed · press Get Times again</small>}
+        {restChoiceStale && <small className="smart-inline-warning">Rest choice changed · press Refresh Staff &amp; Get Times again</small>}
         {availableTime.breachDetail && <small className="smart-inline-error">{availableTime.breachDetail}</small>}
       </>}
       {failures.map((failure, index) => <small className="smart-inline-error" key={`${failure.reason}-${index}`}>{failure.reason}</small>)}
     </td>
 
     <td className="smart-status-cell">
-      <span className={`smart-status-pill ${statusTone(status?.operationalStatus || dispatchStatus)}`}>{status?.operationalStatus || dispatchStatus}</span>
+      <span className={`smart-status-pill ${statusTone(status?.operationalStatus || dispatchStatus)}`}>{status?.operationalStatus || dispatchStatusLabel}</span>
       {status?.driverConfirmed && <small>Driver confirmed</small>}
       {status?.lastDriverReply && <small title={status.lastDriverReply}>{status.lastDriverReply.length > 60 ? `${status.lastDriverReply.slice(0, 60)}…` : status.lastDriverReply}</small>}
       {status?.availabilityStatus === "Unavailable" && <small className="smart-inline-error">{status.availabilityMessage || "Tacho unavailable"}</small>}

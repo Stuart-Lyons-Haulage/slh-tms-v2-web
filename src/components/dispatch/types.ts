@@ -65,6 +65,11 @@ export interface DispatchDriverDto {
   contractedDays: string[];
   homeDepot?: string;
   tachoData: DispatchTachoDataDto;
+  dayNumber?: number;
+  onLeave?: boolean;
+  leaveType?: string;
+  leaveDetails?: string;
+  partDayLeave?: boolean;
   trackingData: DispatchTrackingDataDto;
   needsReturn: boolean;
   availableFrom?: string;

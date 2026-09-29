@@ -10,6 +10,7 @@ const stateSource = readFileSync(new URL("../components/dispatch/dispatchBoardSt
 const filterSource = readFileSync(new URL("../components/dispatch/DispatchFilters.tsx", import.meta.url), "utf8");
 const calculatedStartsSource = readFileSync(new URL("./DispatchCalculatedStarts.tsx", import.meta.url), "utf8");
 const authoritativeCss = readFileSync(new URL("../authoritative-dispatch.css", import.meta.url), "utf8");
+const smartDispatchCss = readFileSync(new URL("../smart-dispatch.css", import.meta.url), "utf8");
 const loadPlanCss = readFileSync(new URL("../customer-load-plans.css", import.meta.url), "utf8");
 
 describe("Driver Dispatch UI contract", () => {
@@ -58,7 +59,7 @@ describe("Driver Dispatch UI contract", () => {
     expect(authoritativeSource).toContain("await syncSamsaraMappings(planningDate, access)");
     expect(authoritativeSource).toContain("sendRunToSamsara(selection.runId, access)");
     expect(authoritativeSource).toContain("onDownloadSamsaraCsv");
-    expect(authoritativeSource).toContain("allocated route is sent to Samsara");
+    expect(authoritativeSource).toContain("Samsara route export");
     expect(authoritativeSource).not.toContain("sendDriverMessage(");
     expect(authoritativeSource).not.toContain("<DispatchMessageDialog");
   });
@@ -66,7 +67,7 @@ describe("Driver Dispatch UI contract", () => {
   it("keeps driver search, sync and customer exports on the routed Driver Dispatch surface", () => {
     expect(operationalSource).not.toContain("CustomerLoadPlanActions");
     expect(filterSource).toContain('aria-label="Search drivers"');
-    expect(authoritativeSource).toContain("Sync Drivers");
+    expect(authoritativeSource).toContain("Refresh Staff & Get Times");
     expect(authoritativeSource).toContain("syncDispatchDrivers");
     expect(authoritativeSource).toContain("filterDriversByDriverSearch");
   });
@@ -74,13 +75,25 @@ describe("Driver Dispatch UI contract", () => {
   it("keeps the authoritative Smart Dispatch toolbar visibly rendered in production", () => {
     expect(authoritativeSource).toContain('className="smart-dispatch-header"');
     expect(authoritativeSource).toContain("Planning date");
-    expect(authoritativeSource).toContain("Sync Drivers");
-    expect(authoritativeSource).toContain("Refresh");
-    expect(authoritativeSource).toContain("Get Times");
+    expect(authoritativeSource).toContain("Refresh Staff & Get Times");
+    expect(authoritativeSource).not.toContain('>Refresh<');
+    expect(authoritativeSource).not.toContain('>Get Times<');
     expect(authoritativeSource).toContain("Dispatch");
     expect(authoritativeCss).toContain(".smart-dispatch-board > .smart-dispatch-header");
     expect(authoritativeCss).toContain("display: flex !important");
     expect(authoritativeCss).toContain("visibility: visible !important");
+  });
+
+  it("uses Routes wording and carries Driver Master/Sage duty and leave state into dispatch", () => {
+    expect(authoritativeSource).toContain('aria-label="Routes ready for driver allocation"');
+    expect(authoritativeSource).toContain("<strong>Routes</strong>");
+    expect(authoritativeSource).toContain("<th>Driver</th><th>Duty</th><th>Last location / fit</th><th>Skills</th><th>Route</th>");
+    expect(apiSource).toContain("authorityByDriver.has(driver.driverId)");
+    expect(apiSource).toContain("onLeave: authority?.onLeave === true");
+    expect(rowSource).toContain('driver.onLeave ? "smart-dispatch-row on-leave"');
+    expect(rowSource).toContain("if (day >= 7) return \"red\"");
+    expect(rowSource).toContain("if (day >= 5) return \"amber\"");
+    expect(smartDispatchCss).toContain(".smart-dispatch-row.on-leave");
   });
 
   it("exposes Dispatch immediately for a selected row and allocates it before route export", () => {
@@ -88,7 +101,7 @@ describe("Driver Dispatch UI contract", () => {
     expect(rowSource).toContain('{busy ? "Allocating…" : "Dispatch"}');
     expect(authoritativeSource).toContain("allocateDispatchRun(effectiveSelection.runId, driver.driverId, effectiveSelection, access)");
     expect(authoritativeSource).not.toContain("lockDispatchPlan(");
-    expect(authoritativeSource).toContain("await sendRunToSamsara(effectiveSelection.runId, access)");
+    expect(authoritativeSource).toContain("sendRunToSamsara(selection.runId, access)");
   });
 
   it("restores the run sidebar with first collection time, first collection, final delivery and fit suggestions", () => {

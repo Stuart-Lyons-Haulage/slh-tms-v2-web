@@ -37,6 +37,17 @@ export type SamsaraDispatchState = {
   lastStopName?: string;
 };
 
+type DriverDispatchAuthority = DispatchEquipmentWorkbench & {
+  drivers: Array<{
+    driverId: string;
+    dayNumber: number;
+    onLeave: boolean;
+    leaveType?: string;
+    leaveDetails?: string;
+    partDayLeave: boolean;
+  }>;
+};
+
 type SamsaraDispatchStatusResponse = {
   planningDate: string;
   configured: boolean;
@@ -99,10 +110,10 @@ export async function getSmartDispatch(
   samsaraDispatch: Record<string, SamsaraDispatchState>;
 }> {
   const encoded = encodeURIComponent(planningDate);
-  const [drivers, runs, equipment, statusResponse, visibility, history, samsaraStatus] = await Promise.all([
+  const [drivers, runs, driverAuthority, statusResponse, visibility, history, samsaraStatus] = await Promise.all([
     request<DispatchDriverDto[]>(`/api/dispatch/drivers?date=${encoded}`, token),
     request<DispatchRunDto[]>(`/api/dispatch/runs?date=${encoded}`, token),
-    request<DispatchEquipmentWorkbench>(`/api/v1/driver-dispatch?date=${encoded}`, token),
+    request<DriverDispatchAuthority>(`/api/v1/driver-dispatch?date=${encoded}`, token),
     request<{ drivers: DispatchDriverStatusDto[] }>(`/api/v1/driver-dispatch-status?date=${encoded}`, token),
     getDispatchVisibility(planningDate, token),
     getDispatchHistory(planningDate, token).catch(() => [] as DispatchHistoryItem[]),
@@ -116,8 +127,11 @@ export async function getSmartDispatch(
       } as SamsaraDispatchStatusResponse))
   ]);
   const visibilityByDriver = new Map(visibility.drivers.map(item => [item.driverId, item]));
+  const authorityByDriver = new Map(driverAuthority.drivers.map(item => [item.driverId, item]));
+  const equipment: DispatchEquipmentWorkbench = driverAuthority;
   const historyByDriver = new Map(history.map(item => [item.driverId, item]));
-  const enrichedDrivers = drivers.map(driver => {
+  const enrichedDrivers = drivers.filter(driver => authorityByDriver.has(driver.driverId)).map(driver => {
+    const authority = authorityByDriver.get(driver.driverId);
     const visibilityDriver = visibilityByDriver.get(driver.driverId);
     const historical = historyByDriver.get(driver.driverId);
     const hasAuthoritativePosition = Boolean(driver.trackingData.lastKnownPosition);
@@ -126,6 +140,15 @@ export async function getSmartDispatch(
       : undefined;
     return {
       ...driver,
+      dayNumber: authority?.dayNumber ?? driver.tachoData.currentDutyDay,
+      onLeave: authority?.onLeave === true,
+      leaveType: authority?.leaveType,
+      leaveDetails: authority?.leaveDetails,
+      partDayLeave: authority?.partDayLeave === true,
+      isBlocked: driver.isBlocked || authority?.onLeave === true,
+      blockedReason: authority?.onLeave
+        ? `Sage HR ${authority.leaveType || "leave"}${authority.partDayLeave ? " (part day)" : ""}`
+        : driver.blockedReason,
       // Sage HR is the only authority allowed to label a driver Employed. If the
       // visibility snapshot is unavailable, preserve known non-employed categories
       // but never promote the local Driver Master default to Employed.
@@ -143,9 +166,11 @@ export async function getSmartDispatch(
       previousTrailerId: historical?.previousTrailerId,
       previousTrailerNumber: historical?.previousTrailerNumber,
       previousTrailerPlanningDate: historical?.previousTrailerPlanningDate,
-      suggestion: driver.suggestion || (!hasAuthoritativePosition && historical?.previousFinalStopName
-        ? `Last known operational stop · ${historical.previousFinalStopName}`
-        : undefined)
+      suggestion: authority?.onLeave
+        ? `Unavailable · Sage HR ${authority.leaveType || "leave"}${authority.partDayLeave ? " (part day)" : ""}.`
+        : driver.suggestion || (!hasAuthoritativePosition && historical?.previousFinalStopName
+          ? `Last known operational stop · ${historical.previousFinalStopName}`
+          : undefined)
     };
   });
   return {
