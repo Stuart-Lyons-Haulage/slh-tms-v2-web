@@ -28,6 +28,7 @@ type SamsaraStatus = {
   connected: boolean;
   vehicleCount: number;
   driverCount: number;
+  assetSyncEnabled: boolean;
   missingSettings: string[];
   message: string;
 };
@@ -166,6 +167,21 @@ export function AdminIntegrationSyncControls() {
     }
   };
 
+  const syncSamsaraMasterData = async () => {
+    if (!samsara?.connected || !window.confirm('Synchronise active SLH Sites, Vehicles and Trailers to Samsara? Existing records will be updated, not duplicated.')) return;
+    setBusy('samsara-master-data');
+    setMessage(undefined);
+    try {
+      const result = await request<{ message: string }>('/api/v1/integrations/samsara/master-data/sync', await token(), { method: 'POST' }, 180000);
+      setMessage(result.message);
+      await loadState();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Samsara Master Data synchronisation failed.');
+    } finally {
+      setBusy(undefined);
+    }
+  };
+
   return <section className="panel" style={{ marginBottom: 18 }}>
     <div className="title-row admin-integration-heading">
       <div>
@@ -240,6 +256,9 @@ export function AdminIntegrationSyncControls() {
           <p className="hint" style={{ marginTop: 10 }}>{samsaraSites.message}</p>
           <small>{samsaraSites.alreadyMapped} already mapped · {samsaraSites.pending} pending · {samsaraSites.missingCoordinates} need coordinates · {samsaraSites.missingAddress} need address text</small>
           <div style={{ marginTop: 10 }}>
+            <button className="primary" onClick={() => void syncSamsaraMasterData()} disabled={Boolean(busy) || !samsara?.connected || !samsara.assetSyncEnabled}>
+              {busy === 'samsara-master-data' ? 'Synchronising Master Data…' : 'Sync Sites, Vehicles & Trailers'}
+            </button>{' '}
             <button className="primary" onClick={() => void syncSamsaraSiteAddresses()} disabled={Boolean(busy) || !samsara?.connected || !samsaraSites.addressSyncEnabled || samsaraSites.eligibleSites === 0}>
               {busy === 'samsara-sites' ? 'Synchronising sites…' : `Sync Master Sites to Samsara${samsaraSites.eligibleSites ? ` (${samsaraSites.eligibleSites})` : ''}`}
             </button>
