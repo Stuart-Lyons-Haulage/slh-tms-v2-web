@@ -8,6 +8,7 @@ import { api, request, type Customer, type CustomerContact, type DiagnosticsTabl
 import { useAccessToken } from '../lib/auth';
 import { useApi } from '../lib/useApi';
 import { allocateRun, createRun, getRunDispatch, getRunRoute, listRuns, updateRunStatus, updateRunStops } from '../api/runs';
+import { ApprovedOrdersList } from './OrderControl';
 
 function State({ loading, error, empty, children }: { loading: boolean; error?: string; empty?: boolean; children: ReactNode }) { if (loading) return <div className="state">Loading operational data…</div>; if (error) return <div className="state error">{error}</div>; if (empty) return <div className="state">No records are available for this view.</div>; return <>{children}</>; }
 const formatDate = (value?: string) => value ? new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '—';
@@ -23,6 +24,7 @@ const stagingStatus = (value: string | number | undefined) => typeof value === '
 const statusClass = (value: string | number | undefined) => stagingStatus(value).toLowerCase();
 const localDateInput = () => { const today = new Date(); return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`; };
 const addDays = (date: string, days: number) => { const value = new Date(`${date}T00:00:00Z`); value.setUTCDate(value.getUTCDate() + days); return value.toISOString().slice(0, 10); };
+const validDateInput = (date: string) => /^\d{4}-\d{2}-\d{2}$/.test(date) && !Number.isNaN(Date.parse(`${date}T00:00:00Z`));
 const masterStagingTypes: readonly string[] = ['vehicle', 'driver', 'trailer', 'site', 'customer', 'customercontact', 'marketcontact', 'fuelprice', 'fuelcard', 'geofence'];
 
 export function Dashboard() {
@@ -343,6 +345,7 @@ export function StagingQueue({ ordersOnly = false, masterOnly = false }: { order
   const [replaying, setReplaying] = useState(false);
   const [sourceEvidenceId, setSourceEvidenceId] = useState<string>();
   const [masterImportBusy, setMasterImportBusy] = useState(false);
+  const [orderView, setOrderView] = useState<'review' | 'approved'>('review');
 
   async function review(item: StagedImport, approved: boolean) {
     setReviewing(item.id);
@@ -438,6 +441,9 @@ export function StagingQueue({ ordersOnly = false, masterOnly = false }: { order
     setReplaying(true);
     setMessage(undefined);
     try {
+      if (!validDateInput(planningDate)) {
+        throw new Error('Select a valid planning date before re-parsing.');
+      }
       const result = await request<{ eligibleOrders: number; pendingAfterReplay: number; legacyMappingExceptionsArchived: number }>(
         '/api/v1/order-intake/replay-retained-evidence',
         await token(),
@@ -572,6 +578,10 @@ export function StagingQueue({ ordersOnly = false, masterOnly = false }: { order
       </div>
       <div className="actions">
         <button onClick={() => void refresh()}>Refresh</button>
+        {ordersOnly && <div role="tablist" aria-label="Order review views" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button type="button" className={orderView === 'review' ? 'primary' : ''} onClick={() => setOrderView('review')} role="tab" aria-selected={orderView === 'review'}>Waiting for review</button>
+          <button type="button" className={orderView === 'approved' ? 'primary' : ''} onClick={() => setOrderView('approved')} role="tab" aria-selected={orderView === 'approved'}>Approved through dispatch</button>
+        </div>}
         {ordersOnly && <button className="primary" disabled={requestingOrders || replaying || Boolean(reviewing)} onClick={() => void requestOrders()}>{requestingOrders ? 'Requesting orders…' : 'Request orders now'}</button>}
         {ordersOnly && <button disabled={requestingOrders || replaying || Boolean(reviewing)} onClick={() => void replayRetainedEvidence()}>{replaying ? 'Replaying…' : `Re-parse ${planningDate}`}</button>}
       </div>
@@ -589,7 +599,7 @@ export function StagingQueue({ ordersOnly = false, masterOnly = false }: { order
       ? <div className="planner-toolbar staging-filter"><label>Orders for planning date <input type="date" value={planningDate} onChange={event => { setPlanningDate(event.target.value); setSelected(undefined); }} /></label><strong>{data?.length || 0} order{data?.length === 1 ? '' : 's'} awaiting review</strong><span>{clearForApproval} clear for approval · {Math.max((data?.length || 0) - clearForApproval, 0)} need review</span>{message && <span className="notice inline-notice">{message}</span>}</div>
       : <div className="planner-toolbar staging-filter"><label>Show pending <select value={entityFilter} onChange={event => { setEntityFilter(event.target.value); setSelected(undefined); }}><option value="">All master-data types</option>{masterStagingTypes.map(type => <option key={type} value={type}>{type}</option>)}</select></label><span>{data?.length || 0} pending master-data record{data?.length === 1 ? '' : 's'} shown</span>{message && <span className="notice inline-notice">{message}</span>}</div>}
 
-    <State loading={loading} error={error} empty={!data?.length}>
+    {ordersOnly && orderView === 'approved' ? <ApprovedOrdersList date={planningDate} token={token} /> : <State loading={loading} error={error} empty={!data?.length}>
       {ordersOnly && <div className="review-readiness-summary"><strong>{data?.length || 0} order{data?.length === 1 ? '' : 's'} in review</strong><span>{clearForApproval} clear for approval</span><span>{Math.max((data?.length || 0) - clearForApproval, 0)} need route, quantity or master-data review</span></div>}
 
       {!ordersOnly && <div className="bulk-review panel">
@@ -678,7 +688,7 @@ export function StagingQueue({ ordersOnly = false, masterOnly = false }: { order
           })}</tbody>
         </table>
       </div>}
-    </State>
+    </State>}
   </section>;
 }
 

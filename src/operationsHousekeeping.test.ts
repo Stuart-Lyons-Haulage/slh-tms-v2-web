@@ -78,17 +78,17 @@ describe("operations housekeeping contract", () => {
     expect(integrations).toContain("single TMS source for external API/feed health");
   });
 
-  it("keeps Planner Builder full-width and leaves order selection to Pallet Order", () => {
+  it("keeps Planner Builder full-width and selects live jobs for the selected day", () => {
     expect(runBuilder).not.toContain('className="simple-order-pool"');
-    expect(runBuilder).toContain('datalist id="planner-collection-site-options"');
-    expect(runBuilder).toContain('datalist id="planner-delivery-site-options"');
-    expect(runBuilder).toContain('list="planner-collection-site-options"');
-    expect(runBuilder).toContain('list="planner-delivery-site-options"');
-    expect(runBuilder).toContain("Use Pallet Order on the second screen to allocate work");
+    expect(runBuilder).toContain('simple-picker-options');
+    expect(runBuilder).not.toContain('planner-collection-site-options');
+    expect(runBuilder).toContain("liveCollections");
+    expect(runBuilder).toContain("matchingOrders");
+    expect(runBuilder).toContain("Choose both to link the line to the matching order(s)");
     expect(runBuilder).toContain("orderLineNote(order)");
     expect(runBuilder).toContain("mergedOrderLineNote");
-    expect(runBuilder).toContain('Start typing collection site');
-    expect(runBuilder).toContain('Start typing delivery site');
+    expect(runBuilder).toContain('Start typing live collection');
+    expect(runBuilder).toContain('Choose delivery from this collection');
   });
 
 

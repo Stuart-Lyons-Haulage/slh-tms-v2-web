@@ -220,10 +220,33 @@
   border-color: #0b5f78;
 }
 
+.simple-picker { position: relative; min-width: 0; }
+.simple-picker-options { position: absolute; z-index: 20; top: calc(100% + 3px); left: 0; right: 0; display: grid; gap: 2px; padding: 4px; max-height: 220px; overflow: auto; border: 1px solid #9fb6c2; border-radius: 7px; background: #fff; box-shadow: 0 8px 20px rgba(23, 61, 80, .16); }
+.simple-picker-options button { display: flex; justify-content: space-between; gap: 10px; width: 100%; padding: 7px 8px; border: 0; border-radius: 4px; background: #fff; color: #173d50; text-align: left; cursor: pointer; }
+.simple-picker-options button:hover { background: #e8f5f2; }
+.simple-picker-options small { color: #59737f; white-space: nowrap; }
+.simple-run-heading { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.simple-run-capacity { display: inline-flex; align-items: center; gap: 6px; font-size: .72rem; font-weight: 750; color: #276749; }
+.simple-run-capacity i { display: block; width: 90px; height: 7px; overflow: hidden; border-radius: 99px; background: #d7e5df; }
+.simple-run-capacity i b { display: block; height: 100%; border-radius: inherit; background: #2f855a; }
+.simple-run-capacity.amber { color: #975a16; }.simple-run-capacity.amber i { background: #fcefc3; }.simple-run-capacity.amber i b { background: #d69e2e; }
+.simple-run-capacity.red { color: #9b2c2c; }.simple-run-capacity.red i { background: #fed7d7; }.simple-run-capacity.red i b { background: #c53030; }
+
 .simple-run-line .simple-pallet-input {
   text-align: center;
   font-weight: 850;
 }
+
+.simple-line-match {
+  grid-column: 2 / 6;
+  margin-top: -2px;
+  color: #637782;
+  font-size: .68rem;
+  font-weight: 750;
+}
+
+.simple-line-match.matched { color: #217346; }
+.simple-line-match.unmatched { color: #a54b00; }
 
 .simple-run-details {
   display: grid;
@@ -452,6 +475,11 @@
   .simple-clear-line {
     grid-column: 4;
     grid-row: 1 / 4;
+  }
+
+  .simple-line-match {
+    grid-column: 2 / 4;
+    grid-row: 4;
   }
 
   .simple-run-details { grid-template-columns: 1fr; }

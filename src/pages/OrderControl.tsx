@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { request } from "../lib/api";
 import { useAccessToken } from "../lib/auth";
@@ -8,19 +8,11 @@ import { SourceEmailEvidenceDrawer } from "../components/SourceEmailEvidenceDraw
 import { JobsOperational } from "./JobsOperational";
 import { OrderReviewBulk } from "./OrderReviewBulk";
 import { UndatedOrderReviewQueue } from "./UndatedOrderReviewQueue";
+import { listRuns } from "../api/runs";
+import type { Load, TransportOrder } from "../lib/api";
 
 type OrderControlTab = "review" | "live";
 type NwfRepairResponse = { repaired: number; message: string };
-type ApprovedOrderRow = {
-  id: string;
-  status: string;
-  source?: string;
-  receivedAtUtc: string;
-  reviewedAtUtc?: string;
-  reviewedBy?: string;
-  payloadJson: string;
-};
-
 type CachedEmailRecord = {
   evidenceId: string;
   idempotencyKey?: string;
@@ -88,40 +80,46 @@ function refreshVisibleReviewData() {
   window.dispatchEvent(new Event(SILENT_API_REFRESH_EVENT));
 }
 
-function ApprovedOrdersList({ date, token }: { date: string; token: ReturnType<typeof useAccessToken> }) {
-  const [rows, setRows] = useState<ApprovedOrderRow[]>([]);
+export function ApprovedOrdersList({ date, token }: { date: string; token: ReturnType<typeof useAccessToken> }) {
+  const [orders, setOrders] = useState<TransportOrder[]>([]);
+  const [runs, setRuns] = useState<Load[]>([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    try {
+      const authToken = await token();
+      const [liveOrders, liveRuns] = await Promise.all([
+        request<TransportOrder[]>(`/api/v1/orders?from=${encodeURIComponent(date)}&to=${encodeURIComponent(date)}`, authToken),
+        listRuns(date, authToken),
+      ]);
+      setOrders(liveOrders.filter(order => order.status !== "Cancelled"));
+      setRuns(liveRuns);
+      setError(undefined);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Approved orders could not be loaded.");
+    } finally {
+      setLoading(false);
+    }
+  }, [date, token]);
 
   useEffect(() => {
     let active = true;
-    void (async () => {
-      try {
-        const authToken = await token();
-        const [approved, promoted] = await Promise.all([
-          request<ApprovedOrderRow[]>(`/api/v1/staging?status=Approved&entityType=order&take=200`, authToken),
-          request<ApprovedOrderRow[]>(`/api/v1/staging?status=Promoted&entityType=order&take=200`, authToken),
-        ]);
-        if (!active) return;
-        setRows([...approved, ...promoted]);
-        setError(undefined);
-      } catch (reason) {
-        if (active) setError(reason instanceof Error ? reason.message : "Approved orders could not be loaded.");
-      }
-    })();
-    return () => { active = false; };
-  }, [date, token]);
+    void refresh();
+    const timer = window.setInterval(() => { if (active) void refresh(); }, 30_000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [refresh]);
 
-  const datedRows = rows.map((row) => {
-    try { return { row, payload: JSON.parse(row.payloadJson) as Record<string, unknown> }; }
-    catch { return { row, payload: {} as Record<string, unknown> }; }
-  }).filter(({ payload }) => payload.collectionDate === date || payload.deliveryDate === date)
-    .sort((left, right) => right.row.receivedAtUtc.localeCompare(left.row.receivedAtUtc));
+  const runByOrderId = new Map(runs.flatMap(run => run.stops
+    .filter(stop => stop.orderId)
+    .map(stop => [stop.orderId!, run] as const)));
 
   return <section className="panel" style={{ marginBottom: 18 }}>
-    <div className="title-row"><div><p className="eyebrow">Order audit</p><h2>Approved / promoted orders</h2><p className="hint">Read-only list of orders that passed review for {date}.</p></div><strong>{datedRows.length} order{datedRows.length === 1 ? "" : "s"}</strong></div>
+    <div className="title-row"><div><p className="eyebrow">Operational order handover</p><h2>Approved orders through dispatch</h2><p className="hint">Live orders for {date}, linked to their current run until dispatch. Refreshes every 30 seconds.</p></div><div className="title-actions" style={{ alignItems: "center", gap: 8 }}><strong>{orders.length} order{orders.length === 1 ? "" : "s"}</strong><button type="button" onClick={() => void refresh()} disabled={loading}>{loading ? "Refreshing…" : "Refresh"}</button></div></div>
     {error && <p className="review-error">{error}</p>}
-    {!error && datedRows.length === 0 && <div className="state">No approved or promoted orders are recorded for this date.</div>}
-    {datedRows.length > 0 && <div style={{ overflowX: "auto" }}><table className="master-table"><thead><tr><th>Status</th><th>Customer</th><th>Reference</th><th>Collection</th><th>Delivery</th><th>Pallets</th><th>Approved by</th><th>Approved at</th></tr></thead><tbody>{datedRows.map(({ row, payload }) => <tr key={row.id}><td>{row.status}</td><td>{String(payload.customerCode ?? "")}</td><td>{String(payload.customerPo ?? payload.poNumber ?? "")}</td><td>{String(payload.collectionSite ?? payload.sellerName ?? "")}</td><td>{String(payload.deliverySite ?? payload.stallNumber ?? "")}</td><td>{String(payload.pallets ?? "")}</td><td>{row.reviewedBy || "—"}</td><td>{formatShortDateTime(row.reviewedAtUtc || row.receivedAtUtc)}</td></tr>)}</tbody></table></div>}
+    {!loading && !error && orders.length === 0 && <div className="state">No approved live orders are recorded for this date.</div>}
+    {orders.length > 0 && <div style={{ overflowX: "auto" }}><table className="master-table"><thead><tr><th>Order status</th><th>Customer</th><th>Reference</th><th>Collection</th><th>Delivery</th><th>Quantity</th><th>Run</th><th>Run status</th></tr></thead><tbody>{orders.map(order => { const run = runByOrderId.get(order.id); return <tr key={order.id}><td><span className={`status ${order.status.toLowerCase().replaceAll(" ", "-")}`}>{order.status}</span></td><td>{order.customerCode}</td><td>{order.reference || order.poNumber || "—"}</td><td>{order.sellerName || order.collectionLocation || "—"}</td><td>{order.marketName || order.deliveryLocation || "—"}</td><td>{order.pallets ?? order.cases ?? order.trays ?? order.trolleys ?? "—"}</td><td>{run?.reference || "Awaiting run"}</td><td>{run ? <span className={`status ${run.status.toLowerCase().replaceAll(" ", "-")}`}>{run.status}</span> : "Not yet planned"}</td></tr>; })}</tbody></table></div>}
   </section>;
 }
 

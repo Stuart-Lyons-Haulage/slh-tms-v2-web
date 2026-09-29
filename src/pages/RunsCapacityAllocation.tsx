@@ -457,7 +457,7 @@ function RunAllocationCard({ load, vehicles, drivers, trailers, sites, onSaved }
     <article className="order-card allocation-card">
       <div className="title-row">
         <div><strong>{runLabel}</strong><small>{load.stops.length} stop{load.stops.length === 1 ? "" : "s"} · {load.stops.map(stop => stop.name).join(" → ") || "Stops pending"}</small></div>
-        <span className={utilisation != null && utilisation > 100 ? "capacity-warning" : ""}>
+        <span className={utilisation != null && utilisation > 100 || load.capacityType?.includes("· Red ·") ? "capacity-over" : utilisation != null && utilisation >= 90 ? "capacity-warning" : ""}>
           {numericUsed} / {effectiveCapacity ?? "—"} {spaceLabel(capacityType)} · {loadTypeLabel(capacityType)}{utilisation != null ? ` · ${utilisation.toFixed(1)}%` : ""}
         </span>
       </div>

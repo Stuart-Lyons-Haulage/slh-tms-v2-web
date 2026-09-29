@@ -1,17 +1,16 @@
 import { useCallback, useMemo, useState } from 'react';
 import { api, type BookingCandidateOrder, type BookingReservation } from '../lib/api';
 import { useAccessToken } from '../lib/auth';
-import { todayIsoDate } from '../lib/dateUtils';
+import { formatDateLong, todayIsoDate } from '../lib/dateUtils';
 import { useApi } from '../lib/useApi';
 
-const addDays = (date: string, days: number) => { const value = new Date(`${date}T12:00:00`); value.setDate(value.getDate() + days); return value.toISOString().slice(0, 10); };
-const dateLabel = (value?: string) => value ? new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium' }).format(new Date(`${value.slice(0, 10)}T12:00:00`)) : 'TBC';
+const dateLabel = (value?: string) => value ? formatDateLong(value) : 'TBC';
 
 export function BookingReservations() {
   const token = useAccessToken();
   const today = todayIsoDate();
-  const [from, setFrom] = useState(addDays(today, -2));
-  const [to, setTo] = useState(addDays(today, 21));
+  const [from, setFrom] = useState(today);
+  const [to, setTo] = useState(today);
   const [customer, setCustomer] = useState('');
   const [status, setStatus] = useState('');
   const [selected, setSelected] = useState<BookingReservation>();
@@ -25,10 +24,12 @@ export function BookingReservations() {
     setSelected(undefined); await rows.refresh();
   }
 
+  const rangeLabel = from === to ? dateLabel(from) : `${dateLabel(from)} to ${dateLabel(to)}`;
   return <section>
     <div className="title-row"><div><p className="eyebrow">Planner control / retained capacity</p><h1>Booking &amp; Capacity</h1><p className="intro">NWF crate and inbound reservations stay visible until they are matched to real orders, amended, cancelled or dispatched.</p></div></div>
-    <div className="panel" style={{ display: 'flex', gap: 12, alignItems: 'end', flexWrap: 'wrap' }}><label>From<input type="date" value={from} onChange={event => setFrom(event.target.value)} /></label><label>To<input type="date" min={from} value={to} onChange={event => setTo(event.target.value)} /></label><label>Customer<input value={customer} onChange={event => setCustomer(event.target.value.toUpperCase())} placeholder="NWF" /></label><label>Status<select value={status} onChange={event => setStatus(event.target.value)}><option value="">All statuses</option>{['PreOrder', 'AwaitingDetails', 'Amended', 'PartiallyAssigned', 'Assigned', 'Cancelled'].map(value => <option key={value}>{value}</option>)}</select></label><button type="button" onClick={() => void rows.refresh()}>Refresh</button></div>
-    <div className="metrics"><article className="metric"><span>Reservations</span><strong>{rows.data?.length || 0}</strong><small>{from} to {to}</small></article><article className="metric"><span>Pre-order / amended</span><strong>{counts.pre}</strong><small>Needs customer detail or review</small></article><article className="metric"><span>Partly/unassigned</span><strong>{counts.unassigned}</strong><small>Capacity not yet matched to orders</small></article><article className="metric"><span>Fully allocated</span><strong>{counts.allocated}</strong><small>Ready to follow through planning</small></article></div>
+    <div className="panel" style={{ display: 'flex', gap: 12, alignItems: 'end', flexWrap: 'wrap' }}><div style={{ flexBasis: '100%' }}><strong>Operational date window</strong><p className="hint" style={{ margin: '4px 0 0' }}>Only reservations whose collection date falls within this window are shown. Dates are UK operational dates.</p></div><label>From<input aria-label="Operational date from" type="date" value={from} onChange={event => { const value = event.target.value; setFrom(value); if (value > to) setTo(value); }} /></label><label>To<input aria-label="Operational date to" type="date" min={from} value={to} onChange={event => setTo(event.target.value)} /></label><button type="button" onClick={() => { setFrom(today); setTo(today); }}>Today</button><label>Customer<input value={customer} onChange={event => setCustomer(event.target.value.toUpperCase())} placeholder="NWF" /></label><label>Status<select value={status} onChange={event => setStatus(event.target.value)}><option value="">All statuses</option>{['PreOrder', 'AwaitingDetails', 'Amended', 'PartiallyAssigned', 'Assigned', 'Cancelled'].map(value => <option key={value}>{value}</option>)}</select></label><button type="button" onClick={() => void rows.refresh()}>Refresh</button></div>
+    <div className="panel" style={{ marginTop: 12 }}><strong>Showing: {rangeLabel}</strong><p className="hint" style={{ margin: '4px 0 0' }}>This date filter is applied to the retained booking list and its matching-order workflow.</p></div>
+    <div className="metrics"><article className="metric"><span>Reservations</span><strong>{rows.data?.length || 0}</strong><small>{rangeLabel}</small></article><article className="metric"><span>Pre-order / amended</span><strong>{counts.pre}</strong><small>Needs customer detail or review</small></article><article className="metric"><span>Partly/unassigned</span><strong>{counts.unassigned}</strong><small>Capacity not yet matched to orders</small></article><article className="metric"><span>Fully allocated</span><strong>{counts.allocated}</strong><small>Ready to follow through planning</small></article></div>
     {rows.loading && <div className="state">Loading retained bookings…</div>}{rows.error && <p className="notice">{rows.error}</p>}
     {!rows.loading && !rows.error && !rows.data?.length && <div className="state">No retained bookings match this period.</div>}
     {!!rows.data?.length && <div className="panel" style={{ overflowX: 'auto' }}><table><thead><tr><th>Collection</th><th>Reference</th><th>Route</th><th>Capacity</th><th>Status</th><th>Revision</th><th /></tr></thead><tbody>{rows.data.map(row => <tr key={row.id}><td><strong>{dateLabel(row.collectionDate)}</strong><br/><small>{row.bookingType}</small></td><td><strong>{row.collectionReference || 'No collection ref'}</strong><br/><small>{row.customerCode} · {row.cratePurchaseOrder || row.transportPurchaseOrder || 'PO TBC'}</small></td><td>{row.collectionDepot || 'Collection TBC'}<br/><small>→ {row.deliverySite || 'Destination TBC'}</small></td><td><strong>{row.assignedUnits}/{row.reservedUnits}</strong><br/><small>{row.unitType}</small></td><td><span className={`status ${row.status.toLowerCase()}`}>{row.status}</span></td><td>v{row.revisionNumber}</td><td><button type="button" onClick={() => setSelected(row)}>Inspect</button> <button type="button" onClick={() => setMatchReservation(row)}>Match order</button></td></tr>)}</tbody></table></div>}
