@@ -149,6 +149,9 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
   const [periodFilter, setPeriodFilter] = useState<PeriodFilter>("ALL");
   const saveTimers = useRef<Record<string, number>>({});
   const mutationCounter = useRef(0);
+  const refreshSequence = useRef(0);
+  const loadsRef = useRef<Load[]>([]);
+  const sitesRef = useRef<Site[]>([]);
   const dirtyRunKeys = useRef(new Set<string>());
   const runsRef = useRef(runs);
   const setPlannerRuns = (next: RunDraft[] | ((current: RunDraft[]) => RunDraft[])) => {
@@ -242,15 +245,27 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
   }, [consolidateLines, date]);
 
   const refreshAll = useCallback(async () => {
+    const sequence = ++refreshSequence.current;
     const access = await token();
     const nextControl = normalisePlanningControl(await request<PlanningControlData>(`/api/v1/planning-control/pallets?date=${encodeURIComponent(date)}`, access));
     const [loadsResult, sitesResult] = await Promise.allSettled([listRuns(date, access), api.sites(access)]);
-    const safeLoads = loadsResult.status === "fulfilled" && Array.isArray(loadsResult.value) ? loadsResult.value : [];
-    const safeSites = sitesResult.status === "fulfilled" && Array.isArray(sitesResult.value) ? sitesResult.value : [];
+    // A failed or out-of-order refresh must never turn a populated planner into an
+    // empty one. Keep the last authoritative projection until a successful response
+    // replaces it; this is especially important immediately after creating a run.
+    if (sequence !== refreshSequence.current) return;
+    const loadsOk = loadsResult.status === "fulfilled" && Array.isArray(loadsResult.value);
+    const sitesOk = sitesResult.status === "fulfilled" && Array.isArray(sitesResult.value);
+    const safeLoads = loadsOk ? loadsResult.value : loadsRef.current;
+    const safeSites = sitesOk ? sitesResult.value : sitesRef.current;
     setControl(nextControl);
     setLoads(safeLoads);
     setSites(safeSites);
-    if (loadsResult.status === "rejected" || sitesResult.status === "rejected") setMessage("Planner loaded the approved pallet balance. Some run or site master data is temporarily unavailable.");
+    loadsRef.current = safeLoads;
+    sitesRef.current = safeSites;
+    if (!loadsOk || !sitesOk) {
+      setMessage("Planner kept the last saved runs while run or site data was temporarily unavailable. Refresh to retry.");
+      return;
+    }
     hydrate(nextControl, safeLoads, safeSites);
   }, [date, hydrate, token]);
 
@@ -434,6 +449,8 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
         plannerNotes: notesForRun(run),
         stops,
       }, access);
+      const confirmed = (await listRuns(date, access)).find((item) => item.id === created.id);
+      if (!confirmed) throw new Error(`${created.reference} was accepted but could not be confirmed in the saved run list. It was not made available for allocation.`);
       setLoads((current) => current.some((load) => load.id === created.id) ? current : [...current, created]);
       updateRun(run.key, (current) => ({ ...current, loadId: created.id }));
       dirtyRunKeys.current.delete(run.key);
