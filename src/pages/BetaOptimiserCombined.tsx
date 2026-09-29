@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { request } from "../lib/api";
 import { useAccessToken } from "../lib/auth";
-import { formatDateLong, todayIsoDate } from "../lib/dateUtils";
+import { formatDateLong, tomorrowIsoDate } from "../lib/dateUtils";
 import { parsePlannerPlanFiles } from "../lib/plannerFileImport";
 import {
   plannerPayloadToBetaComparison,
@@ -138,7 +138,7 @@ function weightedBetaUtilisation(runs: BetaDayPlanRun[]) {
 
 export function BetaOptimiserCombined() {
   const token = useAccessToken();
-  const [planningDate, setPlanningDate] = useState(todayIsoDate());
+  const [planningDate, setPlanningDate] = useState(tomorrowIsoDate());
   const [dayPlan, setDayPlan] = useState<BetaDayPlan>();
   const [comparison, setComparison] = useState<BetaDayPlanComparison>();
   const [fileNames, setFileNames] = useState<string[]>([]);

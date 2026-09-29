@@ -6,6 +6,7 @@ import { startVisiblePolling } from "../lib/visiblePolling";
 import "../simple-planner.css";
 import { createRun, listRuns, updateRunStatus, updateRunStops } from '../api/runs';
 import { planningDeliveryLocation } from "../lib/planningLocations";
+import { tomorrowIsoDate } from "../lib/dateUtils";
 
 type Period = "" | "AM" | "PM";
 type PeriodFilter = "ALL" | "AM" | "PM";
@@ -62,10 +63,7 @@ const blankRun = (key: string): RunDraft => ({
   operationalAmendment: "",
   lines: [blankLine()],
 });
-const localDate = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-};
+const localDate = tomorrowIsoDate;
 const normalise = (value: unknown) => String(value ?? "").trim().replace(/[^a-z0-9]/gi, "").toUpperCase();
 const tagged = (notes: string | undefined, label: string) => (notes || "")
   .split("·")
@@ -355,7 +353,27 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
     });
   };
   const changeLineLocation = (runKey: string, line: RunLine, field: "collectionSite" | "deliverySite", value: string) => {
-    updateLine(runKey, line.key, { [field]: value, orderId: undefined, orderIds: undefined, orderAllocations: undefined });
+    const currentRun = runs.find((run) => run.key === runKey);
+    if (!currentRun) return;
+    const nextLine = { ...line, [field]: value, orderId: undefined, orderIds: undefined, orderAllocations: undefined } as RunLine;
+    const nextLines = currentRun.lines.map((item) => item.key === line.key ? nextLine : item);
+    updateRun(runKey, (run) => ({ ...run, lines: nextLines }));
+    // Manual entry follows the same autosave path as a picker selection once
+    // the typed route resolves to live work for the selected date.
+    if (field !== "deliverySite" || currentRun.loadId) return;
+    const matches = matchingOrders(nextLine.collectionSite, nextLine.deliverySite);
+    if (!matches.length) return;
+    const linkedLine: RunLine = {
+      ...nextLine,
+      collectionSite: matches[0].collection.trim(),
+      deliverySite: matches[0].destination.trim(),
+      pallets: String(matches.reduce((sum, order) => sum + Math.max(order.outstandingPallets, 0), 0)),
+      orderId: matches[0].id,
+      orderIds: matches.map((order) => order.id),
+    };
+    const linkedLines = currentRun.lines.map((item) => item.key === line.key ? linkedLine : item);
+    updateRun(runKey, (run) => ({ ...run, lines: linkedLines }));
+    void createPlanningRun({ ...currentRun, lines: linkedLines });
   };
   const chooseCollection = (runKey: string, lineKey: string, value: string) => {
     const source = effectiveOrders.find((order) => normalise(order.collection) === normalise(value));
@@ -365,14 +383,23 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
     const matches = matchingOrders(collection, destination);
     if (!matches.length) return;
     const outstanding = matches.reduce((sum, order) => sum + Math.max(order.outstandingPallets, 0), 0);
-    updateLine(runKey, lineKey, {
+    const currentRun = runs.find((run) => run.key === runKey);
+    const currentLine = currentRun?.lines.find((line) => line.key === lineKey);
+    if (!currentRun || !currentLine) return;
+    const nextLine: RunLine = {
+      ...currentLine,
       collectionSite: matches[0].collection.trim(),
       deliverySite: matches[0].destination.trim(),
       pallets: String(outstanding),
       orderId: matches[0].id,
       orderIds: matches.map((order) => order.id),
       orderAllocations: undefined,
-    });
+    };
+    const nextLines = currentRun.lines.map((line) => line.key === lineKey ? nextLine : line);
+    updateRun(runKey, (run) => ({ ...run, lines: nextLines }));
+    // Selecting a valid route is the save point for a new run. The server run
+    // must exist before Pallet Control can allocate against it.
+    if (!currentRun.loadId) void createPlanningRun({ ...currentRun, lines: nextLines });
   };
   const runTotal = (run: RunDraft) => run.lines.reduce((sum, line) => sum + (validPallets(line.pallets) || 0), 0);
 
@@ -640,7 +667,7 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
                 </small>}
               </div>;
             })}</div>
-            <div className="simple-run-footer"><div className="simple-line-actions"><button type="button" onClick={(event) => { event.stopPropagation(); updateRun(run.key, (current) => ({ ...current, lines: [...current.lines, blankLine()] })); }}>+ Add line</button>{!run.loadId && <button type="button" className="primary" disabled={Boolean(busyKey)} onClick={(event) => { event.stopPropagation(); void createPlanningRun(run); }}>{saving ? "Creating…" : "Create run"}</button>}</div><small>{saving ? "Saving…" : run.loadId ? "✓ Live · available in Pallet Order" : "Create this run before allocating orders from Pallet Order"}</small></div>
+            <div className="simple-run-footer"><div className="simple-line-actions"><button type="button" onClick={(event) => { event.stopPropagation(); updateRun(run.key, (current) => ({ ...current, lines: [...current.lines, blankLine()] })); }}>+ Add line</button>{!run.loadId && <button type="button" className="primary" disabled={Boolean(busyKey)} onClick={(event) => { event.stopPropagation(); void createPlanningRun(run); }}>{saving ? "Saving…" : "Retry save"}</button>}</div><small>{saving ? "Saving…" : run.loadId ? "✓ Live · available in Pallet Order" : "Select a valid collection and delivery to auto-save this run"}</small></div>
           </article>;
         })}
         <button className="simple-add-run" type="button" onClick={() => { const draft = newDraft(); setPlannerRuns((current) => [...current, draft]); setActiveKey(draft.key); }}>+ Add another run</button>

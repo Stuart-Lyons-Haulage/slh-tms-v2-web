@@ -6,6 +6,7 @@ import { signalPlanningChange, subscribePlanningChanges } from "../lib/planningE
 import { useApi } from "../lib/useApi";
 import { startVisiblePolling } from "../lib/visiblePolling";
 import { planningDeliveryLocation } from "../lib/planningLocations";
+import { tomorrowIsoDate } from "../lib/dateUtils";
 
 type Allocation = { loadId: string; loadReference?: string; pallets: number; updatedAtUtc: string; updatedBy?: string };
 type SourceLine = { sourceLineId: string; sourcePalletType?: string; palletType?: string; loadUnitType?: string; palletColourKey?: string; orderedPallets: number; plannedPallets: number; outstandingPallets: number };
@@ -17,7 +18,7 @@ type RegionData = { date: string; destinations: string[]; destinationRegions: Re
 type ViewMode = "toPlan" | "planned" | "summary";
 type PalletTone = "standard" | "euro" | "traycrate" | "trolley" | "mixed" | "unknown";
 
-function planningDate() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
+function planningDate() { return tomorrowIsoDate(); }
 function ukDate(value: string) { return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(`${value}T12:00:00`)); }
 function fmtTime(value?: string) { if (!value) return "—"; const d = new Date(value); return Number.isNaN(d.getTime()) ? value : d.toLocaleString("en-GB", { hour: "2-digit", minute: "2-digit" }); }
 function palletTone(colourKey?: string, loadUnitType?: string, palletType?: string): PalletTone { const clean = `${colourKey || ""} ${loadUnitType || ""} ${palletType || ""}`.toLowerCase(); if (clean.includes("tray") || clean.includes("crate")) return "traycrate"; if (clean.includes("trolley") || clean.includes("dolly")) return "trolley"; if (clean.includes("euro")) return "euro"; if (clean.includes("standard") || clean.includes("std")) return "standard"; if (clean.includes("mixed")) return "mixed"; return "unknown"; }

@@ -494,11 +494,15 @@ export function OrderReviewBulk({ date }: { date: string }) {
   }
 
   async function approveSelectedOrders() {
-    if (!selectedRows.length || busy || busyId) return;
+    await approveOrders(selectedRows);
+  }
+
+  async function approveOrders(rowsToApprove: ParsedRow[]) {
+    if (!rowsToApprove.length || busy || busyId) return;
     setBusy(true);
     setNotice(undefined);
     try {
-      const approvalChecks = await Promise.all(selectedRows.map(async (row) => ({
+      const approvalChecks = await Promise.all(rowsToApprove.map(async (row) => ({
         row,
         comparison: await request<ApprovalComparison>(
           `/api/v1/order-intake/duplicate-check/staging/${encodeURIComponent(row.item.id)}/comparison`,
@@ -550,6 +554,11 @@ export function OrderReviewBulk({ date }: { date: string }) {
     }
   }
 
+  function approveAllClean() {
+    if (busy || busyId || !cleanRows.length) return;
+    void approveOrders(cleanRows);
+  }
+
   return <section className="panel order-selection-panel">
     <div className="title-row">
       <div><p className="eyebrow">Microsoft Graph intake</p><h2>Order Review</h2><p className="hint">Request the Info mailbox now, then review captured orders before approval.</p></div>
@@ -580,6 +589,9 @@ export function OrderReviewBulk({ date }: { date: string }) {
       <button onClick={() => setSelectedIds(new Set())} disabled={busy || Boolean(busyId) || selectedRows.length === 0}>Clear selection</button>
       <button className="primary" onClick={() => void approveSelectedOrders()} disabled={busy || Boolean(busyId) || selectedRows.length === 0}>
         {busy ? "Checking changes…" : `Approve selected (${selectedRows.length})`}
+      </button>
+      <button className="primary" onClick={approveAllClean} disabled={busy || Boolean(busyId) || cleanRows.length === 0}>
+        {busy ? "Approving…" : `Approve all clean on this page (${cleanRows.length})`}
       </button>
     </div>
 

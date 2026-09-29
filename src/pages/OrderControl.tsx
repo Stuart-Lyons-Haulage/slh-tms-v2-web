@@ -9,6 +9,7 @@ import { JobsOperational } from "./JobsOperational";
 import { OrderReviewBulk } from "./OrderReviewBulk";
 import { UndatedOrderReviewQueue } from "./UndatedOrderReviewQueue";
 import { listRuns } from "../api/runs";
+import { tomorrowIsoDate } from "../lib/dateUtils";
 import type { Load, TransportOrder } from "../lib/api";
 
 type OrderControlTab = "review" | "live";
@@ -48,11 +49,6 @@ type ForceReviewResponse = {
   status?: string;
   stagedImportId?: string;
 };
-
-function localDate() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
 
 function addDays(date: string, days: number) {
   const [year, month, day] = date.split("-").map(Number);
@@ -249,7 +245,7 @@ export function OrderControl({ initialTab = "review" }: { initialTab?: OrderCont
   const [repairNotice, setRepairNotice] = useState<string>();
   const reviewId = searchParams.get("reviewId")?.trim() || undefined;
   const sourceEmailStagingId = searchParams.get("sourceEmail") === "1" ? reviewId : undefined;
-  const selectedDate = searchParams.get("date") || localDate();
+  const selectedDate = searchParams.get("date") || tomorrowIsoDate();
 
   useEffect(() => { if (reviewId) setTab("review"); }, [reviewId]);
 
