@@ -515,6 +515,10 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
     if (saveTimers.current[timerKey]) window.clearTimeout(saveTimers.current[timerKey]);
     saveTimers.current[timerKey] = window.setTimeout(() => {
       delete saveTimers.current[timerKey];
+      // Notify Pallet Order once the input has settled. The successful save
+      // below emits again, so a refresh that races the request is followed by
+      // the authoritative result without refreshing on every keystroke.
+      signalPlanningChange();
       void persistQuantity(run.key, line.key, run.loadId!, distributed.allocations, pallets, linesAfterEdit);
     }, 250);
   }

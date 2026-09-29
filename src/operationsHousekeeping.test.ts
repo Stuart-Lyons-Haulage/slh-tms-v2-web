@@ -91,6 +91,11 @@ describe("operations housekeeping contract", () => {
     expect(runBuilder).toContain('Choose delivery from this collection');
   });
 
+  it("keeps Run Builder suggestions scrollable and signals Pallet Order during quantity edits", () => {
+    expect(runBuilder).toContain("signalPlanningChange();");
+    expect(runBuilder).toContain("const linesAfterEdit = run.lines.map");
+  });
+
 
 
   it("keeps Dashboard focused on daily transport control and feed freshness", () => {

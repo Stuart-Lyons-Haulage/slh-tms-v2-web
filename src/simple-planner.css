@@ -81,7 +81,10 @@
   border-radius: 12px;
   background: #fff;
   box-shadow: 0 2px 9px rgba(18, 48, 65, .05);
-  overflow: hidden;
+  /* Keep route suggestion pop-outs above the card. The pop-out owns its own
+     scroll area; clipping the card made longer live-site lists impossible to
+     inspect while typing. */
+  overflow: visible;
   transition: border-color .15s ease, box-shadow .15s ease;
 }
 
@@ -220,8 +223,9 @@
   border-color: #0b5f78;
 }
 
-.simple-picker { position: relative; min-width: 0; }
-.simple-picker-options { position: absolute; z-index: 20; top: calc(100% + 3px); left: 0; right: 0; display: grid; gap: 2px; padding: 4px; max-height: 220px; overflow: auto; border: 1px solid #9fb6c2; border-radius: 7px; background: #fff; box-shadow: 0 8px 20px rgba(23, 61, 80, .16); }
+.simple-picker { position: relative; min-width: 0; z-index: 1; }
+.simple-picker:focus-within { z-index: 30; }
+.simple-picker-options { position: absolute; z-index: 40; top: calc(100% + 3px); left: 0; right: 0; display: grid; gap: 2px; padding: 4px; max-height: min(260px, 42vh); overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; border: 1px solid #9fb6c2; border-radius: 7px; background: #fff; box-shadow: 0 8px 20px rgba(23, 61, 80, .16); }
 .simple-picker-options button { display: flex; justify-content: space-between; gap: 10px; width: 100%; padding: 7px 8px; border: 0; border-radius: 4px; background: #fff; color: #173d50; text-align: left; cursor: pointer; }
 .simple-picker-options button:hover { background: #e8f5f2; }
 .simple-picker-options small { color: #59737f; white-space: nowrap; }
