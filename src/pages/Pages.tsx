@@ -452,7 +452,7 @@ export function StagingQueue({ ordersOnly = false, masterOnly = false }: { order
         // Replace stale unamended review candidates, but never revive an
         // already-promoted order; the API protects promoted PO references.
         refreshUnamendedPending: true,
-        maxMessages: 20
+        maxMessages: 5
       };
       let afterReceivedAtUtc: string | undefined;
       let afterEvidenceId: string | undefined;
