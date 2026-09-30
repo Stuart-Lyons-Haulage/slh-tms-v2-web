@@ -444,23 +444,51 @@ export function StagingQueue({ ordersOnly = false, masterOnly = false }: { order
       if (!validDateInput(planningDate)) {
         throw new Error('Select a valid planning date before re-parsing.');
       }
-      const result = await request<{ eligibleOrders: number; pendingAfterReplay: number; legacyMappingExceptionsArchived: number }>(
-        '/api/v1/order-intake/replay-retained-evidence',
-        await token(),
-        {
-          method: 'POST',
-          body: JSON.stringify({
-            receivedFromUtc: `${addDays(planningDate, -2)}T00:00:00Z`,
-            minimumPlanningDate: planningDate,
-            maximumPlanningDate: planningDate,
-            // Replace stale unamended review candidates, but never revive an
-            // already-promoted order; the API protects promoted PO references.
-            refreshUnamendedPending: true,
-            maxMessages: 500
-          })
+      const replayToken = await token();
+      const replayRequest = {
+        receivedFromUtc: `${addDays(planningDate, -2)}T00:00:00Z`,
+        minimumPlanningDate: planningDate,
+        maximumPlanningDate: planningDate,
+        // Replace stale unamended review candidates, but never revive an
+        // already-promoted order; the API protects promoted PO references.
+        refreshUnamendedPending: true,
+        maxMessages: 20
+      };
+      let afterReceivedAtUtc: string | undefined;
+      let afterEvidenceId: string | undefined;
+      let eligibleOrders = 0;
+      let legacyMappingExceptionsArchived = 0;
+      let pendingAfterReplay = 0;
+      let batches = 0;
+      do {
+        const result = await request<{
+          eligibleOrders: number;
+          pendingAfterReplay: number;
+          legacyMappingExceptionsArchived: number;
+          hasMore: boolean;
+          nextAfterReceivedAtUtc?: string;
+          nextAfterEvidenceId?: string;
+        }>(
+          '/api/v1/order-intake/replay-retained-evidence',
+          replayToken,
+          {
+            method: 'POST',
+            body: JSON.stringify({ ...replayRequest, afterReceivedAtUtc, afterEvidenceId })
+          }
+        );
+        batches += 1;
+        eligibleOrders += result.eligibleOrders;
+        legacyMappingExceptionsArchived += result.legacyMappingExceptionsArchived;
+        pendingAfterReplay = result.pendingAfterReplay;
+        afterReceivedAtUtc = result.nextAfterReceivedAtUtc;
+        afterEvidenceId = result.nextAfterEvidenceId;
+        if (result.hasMore && (!afterReceivedAtUtc || !afterEvidenceId)) {
+          throw new Error('The replay returned more evidence without a continuation cursor.');
         }
-      );
-      setMessage(`Replay complete: ${result.eligibleOrders} order${result.eligibleOrders === 1 ? '' : 's'} re-parsed; ${result.legacyMappingExceptionsArchived} old mapping exception${result.legacyMappingExceptionsArchived === 1 ? '' : 's'} archived; ${result.pendingAfterReplay} now awaiting review.`);
+        if (result.hasMore) setMessage(`Re-parsing retained evidence… batch ${batches} complete.`);
+        if (!result.hasMore) break;
+      } while (true);
+      setMessage(`Replay complete: ${eligibleOrders} order${eligibleOrders === 1 ? '' : 's'} re-parsed; ${legacyMappingExceptionsArchived} old mapping exception${legacyMappingExceptionsArchived === 1 ? '' : 's'} archived; ${pendingAfterReplay} now awaiting review.`);
       await refresh();
     } catch (exception) {
       setMessage(exception instanceof Error ? exception.message : 'Retained evidence replay failed.');
