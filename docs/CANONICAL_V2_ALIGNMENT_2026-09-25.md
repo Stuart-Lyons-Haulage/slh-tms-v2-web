@@ -31,4 +31,6 @@ Only after Web CI passes and the cleanup is merged:
 1. retire `v2/canonical-hardening-2026-09-24`;
 2. finish the non-auth audit of `v2/local-auth-hardening` before retiring it;
 3. remove/rename old local checkouts only after verifying they contain no uncommitted work;
-4. keep Docker build context pointed only at `~/Desktop/SLH TMS/Repositories/Web`.
+4. keep Docker build contexts pointed only at the canonical repositories:
+   - API: `/Users/danielwilliams/SLH-TMS-V2/slh-tms-api`
+   - Web: `/Users/danielwilliams/SLH-TMS-V2/slh-tms-web`
