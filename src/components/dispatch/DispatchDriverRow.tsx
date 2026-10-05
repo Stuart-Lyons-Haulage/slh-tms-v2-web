@@ -202,6 +202,9 @@ export function DispatchDriverRow({
         <span className="employment-badge">{employmentLabel(driver.employmentType)}</span>
         {driver.driverCode?.trim() && <small>{driver.driverCode.trim()}</small>}
       </div>
+      {driver.agencyName && <small>{driver.agencyName}</small>}
+      {driver.availabilityGroup && <small>{driver.availabilityGroup}{driver.placementEndDate ? ` · placement ends ${driver.placementEndDate}` : ""}</small>}
+      {driver.classificationMismatch && <small className="smart-inline-warning">Master Data review</small>}
     </td>
 
     <td>

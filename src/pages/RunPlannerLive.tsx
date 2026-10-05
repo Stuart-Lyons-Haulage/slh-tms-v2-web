@@ -9,6 +9,7 @@ import { planningDeliveryLocation } from "../lib/planningLocations";
 import { tomorrowIsoDate } from "../lib/dateUtils";
 import { calculateRunCapacity } from "./runPlannerCapacity";
 import { suggestJobsForRun, suggestionConfidencePercent, type RunSuggestionLine, type RunSuggestionSite } from "./runPlannerSuggestions";
+import { DriverAvailabilityPanel } from "../components/DriverAvailabilityPanel";
 
 type Period = "" | "AM" | "PM";
 type PeriodFilter = "ALL" | "AM" | "PM";
@@ -708,6 +709,7 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
     </div>
 
     {message && <p className="notice inline-notice simple-planner-notice">{message}</p>}
+    <DriverAvailabilityPanel planningDate={date} compact />
     <div className="simple-planner-layout">
       <div className="simple-run-builder">
         <div className="simple-section-heading"><div><p className="eyebrow">Run builder</p><h2>{visibleRuns.length} run{visibleRuns.length === 1 ? "" : "s"}</h2></div><small>Collection and delivery choices come from live jobs for the selected day. Choose both to link the line to the matching order(s).</small></div>

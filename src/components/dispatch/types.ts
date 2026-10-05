@@ -86,6 +86,12 @@ export interface DispatchDriverDto {
   availableFrom?: string;
   isBlocked: boolean;
   blockedReason?: string;
+  availabilityGroup?: string;
+  availabilityUntil?: string;
+  availabilityConfirmed?: boolean;
+  agencyName?: string;
+  placementEndDate?: string;
+  classificationMismatch?: boolean;
   suggestedRunId?: string;
   suggestedRunReference?: string;
   distanceToSuggestedCollectionMiles?: number;
@@ -234,4 +240,54 @@ export interface DispatchVisibilitySnapshot {
   windowDays: number;
   cutoffDate: string;
   drivers: DispatchVisibilityItem[];
+}
+
+export interface DriverAvailabilityItem {
+  driverId: string;
+  availabilityWindowId?: string;
+  employeeNumber: string;
+  displayName: string;
+  employmentType: "Employed" | "Agency" | "Casual" | "Unknown" | string;
+  group: "Employed available" | "Agency confirmed" | "Agency unconfirmed" | "Casual confirmed" | "Casual unconfirmed" | "Unavailable/blocked" | string;
+  dispatchable: boolean;
+  blockReasons: string[];
+  classificationMismatch: boolean;
+  classificationReviewReason?: string;
+  agencyName?: string;
+  skills?: string;
+  driverGroup?: string;
+  availableFromUtc?: string;
+  availableUntilUtc?: string;
+  availabilityConfirmed: boolean;
+  longTermPlacement: boolean;
+  placementEndDate?: string;
+  usualDays?: string;
+  notes?: string;
+  bookingReference?: string;
+  currentAllocationCount: number;
+  currentAllocationReference?: string;
+  driveAvailableTodayMinutes?: number;
+  workAvailableWeekMinutes?: number;
+  licenceExpiry?: string;
+  cpcExpiry?: string;
+  tachoCardExpiry?: string;
+  licenceStatus?: string;
+}
+
+export interface DriverAvailabilitySnapshot {
+  planningDate: string;
+  generatedAtUtc: string;
+  summary: {
+    employedAvailable: number;
+    agencyConfirmed: number;
+    agencyUnconfirmed: number;
+    casualConfirmed: number;
+    casualUnconfirmed: number;
+    unavailableBlocked: number;
+    driversRequired: number;
+    availableDrivers: number;
+    surplusShortfall: number;
+  };
+  drivers: DriverAvailabilityItem[];
+  classificationMismatchCount: number;
 }

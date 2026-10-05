@@ -12,8 +12,20 @@ const calculatedStartsSource = readFileSync(new URL("./DispatchCalculatedStarts.
 const authoritativeCss = readFileSync(new URL("../authoritative-dispatch.css", import.meta.url), "utf8");
 const smartDispatchCss = readFileSync(new URL("../smart-dispatch.css", import.meta.url), "utf8");
 const loadPlanCss = readFileSync(new URL("../customer-load-plans.css", import.meta.url), "utf8");
+const availabilitySource = readFileSync(new URL("../components/DriverAvailabilityPanel.tsx", import.meta.url), "utf8");
+const plannerSource = readFileSync(new URL("./RunPlannerLive.tsx", import.meta.url), "utf8");
 
 describe("Driver Dispatch UI contract", () => {
+  it("uses one Driver Availability decision in Planner Builder and Dispatch", () => {
+    expect(plannerSource).toContain("<DriverAvailabilityPanel planningDate={date}");
+    expect(authoritativeSource).toContain("<DriverAvailabilityPanel planningDate={planningDate}");
+    expect(apiSource).toContain("/api/v1/driver-availability?date=");
+    expect(apiSource).toContain("sharedAvailability?.employmentType");
+    expect(apiSource).toContain("sharedAvailability?.dispatchable === false");
+    expect(availabilitySource).toContain("Employment type is read-only here and remains controlled by Master Data.");
+    expect(availabilitySource).toContain("Booking confirmed");
+    expect(availabilitySource).toContain("Long-term placement");
+  });
   it("keeps status visible and puts the calculated Start column beside the driver", () => {
     expect(source).toContain("<th>Status</th>");
     expect(source).toContain("<th>Driver</th><th>Start</th><th>Type / skills</th>");
