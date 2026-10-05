@@ -12,6 +12,7 @@ export type RunSuggestionOrder = {
   destination: string;
   outstandingPallets: number;
   palletType?: string;
+  loadUnitType?: string;
 };
 
 export type RunSuggestionSite = {

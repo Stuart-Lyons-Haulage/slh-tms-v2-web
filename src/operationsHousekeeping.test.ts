@@ -48,6 +48,8 @@ describe("operations housekeeping contract", () => {
     expect(palletControl).not.toContain("2000");
     expect(palletControl).toContain("Trays / Crates");
     expect(palletControl).toContain("Trolleys");
+    expect(palletControl).not.toContain("showCompletedToPlan");
+    expect(palletControl).not.toContain('"✓"');
     expect(palletControl).not.toContain("Current orders");
   });
 

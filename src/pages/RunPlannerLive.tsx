@@ -7,6 +7,7 @@ import "../simple-planner.css";
 import { createRun, listRuns, updateRunStatus, updateRunStops } from '../api/runs';
 import { planningDeliveryLocation } from "../lib/planningLocations";
 import { tomorrowIsoDate } from "../lib/dateUtils";
+import { calculateRunCapacity } from "./runPlannerCapacity";
 
 type Period = "" | "AM" | "PM";
 type PeriodFilter = "ALL" | "AM" | "PM";
@@ -99,13 +100,6 @@ const siteFor = (sites: Site[], value: string) => {
     [site.name, site.driverTextName, site.externalCode, ...(site.aliases || "").split(/[,;|]/)]
       .some((candidate) => normalise(candidate) === target));
 };
-const plannerSiteName = (sites: Site[], value: string) => {
-  const site = siteFor(sites, value);
-  if (site) return site.name?.trim() || site.driverTextName?.trim() || value;
-  const key = normalise(value);
-  if (/MORRISONS(?:FRUIT)?STOCKTON\d*/.test(key)) return "Morrisons Stockton";
-  return value;
-};
 const stopFromSite = (sites: Site[], value: string) => {
   const site = siteFor(sites, value);
   return { address: site?.collectionAddress, latitude: site?.latitude, longitude: site?.longitude };
@@ -194,7 +188,7 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
     return [...groups.values()];
   }, []);
 
-  const hydrate = useCallback((nextControl: PlanningControlData, nextLoads: Load[], nextSites: Site[]) => {
+  const hydrate = useCallback((nextControl: PlanningControlData, nextLoads: Load[]) => {
     const ordered = [...nextLoads].sort((left, right) => String(left.reference).localeCompare(String(right.reference)));
     const drafts = ordered.length === 0 ? [] : (() => {
       const ordersById = new Map(nextControl.orders.map((order) => [order.id, order]));
@@ -264,7 +258,7 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
       setMessage("Planner kept the last saved runs while run or site data was temporarily unavailable. Refresh to retry.");
       return;
     }
-    hydrate(nextControl, safeLoads, safeSites);
+    hydrate(nextControl, safeLoads);
   }, [date, hydrate, token]);
 
   const refreshControl = useCallback(async () => {
@@ -340,18 +334,6 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
     setPlannerRuns((current) => current.map((run) => run.key === key ? updater(run) : run));
   };
   const updateLine = (runKey: string, lineKey: string, patch: Partial<RunLine>) => updateRun(runKey, (run) => ({ ...run, lines: run.lines.map((line) => line.key === lineKey ? { ...line, ...patch } : line) }));
-  const canonicaliseSiteEntry = (runKey: string, lineKey: string, field: "collectionSite" | "deliverySite", value: string) => {
-    const site = siteFor(sites, value);
-    if (site) updateLine(runKey, lineKey, { [field]: site.name?.trim() || site.driverTextName?.trim() || value });
-  };
-  const resolveLineOrders = (runKey: string, lineKey: string, collection: string, delivery: string) => {
-    const matches = matchingOrders(collection, delivery);
-    updateLine(runKey, lineKey, {
-      orderId: matches[0]?.id,
-      orderIds: matches.length ? matches.map(order => order.id) : undefined,
-      orderAllocations: undefined,
-    });
-  };
   const changeLineLocation = (runKey: string, line: RunLine, field: "collectionSite" | "deliverySite", value: string) => {
     const currentRun = runs.find((run) => run.key === runKey);
     if (!currentRun) return;
@@ -401,7 +383,33 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
     // must exist before Pallet Control can allocate against it.
     if (!currentRun.loadId) void createPlanningRun({ ...currentRun, lines: nextLines });
   };
-  const runTotal = (run: RunDraft) => run.lines.reduce((sum, line) => sum + (validPallets(line.pallets) || 0), 0);
+  const runCapacity = (run: RunDraft) => {
+    const capacityLines = run.lines.flatMap((line) => {
+      const ids = lineOrderIds(line);
+      if (!ids.length) return [];
+      if (line.orderAllocations) {
+        return ids.map((orderId) => ({
+          orderId,
+          collectionSite: line.collectionSite,
+          deliverySite: line.deliverySite,
+          pallets: String(Math.max(line.orderAllocations?.[orderId] || 0, 0)),
+        }));
+      }
+      if (ids.length === 1) return [{ orderId: ids[0], collectionSite: line.collectionSite, deliverySite: line.deliverySite, pallets: line.pallets }];
+
+      // Older consolidated lines may not have the per-order allocation map.
+      // Split their visible quantity across the source orders so each order's
+      // pallet/load-unit type is still represented in the capacity calculation.
+      let remaining = validPallets(line.pallets) || 0;
+      return ids.flatMap((orderId) => {
+        const order = orders.find((item) => item.id === orderId);
+        const quantity = Math.min(remaining, Math.max(order?.outstandingPallets || order?.orderedPallets || 0, 0));
+        remaining -= quantity;
+        return quantity > 0 ? [{ orderId, collectionSite: line.collectionSite, deliverySite: line.deliverySite, pallets: String(quantity) }] : [];
+      });
+    });
+    return calculateRunCapacity(capacityLines, orders);
+  };
 
   function buildStops(lines: RunLine[]) {
     return lines.filter((line) => (validPallets(line.pallets) || 0) > 0 && lineOrderIds(line).length > 0).flatMap((line) => {
@@ -467,12 +475,13 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
       const existingReferences = new Set(loads.map((load) => load.reference.toUpperCase()));
       let number = index + 1;
       while (existingReferences.has(runRef(date, number).toUpperCase())) number += 1;
+      const capacity = runCapacity({ ...run, lines: linkedLines });
       const created = await createRun({
         reference: runRef(date, number),
         planningDate: date,
-        palletSpacesUsed: runTotal(run),
-        totalPalletSpaces: 26,
-        capacityType: "Standard pallets",
+        palletSpacesUsed: capacity.standardEquivalentUsed,
+        totalPalletSpaces: capacity.standardCapacity,
+        capacityType: `Standard pallets · ${capacity.status} · ${capacity.utilisationPercent}%`,
         plannerNotes: notesForRun(run),
         stops,
       }, access);
@@ -497,7 +506,8 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
     const next = { ...run, ...patch };
     const load = loads.find((item) => item.id === run.loadId);
     try {
-      await request(`/api/v1/loads/${run.loadId}/utilisation`, await token(), { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ palletSpacesUsed: runTotal(run), totalPalletSpaces: load?.totalPalletSpaces ?? 26, capacityType: load?.capacityType ?? "Standard pallets", depotSplits: load?.depotSplits, temperatureC: load?.temperatureC, plannerNotes: notesForRun(next) }) });
+      const capacity = runCapacity(next);
+      await request(`/api/v1/loads/${run.loadId}/utilisation`, await token(), { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ palletSpacesUsed: capacity.standardEquivalentUsed, totalPalletSpaces: capacity.standardCapacity, capacityType: `Standard pallets · ${capacity.status} · ${capacity.utilisationPercent}%`, depotSplits: load?.depotSplits, temperatureC: load?.temperatureC, plannerNotes: notesForRun(next) }) });
       dirtyRunKeys.current.delete(run.key);
       signalPlanningChange();
     } catch (error) { setMessage(error instanceof Error ? error.message : "Run details could not be auto-saved."); }
@@ -604,7 +614,7 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
     finally { setBusyKey(undefined); }
   }
 
-  function resetForDate(nextDate: string) {
+  const resetForDate = useCallback((nextDate: string) => {
     Object.values(saveTimers.current).forEach((id) => window.clearTimeout(id));
     saveTimers.current = {};
     setDate(nextDate);
@@ -612,9 +622,9 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
     const shell = blankRun(`shell-${nextDate}-1`);
     setPlannerRuns([shell]);
     setActiveKey(shell.key);
-  }
+  }, []);
 
-  useEffect(() => { if (planningDate && planningDate !== date) resetForDate(planningDate); }, [date, planningDate]);
+  useEffect(() => { if (planningDate && planningDate !== date) resetForDate(planningDate); }, [date, planningDate, resetForDate]);
 
   return <section className="simple-planner">
     <div className="simple-planner-toolbar">
@@ -632,13 +642,20 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
         {visibleRuns.map((run) => {
           const index = runs.indexOf(run);
           const saving = busyKey === run.key || busyKey?.startsWith(`${run.key}:`);
-          const load = run.loadId ? loads.find((item) => item.id === run.loadId) : undefined;
-          const usedCapacity = runTotal(run);
-          const totalCapacity = load?.totalPalletSpaces || 26;
-          const utilisation = totalCapacity > 0 ? usedCapacity / totalCapacity * 100 : 0;
-          const capacityStatus = load?.capacityType?.includes("· Red ·") || utilisation > 100 ? "red" : utilisation >= 90 ? "amber" : "green";
+          const capacity = runCapacity(run);
+          const usedCapacity = capacity.standardEquivalentUsed;
+          const totalCapacity = capacity.standardCapacity;
+          const utilisation = capacity.utilisationPercent;
+          const capacityStatus = capacity.status.toLowerCase();
+          const capacityBreakdown = [
+            capacity.standardPallets ? `${capacity.standardPallets} Std` : "",
+            capacity.euroPallets ? `${capacity.euroPallets} Euro` : "",
+            capacity.trolleys ? `${capacity.trolleys} Trolley` : "",
+            capacity.nonPalletUnits ? `${capacity.nonPalletUnits} Tray/Crate` : "",
+            capacity.unknownPallets ? `${capacity.unknownPallets} unknown` : "",
+          ].filter(Boolean).join(" · ") || "No capacity units";
           return <article key={run.key} className={`simple-run-card ${activeKey === run.key ? "active" : ""}`} onClick={() => setActiveKey(run.key)}>
-            <div className="simple-run-header"><div className="simple-run-heading"><strong>RUN {index + 1}{run.period ? ` ${run.period}` : ""}{run.nightOut ? " O/N" : ""}</strong><small>{run.loadId ? "Live" : "New"}</small><span className={`simple-run-capacity ${capacityStatus}`}><i><b style={{ width: `${Math.min(utilisation, 100)}%` }} /></i><span>{usedCapacity} / {totalCapacity} pallets · {utilisation.toFixed(1)}%</span></span></div><div className="run-period-selector"><span>Period</span>{(["AM", "PM"] as const).map((period) => <button key={period} type="button" className={run.period === period ? "selected" : ""} onClick={(event) => { event.stopPropagation(); updateRun(run.key, (current) => ({ ...current, period })); void persistRunDetails(run, { period }); }}>{period}</button>)}</div></div>
+            <div className="simple-run-header"><div className="simple-run-heading"><strong>RUN {index + 1}{run.period ? ` ${run.period}` : ""}{run.nightOut ? " O/N" : ""}</strong><small>{run.loadId ? "Live" : "New"}</small><span className={`simple-run-capacity ${capacityStatus}`} title={`${capacityBreakdown} · ${usedCapacity.toFixed(1)} / ${totalCapacity} standard-equivalent spaces`}><i><b style={{ width: `${Math.min(utilisation, 100)}%` }} /></i><span>{capacityBreakdown} · {utilisation.toFixed(1)}%</span></span></div><div className="run-period-selector"><span>Period</span>{(["AM", "PM"] as const).map((period) => <button key={period} type="button" className={run.period === period ? "selected" : ""} onClick={(event) => { event.stopPropagation(); updateRun(run.key, (current) => ({ ...current, period })); void persistRunDetails(run, { period }); }}>{period}</button>)}</div></div>
             <div className="simple-run-details"><label className="simple-night-out"><input type="checkbox" checked={run.nightOut} onChange={(event) => { const nightOut = event.target.checked; updateRun(run.key, (current) => ({ ...current, nightOut })); void persistRunDetails(run, { nightOut }); }} /> Overnight / night-out confirmed</label><label>Operational amendment<input value={run.operationalAmendment} placeholder="e.g. swap to trailer 123 / breakdown" onChange={(event) => updateRun(run.key, (current) => ({ ...current, operationalAmendment: event.target.value }))} onBlur={() => void persistRunDetails(run, { operationalAmendment: run.operationalAmendment })} /></label></div>
             <div className="simple-run-columns"><span>Collection</span><span>Pallets</span><span>Delivery</span><span>Line note</span><span /></div>
             <div className="simple-run-lines">{run.lines.map((line, lineIndex) => {
