@@ -94,12 +94,14 @@ export function JobsOperational({ date }: { date: string }) {
     setSaving(true);
     setMessage(undefined);
     try {
-      await orderMaintenance.update(editingId, form, await token());
+      const result = await orderMaintenance.update(editingId, form, await token());
       setEditingId(undefined);
       setForm(undefined);
       await orders.refresh();
       await geofenceCoverage.refresh();
-      setMessage("Job amended successfully. Planner data has been refreshed from the saved order.");
+      setMessage(result.siteMasterMessage
+        ? `Job amended successfully. ${result.siteMasterMessage} Planner data has been refreshed from the saved order.`
+        : "Job amended successfully. Planner data has been refreshed from the saved order.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "The job could not be amended.");
     } finally {
