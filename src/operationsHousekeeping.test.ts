@@ -45,6 +45,7 @@ describe("operations housekeeping contract", () => {
     expect(palletControl).toContain("destinationLabels");
     expect(palletControl).toContain("pallet-destination-heading");
     expect(palletControl).not.toContain("regionGroups.map");
+    expect(palletControl).not.toContain("showCompletedToPlan");
     expect(palletControl).toContain("const showTotals = mode !== \"toPlan\"");
     expect(palletControl).not.toContain("vertical-destination");
     expect(palletControl).toContain("subscribePlanningChanges");
