@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { buildHistoricalRouteAffinity, suggestJobsForRun } from "./runPlannerSuggestions";
+import { buildHistoricalRouteAffinity, suggestJobsForRun, suggestionConfidencePercent } from "./runPlannerSuggestions";
+
+describe("suggestionConfidencePercent", () => {
+  it("converts the optimiser score to a bounded planner percentage", () => {
+    expect(suggestionConfidencePercent(83)).toBe(100);
+    expect(suggestionConfidencePercent(41.5)).toBe(50);
+    expect(suggestionConfidencePercent(-5)).toBe(0);
+    expect(suggestionConfidencePercent(200)).toBe(100);
+  });
+});
 
 describe("suggestJobsForRun", () => {
   const sites = [

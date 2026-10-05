@@ -44,6 +44,15 @@ export type RunJobSuggestion<TOrder extends RunSuggestionOrder = RunSuggestionOr
   reasons: string[];
 };
 
+// The scoring signals below add up to 83 at their strongest. Keep the raw
+// score for sorting, but expose a bounded percentage to planners.
+const MAX_SUGGESTION_SCORE = 83;
+
+export function suggestionConfidencePercent(score: number) {
+  if (!Number.isFinite(score)) return 0;
+  return Math.max(0, Math.min(100, Math.round((score / MAX_SUGGESTION_SCORE) * 100)));
+}
+
 const normalise = (value: unknown) => String(value ?? "").trim().replace(/[^a-z0-9]/gi, "").toUpperCase();
 
 function siteFor(sites: RunSuggestionSite[], value: string) {
