@@ -23,6 +23,8 @@ describe("operations housekeeping contract", () => {
   it("removes pallet utilisation from the mixed-unit run builder and gives optimiser more time", () => {
     expect(runBuilder).not.toContain("/ 26 pallets");
     expect(runBuilder).not.toContain("simple-run-pallets");
+    expect(runBuilder).not.toContain("Ref: ${order.reference}");
+    expect(runBuilder).toContain("cleanLineNote");
     expect(optimiser).toContain("180000");
   });
 

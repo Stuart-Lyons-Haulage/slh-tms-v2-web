@@ -109,13 +109,21 @@ function lineOrderIds(line: RunLine) {
   return line.orderIds?.length ? line.orderIds : line.orderId ? [line.orderId] : [];
 }
 
+function cleanLineNote(value?: string) {
+  return (value || "")
+    .split("·")
+    .map(part => part.trim())
+    .filter(part => part && !/^ref\s*:/i.test(part))
+    .join(" · ");
+}
+
 function orderLineNote(order: PlanningOrder) {
-  return order.lineNote?.trim() || `Ref: ${order.reference}`;
+  return cleanLineNote(order.lineNote);
 }
 
 function mergedOrderLineNote(...values: Array<string | undefined>) {
   const parts = values
-    .flatMap(value => (value || "").split("·"))
+    .flatMap(value => cleanLineNote(value).split("·"))
     .map(value => value.trim())
     .filter(Boolean);
   return [...new Map(parts.map(value => [normalise(value), value])).values()].join(" · ");
