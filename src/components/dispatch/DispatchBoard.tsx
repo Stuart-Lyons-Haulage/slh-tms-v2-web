@@ -384,7 +384,8 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
   }
 
   async function handleSamsaraSingle(driver: DispatchDriverDto, selection: DispatchAllocationSelection) {
-    if (!selection.runId || !snapshot?.samsaraConfigured) return;
+    const existingSamsaraRoute = selection.runId ? Boolean(snapshot?.samsaraDispatch[selection.runId]) : false;
+    if (!selection.runId || (!snapshot?.samsaraConfigured && !existingSamsaraRoute)) return;
     setBusyDriverId(driver.driverId);
     setNotice(undefined);
     setFailures(current => current.filter(failure => failure.driverId !== driver.driverId));
