@@ -1,5 +1,6 @@
-export function dispatchActionForStatus(lockedToDriver: boolean, _status?: string): "allocate" | "dispatch" {
+export function dispatchActionForStatus(lockedToDriver: boolean, status?: string): "allocate" | "dispatch" {
   if (!lockedToDriver) return "allocate";
+  void status;
   return "dispatch";
 }
 

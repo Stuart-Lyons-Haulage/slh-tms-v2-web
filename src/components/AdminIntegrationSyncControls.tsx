@@ -288,7 +288,7 @@ export function AdminIntegrationSyncControls() {
       </article>
     </div>
 
-    <p className="hint">Automatic cadence: TachoMaster every 20 minutes · Sage HR 05:30 UK daily · Fleetio hourly · DOT/Falcon continuous. Status refreshes on screen every 60 seconds.</p>
+    <p className="hint">Automatic cadence: TachoMaster every 20 minutes · Sage HR 05:00 and 14:00 UK daily · Fleetio hourly · DOT/Falcon continuous. Status refreshes on screen every 60 seconds.</p>
     {state && <p className="hint">Platform state: <strong>{state.status}</strong>{state.lastPlatformUpdateUtc ? ` · last update ${new Date(state.lastPlatformUpdateUtc).toLocaleString('en-GB')}` : ''}</p>}
     {message && <p className="notice inline-notice">{message}</p>}
   </section>;

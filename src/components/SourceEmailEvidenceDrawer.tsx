@@ -1,3 +1,5 @@
+/* The exported pure evidence helpers are shared by focused unit tests. */
+/* eslint-disable react-refresh/only-export-components */
 import { useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import { request } from "../lib/api";

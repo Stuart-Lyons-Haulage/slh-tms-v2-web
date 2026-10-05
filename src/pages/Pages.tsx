@@ -460,7 +460,8 @@ export function StagingQueue({ ordersOnly = false, masterOnly = false }: { order
       let legacyMappingExceptionsArchived = 0;
       let pendingAfterReplay = 0;
       let batches = 0;
-      do {
+      let hasMore = true;
+      while (hasMore) {
         const result = await request<{
           eligibleOrders: number;
           pendingAfterReplay: number;
@@ -485,9 +486,9 @@ export function StagingQueue({ ordersOnly = false, masterOnly = false }: { order
         if (result.hasMore && (!afterReceivedAtUtc || !afterEvidenceId)) {
           throw new Error('The replay returned more evidence without a continuation cursor.');
         }
-        if (result.hasMore) setMessage(`Re-parsing retained evidence… batch ${batches} complete.`);
-        if (!result.hasMore) break;
-      } while (true);
+        hasMore = result.hasMore;
+        if (hasMore) setMessage(`Re-parsing retained evidence… batch ${batches} complete.`);
+      }
       setMessage(`Replay complete: ${eligibleOrders} order${eligibleOrders === 1 ? '' : 's'} re-parsed; ${legacyMappingExceptionsArchived} old mapping exception${legacyMappingExceptionsArchived === 1 ? '' : 's'} archived; ${pendingAfterReplay} now awaiting review.`);
       await refresh();
     } catch (exception) {
