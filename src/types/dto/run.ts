@@ -45,8 +45,20 @@ export interface RunDto {
   plannerNotes?: string;
   utilisationPercent?: number;
   notes?: string;
+  relayPlan?: RunRelayPlanDto;
   createdAtUtc?: string;
   stops: RunStopDto[];
+}
+
+export interface RunRelayPlanDto {
+  enabled: boolean;
+  handoverSite?: string | null;
+  handoverSiteId?: string | null;
+  handoverAfterStopSequence?: number | null;
+  plannedHandoverUtc?: string | null;
+  deliveryDriverId?: string | null;
+  deliveryVehicleId?: string | null;
+  deliveryTrailerId?: string | null;
 }
 
 export interface CreateRunStopDto {

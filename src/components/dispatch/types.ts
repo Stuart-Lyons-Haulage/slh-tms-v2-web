@@ -21,6 +21,17 @@ export interface DispatchCollectionPointDto {
   longitude?: number;
 }
 
+export interface DispatchRelayDto {
+  enabled: boolean;
+  handoverSite?: string;
+  handoverSiteId?: string;
+  handoverAfterStopSequence?: number;
+  plannedHandoverUtc?: string;
+  deliveryDriverId?: string;
+  deliveryVehicleId?: string;
+  deliveryTrailerId?: string;
+}
+
 export interface DispatchTachoDataDto {
   currentDutyDay: number;
   shiftEndTimeUtc?: string;
@@ -104,6 +115,7 @@ export interface DispatchRunDto {
   finalDeliveryPoint?: DispatchCollectionPointDto;
   plannerNotes?: string;
   trailerSwapRequested?: boolean;
+  relay?: DispatchRelayDto;
 }
 
 export interface DispatchAvailableTimeDto {
@@ -171,6 +183,7 @@ export interface LegacyDispatchLoad {
   trailerId?: string;
   plannedStartUtc?: string;
   plannerNotes?: string;
+  relayPlan?: DispatchRelayDto;
   southbound?: boolean;
   stops?: LegacyDispatchStop[];
 }

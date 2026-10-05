@@ -30,6 +30,7 @@ export type SamsaraDispatchState = {
   runId: string;
   reference?: string;
   routeId: string;
+  deliveryRouteId?: string;
   exportedAtUtc: string;
   executionState?: string;
   executionOperation?: string;
@@ -92,7 +93,8 @@ function runDetail(run: DispatchRunDto, equipment: DispatchEquipmentWorkbench): 
       longitude: delivery.longitude
     } : undefined,
     plannerNotes: load.plannerNotes,
-    trailerSwapRequested
+    trailerSwapRequested,
+    relay: load.relayPlan
   };
 }
 

@@ -1,5 +1,6 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { useAccessToken } from "../../lib/auth";
+import { updateRunRelay } from "../../api/runs";
 import "../../smart-dispatch.css";
 import { ComplianceWarningBanner } from "./ComplianceWarningBanner";
 import { DispatchDriverRow } from "./DispatchDriverRow";
@@ -82,7 +83,8 @@ function RouteSidebar({ runs, owners, drivers }: {
             <ol>{rankedDrivers.slice(0, 3).map(match => <li key={match.driver.driverId}><strong>{match.driver.name} · {match.score}/100</strong><small>{match.reasons.join(" · ")}</small></li>)}</ol>
           </details>}
           {!owner && rankedDrivers.length === 0 && <small className="smart-run-warning">No eligible driver currently matches this route</small>}
-          {run.trailerSwapRequested && <small className="smart-run-warning">Planner note: trailer swap requested</small>}
+          {run.relay?.enabled && <small className="smart-run-warning">Relay: collect → {run.relay.handoverSite || "handover site required"} → delivery</small>}
+          {!run.relay?.enabled && run.trailerSwapRequested && <small className="smart-run-warning">Planner note: trailer swap requested</small>}
         </article>;
       })}
     </div>
@@ -102,6 +104,7 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
   const [busyDriverId, setBusyDriverId] = useState<string>();
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
+  const [relayBusyId, setRelayBusyId] = useState<string>();
 
   const refresh = useCallback(async () => {
     setAction(current => current || "refresh");
@@ -239,6 +242,31 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
       setError(exception instanceof Error ? exception.message : "Driver sync and Tacho refresh failed.");
     } finally {
       setAction(undefined);
+    }
+  }
+
+  async function saveRelayAllocation(runId: string, patch: { deliveryDriverId?: string; deliveryVehicleId?: string; deliveryTrailerId?: string }) {
+    const run = snapshot?.runs.find(item => item.runId === runId);
+    if (!run?.relay?.enabled) return;
+    setRelayBusyId(runId);
+    setNotice(undefined);
+    try {
+      await updateRunRelay(runId, {
+        enabled: true,
+        handoverSite: run.relay.handoverSite,
+        handoverSiteId: run.relay.handoverSiteId,
+        handoverAfterStopSequence: run.relay.handoverAfterStopSequence,
+        plannedHandoverUtc: run.relay.plannedHandoverUtc,
+        deliveryDriverId: patch.deliveryDriverId ?? run.relay.deliveryDriverId,
+        deliveryVehicleId: patch.deliveryVehicleId ?? run.relay.deliveryVehicleId,
+        deliveryTrailerId: patch.deliveryTrailerId ?? run.relay.deliveryTrailerId,
+      }, await token());
+      await refresh();
+      setNotice(`${run.reference} relay allocation saved. Check both legs before exporting to Samsara.`);
+    } catch (exception) {
+      setNotice(exception instanceof Error ? exception.message : "Relay allocation could not be saved.");
+    } finally {
+      setRelayBusyId(undefined);
     }
   }
 
@@ -450,6 +478,20 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
     {notice && <div className="smart-dispatch-notice" role="status">{notice}</div>}
     {error && <div className="smart-dispatch-error inline" role="alert">{error}</div>}
     {globalLockFailures.map((failure, index) => <div className="smart-dispatch-error inline" role="alert" key={`${failure.reason}-${index}`}>{failure.reason}</div>)}
+
+    {snapshot.runs.filter(run => run.relay?.enabled).map(run => {
+      const relay = run.relay!;
+      const deliveryDriver = snapshot.drivers.find(driver => driver.driverId === relay.deliveryDriverId);
+      const load = snapshot.equipment.loads.find(item => item.id === run.runId);
+      const collectionDriver = snapshot.drivers.find(driver => driver.driverId === load?.driverId);
+      return <section className="relay-dispatch-panel" key={run.runId} aria-label={`Relay allocation for ${run.reference}`}>
+        <div><strong>{run.reference} · Relay / trailer swap</strong><span>{collectionDriver?.name || "Collection driver not allocated"} collects → {relay.handoverSite || "handover site required"} → delivery driver</span></div>
+        <label>Delivery driver<select value={relay.deliveryDriverId || ""} onChange={event => void saveRelayAllocation(run.runId, { deliveryDriverId: event.target.value || undefined })} disabled={relayBusyId === run.runId}><option value="">Select delivery driver…</option>{snapshot.drivers.filter(driver => !driver.onLeave && !driver.isBlocked).map(driver => <option key={driver.driverId} value={driver.driverId}>{driver.name} · {driver.driverCode}</option>)}</select></label>
+        <label>Delivery vehicle<select value={relay.deliveryVehicleId || ""} onChange={event => void saveRelayAllocation(run.runId, { deliveryVehicleId: event.target.value || undefined })} disabled={relayBusyId === run.runId}><option value="">Select delivery vehicle…</option>{snapshot.equipment.vehicles.map(vehicle => <option key={vehicle.id} value={vehicle.id}>{vehicle.registration}{vehicle.fleetNumber ? ` · ${vehicle.fleetNumber}` : ""}</option>)}</select></label>
+        <label>Delivery trailer<select value={relay.deliveryTrailerId || ""} onChange={event => void saveRelayAllocation(run.runId, { deliveryTrailerId: event.target.value || undefined })} disabled={relayBusyId === run.runId}><option value="">Select replacement trailer…</option>{snapshot.equipment.trailers.map(trailer => <option key={trailer.id} value={trailer.id}>{trailer.trailerNumber}{trailer.type ? ` · ${trailer.type}` : ""}</option>)}</select></label>
+        <small>{deliveryDriver ? `Delivery leg: ${deliveryDriver.name}` : "Samsara export will remain blocked until the delivery leg is assigned."}</small>
+      </section>;
+    })}
 
     <div className="smart-dispatch-summary">
       <span><strong>{snapshot.drivers.length}</strong> recent/operational drivers</span>

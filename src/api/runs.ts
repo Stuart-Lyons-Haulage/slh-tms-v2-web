@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { RunAllocationDto } from '../types/dto/allocation';
 import type { RunDispatchDto } from '../types/dto/dispatch';
-import type { CreateRunDto, RunDto, RunOperationalUpdateDto, RunStopDto } from '../types/dto/run';
+import type { CreateRunDto, RunDto, RunOperationalUpdateDto, RunRelayPlanDto, RunStopDto } from '../types/dto/run';
 import { apiRequest, unknownObjectSchema } from './apiClient';
 
 export const runStopSchema: z.ZodType<RunStopDto> = z.object({
@@ -28,6 +28,17 @@ export const runStopSchema: z.ZodType<RunStopDto> = z.object({
   notes: z.string().optional(),
 });
 
+const relayPlanSchema = z.object({
+  enabled: z.boolean(),
+  handoverSite: z.string().optional().nullable().transform(value => value ?? undefined),
+  handoverSiteId: z.string().optional().nullable().transform(value => value ?? undefined),
+  handoverAfterStopSequence: z.number().int().optional().nullable().transform(value => value ?? undefined),
+  plannedHandoverUtc: z.string().optional().nullable().transform(value => value ?? undefined),
+  deliveryDriverId: z.string().optional().nullable().transform(value => value ?? undefined),
+  deliveryVehicleId: z.string().optional().nullable().transform(value => value ?? undefined),
+  deliveryTrailerId: z.string().optional().nullable().transform(value => value ?? undefined),
+});
+
 export const runSchema: z.ZodType<RunDto> = z.object({
   id: z.string().min(1),
   reference: z.string().min(1),
@@ -51,6 +62,7 @@ export const runSchema: z.ZodType<RunDto> = z.object({
   plannerNotes: z.string().optional().nullable().transform(value => value ?? undefined),
   utilisationPercent: z.number().optional().nullable().transform(value => value ?? undefined),
   notes: z.string().optional(),
+  relayPlan: relayPlanSchema.optional().nullable().transform(value => value ?? undefined),
   createdAtUtc: z.string().optional(),
   stops: z.array(runStopSchema),
 });
@@ -117,10 +129,11 @@ async function confirmPreferredVehicle(runId: string, payload: RunAllocation, to
 
 export async function allocateRun(id: string, payload: RunAllocation, token?: string): Promise<Run> { await confirmPreferredVehicle(id, payload, token); return apiRequest(`/api/v1/runs/${encodeURIComponent(id)}/allocation`, runSchema, token, { method: 'PUT', body: JSON.stringify(payload) }); }
 export function updateRunOperational(id: string, payload: RunOperationalUpdateDto, token?: string): Promise<Run> { return apiRequest(`/api/v1/runs/${encodeURIComponent(id)}/operational`, runSchema, token, { method: 'PUT', body: JSON.stringify(payload) }); }
+export function updateRunRelay(id: string, payload: RunRelayPlanDto, token?: string): Promise<Run> { return apiRequest(`/api/v1/runs/${encodeURIComponent(id)}/relay`, runSchema, token, { method: 'PUT', body: JSON.stringify(payload) }); }
 export function updateRunStops(id: string, stops: CreateRun['stops'], token?: string): Promise<Run> { const path = stops.length === 0 ? `/api/v1/planning-control/runs/${encodeURIComponent(id)}/stops` : `/api/v1/runs/${encodeURIComponent(id)}/stops`; return apiRequest(path, runSchema, token, { method: 'PUT', body: JSON.stringify(stops) }); }
 export function getRunRoute(id: string, token?: string): Promise<Record<string, unknown>> { return apiRequest(`/api/v1/runs/${encodeURIComponent(id)}/route`, unknownObjectSchema, token); }
 export function getDriverDispatchRoute(id: string, token?: string): Promise<Record<string, unknown>> { return apiRequest(`/api/v1/driver-dispatch-routes/${encodeURIComponent(id)}`, unknownObjectSchema, token); }
 export function getRunDispatch(id: string, token?: string): Promise<RunDispatch> { return apiRequest(`/api/v1/runs/${encodeURIComponent(id)}/dispatch`, dispatchSchema, token); }
 export function updateRunStatus(id: string, status: string, token?: string): Promise<Run> { return apiRequest(`/api/v1/runs/${encodeURIComponent(id)}/status`, runSchema, token, { method: 'PUT', body: JSON.stringify({ status }) }); }
 
-export const runsApi = { list: listRuns, create: createRun, allocate: allocateRun, updateOperational: updateRunOperational, updateStops: updateRunStops, route: getRunRoute, dispatch: getRunDispatch, updateStatus: updateRunStatus };
+export const runsApi = { list: listRuns, create: createRun, allocate: allocateRun, updateOperational: updateRunOperational, updateRelay: updateRunRelay, updateStops: updateRunStops, route: getRunRoute, dispatch: getRunDispatch, updateStatus: updateRunStatus };

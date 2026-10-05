@@ -4,7 +4,7 @@ import { useAccessToken } from "../lib/auth";
 import { signalPlanningChange, subscribePlanningChanges } from "../lib/planningEvents";
 import { startVisiblePolling } from "../lib/visiblePolling";
 import "../simple-planner.css";
-import { createRun, listRuns, updateRunStatus, updateRunStops } from '../api/runs';
+import { createRun, listRuns, updateRunRelay, updateRunStatus, updateRunStops } from '../api/runs';
 import { planningDeliveryLocation } from "../lib/planningLocations";
 import { tomorrowIsoDate } from "../lib/dateUtils";
 import { calculateRunCapacity } from "./runPlannerCapacity";
@@ -55,7 +55,7 @@ type RunLine = {
   pallets: string;
   note: string;
 };
-type RunDraft = { key: string; loadId?: string; period: Period; nightOut: boolean; operationalAmendment: string; lines: RunLine[] };
+type RunDraft = { key: string; loadId?: string; period: Period; nightOut: boolean; operationalAmendment: string; relayEnabled: boolean; handoverSite: string; handoverAfterStopSequence: string; lines: RunLine[] };
 
 const blankLine = (): RunLine => ({ key: crypto.randomUUID(), collectionSite: "", deliverySite: "", pallets: "", note: "" });
 const blankRun = (key: string): RunDraft => ({
@@ -63,6 +63,9 @@ const blankRun = (key: string): RunDraft => ({
   period: "",
   nightOut: false,
   operationalAmendment: "",
+  relayEnabled: false,
+  handoverSite: "",
+  handoverAfterStopSequence: "",
   lines: [blankLine()],
 });
 const localDate = tomorrowIsoDate;
@@ -140,6 +143,7 @@ function runBuilderWarnings(run: RunDraft, capacity: ReturnType<typeof calculate
   if (capacity.status === "Red") warnings.push("Capacity exceeds the current trailer basis.");
   if (capacity.unknownPallets > 0) warnings.push(`${capacity.unknownPallets} load unit${capacity.unknownPallets === 1 ? " is" : "s are"} not classified as Standard, Euro, trolley or tray/crate.`);
   if (run.period === "PM" && !run.nightOut) warnings.push("PM work is selected; confirm whether a night-out is required before dispatch.");
+  if (run.relayEnabled && !run.handoverSite.trim()) warnings.push("Trailer swap is enabled; add the handover site before Dispatch or Samsara export.");
   run.lines.forEach((line, index) => {
     const hasContent = Boolean(line.collectionSite.trim() || line.deliverySite.trim() || line.pallets.trim());
     if (!hasContent) return;
@@ -246,6 +250,9 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
         period: periodFromLoad(load),
         nightOut: overnightFromLoad(load),
         operationalAmendment: tagged(load.plannerNotes, "Operational amendment"),
+        relayEnabled: load.relayPlan?.enabled === true,
+        handoverSite: load.relayPlan?.handoverSite || tagged(load.plannerNotes, "Handover site"),
+        handoverAfterStopSequence: load.relayPlan?.handoverAfterStopSequence ? String(load.relayPlan.handoverAfterStopSequence) : "",
         lines: lines.length ? lines : [blankLine()],
       } satisfies RunDraft;
       });
@@ -489,7 +496,17 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
 
   function notesForRun(run: RunDraft, period = run.period) {
     const current = loads.find((item) => item.id === run.loadId)?.plannerNotes;
-    return plannerTag(plannerTag(withPlannerPeriod(current, period), "Night out", run.nightOut ? "Yes" : "No"), "Operational amendment", run.operationalAmendment);
+    let notes = plannerTag(plannerTag(withPlannerPeriod(current, period), "Night out", run.nightOut ? "Yes" : "No"), "Operational amendment", run.operationalAmendment);
+    notes = plannerTag(notes, "Handover site", run.relayEnabled ? run.handoverSite : "");
+    return plannerTag(notes, "Trailer swap", run.relayEnabled ? "Yes" : "");
+  }
+
+  function relayPayload(run: RunDraft) {
+    return {
+      enabled: run.relayEnabled,
+      handoverSite: run.relayEnabled ? run.handoverSite : null,
+      handoverAfterStopSequence: run.relayEnabled && run.handoverAfterStopSequence.trim() ? Number(run.handoverAfterStopSequence) : null,
+    };
   }
 
   async function createPlanningRun(run: RunDraft) {
@@ -539,6 +556,7 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
       }, access);
       const confirmed = (await listRuns(date, access)).find((item) => item.id === created.id);
       if (!confirmed) throw new Error(`${created.reference} was accepted but could not be confirmed in the saved run list. It was not made available for allocation.`);
+      if (run.relayEnabled) await updateRunRelay(created.id, relayPayload(run), access);
       setLoads((current) => current.some((load) => load.id === created.id) ? current : [...current, created]);
       updateRun(run.key, (current) => ({ ...current, loadId: created.id }));
       dirtyRunKeys.current.delete(run.key);
@@ -560,6 +578,8 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
     try {
       const capacity = runCapacity(next);
       await request(`/api/v1/loads/${run.loadId}/utilisation`, await token(), { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ palletSpacesUsed: capacity.standardEquivalentUsed, totalPalletSpaces: capacity.standardCapacity, capacityType: `Standard pallets · ${capacity.status} · ${capacity.utilisationPercent}%`, depotSplits: load?.depotSplits, temperatureC: load?.temperatureC, plannerNotes: notesForRun(next) }) });
+      if (patch.relayEnabled !== undefined || patch.handoverSite !== undefined || patch.handoverAfterStopSequence !== undefined)
+        await updateRunRelay(run.loadId, relayPayload(next), await token());
       dirtyRunKeys.current.delete(run.key);
       signalPlanningChange();
     } catch (error) { setMessage(error instanceof Error ? error.message : "Run details could not be auto-saved."); }
@@ -706,7 +726,7 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
           const builderWarnings = runBuilderWarnings(run, capacity, effectiveOrders, sites);
           return <article key={run.key} className={`simple-run-card ${activeKey === run.key ? "active" : ""}`} onClick={() => setActiveKey(run.key)}>
             <div className="simple-run-header"><div className="simple-run-heading"><strong>RUN {index + 1}{run.period ? ` ${run.period}` : ""}{run.nightOut ? " O/N" : ""}</strong><small>{run.loadId ? "Live" : "New"}</small><span className={`simple-run-capacity ${capacityStatus}`} title={`${capacityBreakdown} · ${usedCapacity.toFixed(1)} / ${totalCapacity} standard-equivalent spaces`}><i><b style={{ width: `${Math.min(utilisation, 100)}%` }} /></i><strong>{utilisation.toFixed(1)}%</strong></span><span className="simple-run-capacity-breakdown" aria-label={`Capacity: ${capacityBreakdown}`}><span>Std {capacity.standardPallets}/{capacity.standardCapacity}</span><span>Euro {capacity.euroPallets}/{capacity.euroCapacity}</span><span>Trolley {capacity.trolleys}</span><span>Tray/Crate {capacity.nonPalletUnits}</span>{capacity.unknownPallets ? <span>Unknown {capacity.unknownPallets}</span> : null}</span></div><div className="run-period-selector"><span>Period</span>{(["AM", "PM"] as const).map((period) => <button key={period} type="button" className={run.period === period ? "selected" : ""} onClick={(event) => { event.stopPropagation(); updateRun(run.key, (current) => ({ ...current, period })); void persistRunDetails(run, { period }); }}>{period}</button>)}</div></div>
-            <div className="simple-run-details"><label className="simple-night-out"><input type="checkbox" checked={run.nightOut} onChange={(event) => { const nightOut = event.target.checked; updateRun(run.key, (current) => ({ ...current, nightOut })); void persistRunDetails(run, { nightOut }); }} /> Overnight / night-out confirmed</label><label>Operational amendment<input value={run.operationalAmendment} placeholder="e.g. swap to trailer 123 / breakdown" onChange={(event) => updateRun(run.key, (current) => ({ ...current, operationalAmendment: event.target.value }))} onBlur={() => void persistRunDetails(run, { operationalAmendment: run.operationalAmendment })} /></label></div>
+            <div className="simple-run-details"><label className="simple-night-out"><input type="checkbox" checked={run.nightOut} onChange={(event) => { const nightOut = event.target.checked; updateRun(run.key, (current) => ({ ...current, nightOut })); void persistRunDetails(run, { nightOut }); }} /> Overnight / night-out confirmed</label><label className="simple-night-out"><input type="checkbox" checked={run.relayEnabled} onChange={(event) => { const relayEnabled = event.target.checked; updateRun(run.key, (current) => ({ ...current, relayEnabled })); void persistRunDetails(run, { relayEnabled }); }} /> Trailer swap / relay</label><label>Operational amendment<input value={run.operationalAmendment} placeholder="e.g. swap to trailer 123 / breakdown" onChange={(event) => updateRun(run.key, (current) => ({ ...current, operationalAmendment: event.target.value }))} onBlur={() => void persistRunDetails(run, { operationalAmendment: run.operationalAmendment })} /></label>{run.relayEnabled && <><label>Handover site<input list={`relay-sites-${run.key}`} value={run.handoverSite} placeholder="e.g. Cherwell Valley" onChange={(event) => updateRun(run.key, (current) => ({ ...current, handoverSite: event.target.value }))} onBlur={(event) => void persistRunDetails(run, { handoverSite: event.currentTarget.value })} /></label><label>Handover after stop<input type="number" min="1" value={run.handoverAfterStopSequence} placeholder="Optional" onChange={(event) => updateRun(run.key, (current) => ({ ...current, handoverAfterStopSequence: event.target.value }))} onBlur={(event) => void persistRunDetails(run, { handoverAfterStopSequence: event.currentTarget.value })} /></label><datalist id={`relay-sites-${run.key}`}>{sites.map(site => <option key={site.id} value={site.name} />)}</datalist></>}</div>
             {nextOrderSuggestions.length > 0 && <section className="simple-run-suggestions" aria-label={`Suggested next orders for ${run.key}`} onClick={(event) => event.stopPropagation()}><div className="simple-run-suggestions-heading"><div><strong>Suggested next orders</strong><small>Compact route options based on fit, direction and remaining capacity.</small></div><span className="simple-run-suggestion-hint">Check before adding</span></div><div className="simple-run-suggestion-list">{nextOrderSuggestions.map(item => { const confidencePercent = suggestionConfidencePercent(item.score); const confidence = confidencePercent >= 70 ? "high" : confidencePercent >= 45 ? "medium" : "low"; const loadType = item.order.palletType || item.order.loadUnitType; return <article key={item.order.id} className={`simple-run-suggestion confidence-${confidence}`}><div className="simple-run-suggestion-route"><span><small>From</small><strong>{item.order.collection}</strong></span><b aria-hidden="true">→</b><span><small>To</small><strong>{item.order.destination}</strong></span></div><div className="simple-run-suggestion-meta"><span><small>Pallets</small><strong>{item.order.outstandingPallets}{loadType ? ` ${loadType}` : ""}</strong></span><span><small>Confidence</small><strong>{confidencePercent}%</strong></span></div><details><summary>Why?</summary><small>{item.reasons.join(" · ")}</small></details><button type="button" onClick={() => addSuggestedOrder(run, item.order)}>Add</button></article>; })}</div></section>}
             {builderWarnings.length > 0 && <aside className="simple-run-warnings" aria-label="Run builder checks"><strong>Planner checks</strong><ul>{builderWarnings.map(warning => <li key={warning}>{warning}</li>)}</ul></aside>}
             <div className="simple-run-columns"><span>Collection</span><span>Pallets</span><span>Delivery</span><span>Line note</span><span /></div>
