@@ -26,6 +26,7 @@ function palletLabel(order: PlanningOrder) { if (order.loadUnitType && order.loa
 function toneBackground(tone: PalletTone) { if (tone === "standard") return "#dbeafe"; if (tone === "euro") return "#ffedd5"; if (tone === "traycrate") return "#dcfce7"; if (tone === "trolley") return "#fef9c3"; if (tone === "mixed") return "linear-gradient(135deg, #dbeafe 0 25%, #ffedd5 25% 50%, #dcfce7 50% 75%, #fef9c3 75% 100%)"; return "#f3f4f6"; }
 function toneBorder(tone: PalletTone) { if (tone === "standard") return "#2563eb"; if (tone === "euro") return "#ea580c"; if (tone === "traycrate") return "#16a34a"; if (tone === "trolley") return "#ca8a04"; if (tone === "mixed") return "#7c3aed"; return "#9ca3af"; }
 function sectionLabel(value?: string) { return value?.toLowerCase().includes("pm") ? "PM / Overnight" : "AM"; }
+export function planningCollectionGroup(order: { planningGroup?: string; collection: string }) { return order.planningGroup?.trim() || order.collection.trim(); }
 
 export function PalletPlanningControl() {
   const token = useAccessToken();
@@ -48,7 +49,7 @@ export function PalletPlanningControl() {
   const data = control.data;
   const orders = useMemo(() => data?.orders || [], [data?.orders]);
   const orderById = useMemo(() => new Map(orders.map(order => [order.id, order])), [orders]);
-  const planningGroups = useMemo(() => [...new Set(orders.map(order => order.collection.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [orders]);
+  const planningGroups = useMemo(() => [...new Set(orders.map(planningCollectionGroup).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [orders]);
   const liveDestinations = useMemo(() => [...new Set(orders.map(order => planningDeliveryLocation(order)).filter(Boolean))], [orders]);
   const orderedDestinations = useMemo(() => {
     const live = new Set(liveDestinations);
@@ -69,7 +70,7 @@ export function PalletPlanningControl() {
   const cellMap = useMemo(() => {
     const map = new Map<string, PlanningCell>();
     for (const order of orders) {
-      const group = order.collection.trim();
+      const group = planningCollectionGroup(order);
       const destination = planningDeliveryLocation(order);
       if (!group || !destination) continue;
       const key = `${group}|||${destination}`;
@@ -94,7 +95,7 @@ export function PalletPlanningControl() {
     }
     return map;
   }, [orders]);
-  const selectedOrders = useMemo(() => !selectedCell ? [] : orders.filter(order => order.collection === selectedCell.group && planningDeliveryLocation(order) === selectedCell.destination), [orders, selectedCell]);
+  const selectedOrders = useMemo(() => !selectedCell ? [] : orders.filter(order => planningCollectionGroup(order) === selectedCell.group && planningDeliveryLocation(order) === selectedCell.destination), [orders, selectedCell]);
   const groupedSelectedOrders = useMemo(() => {
     const groups = new Map<string, PlanningOrder[]>();
     for (const order of selectedOrders) {
