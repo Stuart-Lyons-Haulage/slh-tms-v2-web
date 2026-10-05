@@ -81,6 +81,8 @@ export interface DispatchDriverDto {
   backloadCandidate: boolean;
   deadheadReductionMiles?: number;
   suggestion?: string;
+  suggestionScore?: number;
+  suggestionReasons?: string[];
   previousRunReference?: string;
   previousPlanningDate?: string;
   previousTrailerId?: string;

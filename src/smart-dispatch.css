@@ -508,3 +508,11 @@
     flex-direction: column;
   }
 }
+.smart-suggestion-details { margin-top: 5px; color: #365b42; }
+.smart-suggestion-details summary { cursor: pointer; font-weight: 600; }
+.smart-suggestion-details ul { margin: 4px 0 0 18px; padding: 0; }
+.smart-suggestion-details li { margin: 2px 0; }
+.smart-run-fit summary { cursor: pointer; font-weight: 600; }
+.smart-run-fit ol { margin: 5px 0 0 18px; padding: 0; }
+.smart-run-fit li { margin: 4px 0; }
+.smart-run-fit li small { display: block; line-height: 1.35; }

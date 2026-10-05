@@ -8,6 +8,7 @@ import { createRun, listRuns, updateRunStatus, updateRunStops } from '../api/run
 import { planningDeliveryLocation } from "../lib/planningLocations";
 import { tomorrowIsoDate } from "../lib/dateUtils";
 import { calculateRunCapacity } from "./runPlannerCapacity";
+import { suggestJobsForRun, type RunSuggestionLine, type RunSuggestionSite } from "./runPlannerSuggestions";
 
 type Period = "" | "AM" | "PM";
 type PeriodFilter = "ALL" | "AM" | "PM";
@@ -132,6 +133,25 @@ function mergedOrderLineNote(...values: Array<string | undefined>) {
 function validPallets(value: string) {
   const pallets = Number(value);
   return Number.isInteger(pallets) && pallets >= 0 ? pallets : undefined;
+}
+
+function runBuilderWarnings(run: RunDraft, capacity: ReturnType<typeof calculateRunCapacity>, effectiveOrders: PlanningOrder[], sites: Site[]) {
+  const warnings: string[] = [];
+  if (capacity.status === "Red") warnings.push("Capacity exceeds the current trailer basis.");
+  if (capacity.unknownPallets > 0) warnings.push(`${capacity.unknownPallets} load unit${capacity.unknownPallets === 1 ? " is" : "s are"} not classified as Standard, Euro, trolley or tray/crate.`);
+  if (run.period === "PM" && !run.nightOut) warnings.push("PM work is selected; confirm whether a night-out is required before dispatch.");
+  run.lines.forEach((line, index) => {
+    const hasContent = Boolean(line.collectionSite.trim() || line.deliverySite.trim() || line.pallets.trim());
+    if (!hasContent) return;
+    const ids = lineOrderIds(line);
+    const matches = effectiveOrders.filter(order => normalise(order.collection) === normalise(line.collectionSite) && normalise(order.destination) === normalise(line.deliverySite));
+    if (!ids.length && matches.length === 0) warnings.push(`Line ${index + 1} does not match a live order for this date.`);
+    const collection = siteFor(sites, line.collectionSite);
+    const delivery = siteFor(sites, line.deliverySite);
+    if (collection && (collection.latitude == null || collection.longitude == null)) warnings.push(`Line ${index + 1} collection is missing mapped coordinates.`);
+    if (delivery && (delivery.latitude == null || delivery.longitude == null)) warnings.push(`Line ${index + 1} delivery is missing mapped coordinates.`);
+  });
+  return [...new Set(warnings)];
 }
 
 export function RunPlannerLive({ planningDate }: { planningDate?: string } = {}) {
@@ -342,6 +362,29 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
     setPlannerRuns((current) => current.map((run) => run.key === key ? updater(run) : run));
   };
   const updateLine = (runKey: string, lineKey: string, patch: Partial<RunLine>) => updateRun(runKey, (run) => ({ ...run, lines: run.lines.map((line) => line.key === lineKey ? { ...line, ...patch } : line) }));
+  const addSuggestedOrder = (run: RunDraft, order: PlanningOrder) => {
+    const quantity = run.loadId
+      ? distributeQuantity([order.id], order.outstandingPallets, run.key).allocations[order.id] || 0
+      : order.outstandingPallets;
+    if (quantity <= 0) {
+      setMessage(`${order.reference} does not fit the remaining capacity on this run.`);
+      return;
+    }
+    const nextLine: RunLine = {
+      ...blankLine(),
+      collectionSite: order.collection,
+      deliverySite: order.destination,
+      pallets: String(quantity),
+      orderId: order.id,
+      orderIds: [order.id],
+      orderAllocations: { [order.id]: quantity },
+      note: orderLineNote(order),
+    };
+    const nextLines = [...run.lines.filter(line => lineOrderIds(line).length > 0 || line.collectionSite.trim() || line.deliverySite.trim() || line.pallets.trim()), nextLine];
+    updateRun(run.key, current => ({ ...current, lines: nextLines }));
+    if (run.loadId) void persistQuantity(run.key, nextLine.key, run.loadId, { [order.id]: quantity }, quantity, nextLines);
+    setMessage(`${order.reference} added to ${run.loadId ? "the live run and saved" : "the draft run"}.`);
+  };
   const changeLineLocation = (runKey: string, line: RunLine, field: "collectionSite" | "deliverySite", value: string) => {
     const currentRun = runs.find((run) => run.key === runKey);
     if (!currentRun) return;
@@ -662,9 +705,15 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
             capacity.nonPalletUnits ? `${capacity.nonPalletUnits} Tray/Crate` : "",
             capacity.unknownPallets ? `${capacity.unknownPallets} unknown` : "",
           ].filter(Boolean).join(" · ") || "No capacity units";
+          const suggestionLines: RunSuggestionLine[] = run.lines.map(line => ({ orderId: lineOrderIds(line)[0], collectionSite: line.collectionSite, deliverySite: line.deliverySite, pallets: line.pallets }));
+          const suggestionSites: RunSuggestionSite[] = sites;
+          const nextOrderSuggestions = suggestJobsForRun(suggestionLines, effectiveOrders, suggestionSites, { standard: capacity.standardRemaining, euro: capacity.euroRemaining });
+          const builderWarnings = runBuilderWarnings(run, capacity, effectiveOrders, sites);
           return <article key={run.key} className={`simple-run-card ${activeKey === run.key ? "active" : ""}`} onClick={() => setActiveKey(run.key)}>
             <div className="simple-run-header"><div className="simple-run-heading"><strong>RUN {index + 1}{run.period ? ` ${run.period}` : ""}{run.nightOut ? " O/N" : ""}</strong><small>{run.loadId ? "Live" : "New"}</small><span className={`simple-run-capacity ${capacityStatus}`} title={`${capacityBreakdown} · ${usedCapacity.toFixed(1)} / ${totalCapacity} standard-equivalent spaces`}><i><b style={{ width: `${Math.min(utilisation, 100)}%` }} /></i><span>{capacityBreakdown} · {utilisation.toFixed(1)}%</span></span></div><div className="run-period-selector"><span>Period</span>{(["AM", "PM"] as const).map((period) => <button key={period} type="button" className={run.period === period ? "selected" : ""} onClick={(event) => { event.stopPropagation(); updateRun(run.key, (current) => ({ ...current, period })); void persistRunDetails(run, { period }); }}>{period}</button>)}</div></div>
             <div className="simple-run-details"><label className="simple-night-out"><input type="checkbox" checked={run.nightOut} onChange={(event) => { const nightOut = event.target.checked; updateRun(run.key, (current) => ({ ...current, nightOut })); void persistRunDetails(run, { nightOut }); }} /> Overnight / night-out confirmed</label><label>Operational amendment<input value={run.operationalAmendment} placeholder="e.g. swap to trailer 123 / breakdown" onChange={(event) => updateRun(run.key, (current) => ({ ...current, operationalAmendment: event.target.value }))} onBlur={() => void persistRunDetails(run, { operationalAmendment: run.operationalAmendment })} /></label></div>
+            {nextOrderSuggestions.length > 0 && <section className="simple-run-suggestions" aria-label={`Suggested next orders for ${run.key}`} onClick={(event) => event.stopPropagation()}><div><strong>Suggested next orders</strong><small>Based on route fit, direction, previous planning patterns and remaining capacity.</small></div><div className="simple-run-suggestion-list">{nextOrderSuggestions.map(item => <article key={item.order.id}><div><strong>{item.order.reference}</strong><small>{item.order.collection} → {item.order.destination} · {item.order.outstandingPallets} {item.order.palletType || item.order.loadUnitType || "units"} · score {item.score}</small><small>{item.reasons.join(" · ")}</small></div><button type="button" onClick={() => addSuggestedOrder(run, item.order)}>Add to run</button></article>)}</div></section>}
+            {builderWarnings.length > 0 && <aside className="simple-run-warnings" aria-label="Run builder checks"><strong>Planner checks</strong><ul>{builderWarnings.map(warning => <li key={warning}>{warning}</li>)}</ul></aside>}
             <div className="simple-run-columns"><span>Collection</span><span>Pallets</span><span>Delivery</span><span>Line note</span><span /></div>
             <div className="simple-run-lines">{run.lines.map((line, lineIndex) => {
               const refs = lineOrderIds(line).map((id) => effectiveOrders.find((order) => order.id === id)?.reference).filter(Boolean);

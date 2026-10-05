@@ -4,6 +4,7 @@ import "../../smart-dispatch.css";
 import { ComplianceWarningBanner } from "./ComplianceWarningBanner";
 import { DispatchDriverRow } from "./DispatchDriverRow";
 import { DispatchFilters } from "./DispatchFilters";
+import { rankDriversForRun } from "./dispatchRunRanking";
 import { allocateDispatchRun, downloadSamsaraCsv, getAvailableTimes, getSmartDispatch, sendRunToSamsara, syncDispatchDrivers, syncSamsaraMappings, unassignDispatchRun } from "./dispatchApi";
 import {
   applyAvailableTimes,
@@ -62,7 +63,9 @@ function RouteSidebar({ runs, owners, drivers }: {
       {runs.map(run => {
         const ownerId = owners[run.runId];
         const owner = ownerId ? drivers.find(driver => driver.driverId === ownerId) : undefined;
-        const suggested = drivers.filter(driver => driver.suggestedRunId === run.runId).slice(0, 2);
+        const suggestedDrivers = drivers.filter(driver => driver.suggestedRunId === run.runId);
+        const rankedDrivers = rankDriversForRun(run, drivers, owners)
+          .sort((left, right) => Number(suggestedDrivers.includes(right.driver)) - Number(suggestedDrivers.includes(left.driver)) || right.score - left.score);
         return <article className={`smart-run-card ${owner ? "allocated" : "available"}`} key={run.runId}>
           <div className="smart-run-card-title">
             <strong>{run.reference}</strong>
@@ -74,7 +77,11 @@ function RouteSidebar({ runs, owners, drivers }: {
             <span><b>Deliver</b>{run.finalDeliveryPoint?.name || "Final stop not set"}</span>
           </div>
           {owner && <small>Allocated/selected · {owner.name}</small>}
-          {!owner && suggested.length > 0 && <small className="smart-run-fit">Suggested · {suggested.map(driver => driver.name).join(" / ")}</small>}
+          {!owner && rankedDrivers.length > 0 && <details className="smart-run-fit">
+            <summary>Best driver matches</summary>
+            <ol>{rankedDrivers.slice(0, 3).map(match => <li key={match.driver.driverId}><strong>{match.driver.name} · {match.score}/100</strong><small>{match.reasons.join(" · ")}</small></li>)}</ol>
+          </details>}
+          {!owner && rankedDrivers.length === 0 && <small className="smart-run-warning">No eligible driver currently matches this route</small>}
           {run.trailerSwapRequested && <small className="smart-run-warning">Planner note: trailer swap requested</small>}
         </article>;
       })}
