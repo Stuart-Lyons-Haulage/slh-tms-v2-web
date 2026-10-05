@@ -198,10 +198,6 @@
   text-transform: none;
 }
 
-.pallet-control-matrix thead tr:first-child th {
-  border-bottom-color: #cfdee4;
-}
-
 .pallet-control-matrix tbody tr:nth-child(even) td:not(.pallet-row-label) {
   background: #fbfcfd;
 }
