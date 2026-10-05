@@ -461,7 +461,7 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
       <div>
         <strong>Samsara route export</strong>
         <span>{snapshot.samsaraConfigured
-           ? `${samsaraExportCandidates.length} allocated unsent route${samsaraExportCandidates.length === 1 ? '' : 's'} ready · ${Object.keys(snapshot.samsaraDispatch).length} already sent`
+           ? `${samsaraExportCandidates.length} allocated unsent route${samsaraExportCandidates.length === 1 ? '' : 's'} ready · ${Object.keys(snapshot.samsaraDispatch).length} verified in Samsara${snapshot.samsaraStaleRouteCount ? ` · ${snapshot.samsaraStaleRouteCount} stale mapping${snapshot.samsaraStaleRouteCount === 1 ? '' : 's'} available for retry` : ''}`
           : snapshot.samsaraConnectionMessage || 'Samsara API is unavailable. CSV fallback remains available on each allocated route.'}</span>
       </div>
       <button

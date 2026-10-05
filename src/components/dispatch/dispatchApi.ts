@@ -54,6 +54,8 @@ type SamsaraDispatchStatusResponse = {
   configured: boolean;
   connected: boolean;
   connectionMessage?: string;
+  remoteVerification?: boolean;
+  staleRouteCount?: number;
   runs: SamsaraDispatchState[];
 };
 
@@ -109,6 +111,7 @@ export async function getSmartDispatch(
   visibility: DispatchVisibilitySnapshot;
   samsaraConfigured: boolean;
   samsaraConnectionMessage?: string;
+  samsaraStaleRouteCount: number;
   samsaraDispatch: Record<string, SamsaraDispatchState>;
 }> {
   const encoded = encodeURIComponent(planningDate);
@@ -183,6 +186,7 @@ export async function getSmartDispatch(
     visibility,
     samsaraConfigured: samsaraStatus.configured && samsaraStatus.connected,
     samsaraConnectionMessage: samsaraStatus.connectionMessage,
+    samsaraStaleRouteCount: samsaraStatus.staleRouteCount || 0,
     samsaraDispatch: Object.fromEntries(samsaraStatus.runs.map(item => [item.runId, item]))
   };
 }
