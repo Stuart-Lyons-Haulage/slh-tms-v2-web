@@ -242,7 +242,9 @@
 }
 
 .pallet-control-matrix tbody .pallet-row-label {
+  color: #0b5f78;
   font-size: clamp(.58rem, .67vw, .74rem);
+  font-weight: 850;
 }
 
 .pallet-control-matrix .pallet-total-col {
@@ -261,6 +263,8 @@
   vertical-align: middle;
   overflow: hidden;
   background: #f3f7f8;
+  color: #173d50;
+  font-weight: 850;
 }
 
 .pallet-control-matrix .pallet-destination-heading span {

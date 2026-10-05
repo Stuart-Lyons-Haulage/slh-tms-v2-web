@@ -183,6 +183,13 @@
   letter-spacing: .04em;
 }
 
+.simple-run-columns span:first-child,
+.simple-run-columns span:nth-child(3) {
+  color: #0b5f78;
+  font-size: .74rem;
+  font-weight: 900;
+}
+
 .simple-run-lines {
   display: grid;
   gap: 5px;
@@ -221,6 +228,17 @@
 .simple-run-line input:focus {
   outline: 2px solid rgba(11, 95, 120, .15);
   border-color: #0b5f78;
+}
+
+.simple-run-line .simple-picker input {
+  color: #173d50;
+  font-size: .96rem;
+  font-weight: 750;
+}
+
+.simple-run-line .simple-picker input::placeholder {
+  color: #6a7f89;
+  font-weight: 500;
 }
 
 .simple-picker { position: relative; min-width: 0; z-index: 1; }
