@@ -198,13 +198,7 @@
   text-transform: none;
 }
 
-.pallet-control-matrix thead tr:first-child th {
-  border-bottom-color: #cfdee4;
-}
-
-/* Keep the two planning headers visible while the To Plan matrix is scrolled.
-   Planned and summary matrices remain unchanged so only the active work queue
-   keeps its collection/region context in view. */
+/* Keep the delivery-point header visible while the To Plan matrix is scrolled. */
 .pallet-control-board.to-plan .pallet-control-matrix thead th {
   position: sticky;
   z-index: 4;
@@ -215,10 +209,6 @@
   top: 0;
   background: #eaf2f5;
   z-index: 5;
-}
-
-.pallet-control-board.to-plan .pallet-control-matrix thead tr:nth-child(2) th {
-  top: 24px;
 }
 
 .pallet-control-matrix tbody tr:nth-child(even) td:not(.pallet-row-label) {
