@@ -50,6 +50,15 @@ type ForceReviewResponse = {
   stagedImportId?: string;
 };
 
+type RetainedReplayResponse = {
+  eligibleOrders: number;
+  pendingAfterReplay: number;
+  legacyMappingExceptionsArchived: number;
+  hasMore: boolean;
+  nextAfterReceivedAtUtc?: string;
+  nextAfterEvidenceId?: string;
+};
+
 function addDays(date: string, days: number) {
   const [year, month, day] = date.split("-").map(Number);
   const d = new Date(Date.UTC(year, month - 1, day));
@@ -161,6 +170,7 @@ function OrderIntakeCacheRecovery({ date }: { date: string }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [forcing, setForcing] = useState<string | "all" | undefined>();
+  const [replaying, setReplaying] = useState(false);
   const [data, setData] = useState<CachedEmailResponse>();
   const [notice, setNotice] = useState<string>();
   const [error, setError] = useState<string>();
@@ -215,6 +225,54 @@ function OrderIntakeCacheRecovery({ date }: { date: string }) {
     }
   }
 
+  async function replayRetainedEvidence() {
+    setReplaying(true);
+    setError(undefined);
+    try {
+      const authToken = await token();
+      const baseRequest = {
+        receivedFromUtc: `${addDays(date, -2)}T00:00:00Z`,
+        minimumPlanningDate: date,
+        maximumPlanningDate: date,
+        refreshUnamendedPending: true,
+        maxMessages: 5
+      };
+      let afterReceivedAtUtc: string | undefined;
+      let afterEvidenceId: string | undefined;
+      let eligibleOrders = 0;
+      let pendingAfterReplay = 0;
+      let archived = 0;
+      let batches = 0;
+      let hasMore = true;
+
+      while (hasMore) {
+        const result = await request<RetainedReplayResponse>("/api/v1/order-intake/replay-retained-evidence", authToken, {
+          method: "POST",
+          body: JSON.stringify({ ...baseRequest, afterReceivedAtUtc, afterEvidenceId })
+        });
+        batches += 1;
+        eligibleOrders += result.eligibleOrders;
+        pendingAfterReplay = result.pendingAfterReplay;
+        archived += result.legacyMappingExceptionsArchived;
+        hasMore = result.hasMore;
+        afterReceivedAtUtc = result.nextAfterReceivedAtUtc;
+        afterEvidenceId = result.nextAfterEvidenceId;
+        if (hasMore && (!afterReceivedAtUtc || !afterEvidenceId)) {
+          throw new Error("Replay continuation cursor was missing.");
+        }
+        if (batches > 500) throw new Error("Replay exceeded the safe batch limit.");
+      }
+
+      setNotice(`Re-parse complete: ${eligibleOrders} order${eligibleOrders === 1 ? "" : "s"} matched for ${date}; ${pendingAfterReplay} awaiting review; ${archived} legacy mapping exception${archived === 1 ? "" : "s"} archived.`);
+      await loadCache();
+      refreshVisibleReviewData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Retained evidence could not be re-parsed.");
+    } finally {
+      setReplaying(false);
+    }
+  }
+
   useEffect(() => {
     if (!open) return;
     void loadCache();
@@ -230,6 +288,7 @@ function OrderIntakeCacheRecovery({ date }: { date: string }) {
       </div>
       <div className="title-actions" style={{ gap: 8, flexWrap: "wrap" }}>
         {data && <span className={missing.length ? "status warning" : "status approved"}>{missing.length} missing order rows</span>}
+        <button type="button" onClick={() => void replayRetainedEvidence()} disabled={replaying || forcing !== undefined || loading}>{replaying ? "Re-parsing…" : `Re-parse ${date}`}</button>
         <button type="button" onClick={() => setOpen(value => !value)}>{open ? "Hide cached emails" : "Show cached emails"}</button>
         {open && <button type="button" onClick={loadCache} disabled={loading}>{loading ? "Checking…" : "Refresh cache"}</button>}
         {open && <button type="button" className="primary" onClick={forceAll} disabled={forcing !== undefined || missing.length === 0}>{forcing === "all" ? "Forcing…" : `Force all missing (${missing.length})`}</button>}
