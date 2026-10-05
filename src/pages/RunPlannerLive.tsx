@@ -338,13 +338,14 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
   // The route builder must start from live work for the selected day. Site Master
   // remains useful for addresses/geocoding, but must not be the source of the
   // collection and delivery choices shown to the planner.
-  const liveCollections = useMemo(() => [...new Set(effectiveOrders.map(order => order.collection.trim()).filter(Boolean))].sort((left, right) => left.localeCompare(right)), [effectiveOrders]);
+  const availableOrders = useMemo(() => effectiveOrders.filter(order => order.outstandingPallets > 0), [effectiveOrders]);
+  const liveCollections = useMemo(() => [...new Set(availableOrders.map(order => order.collection.trim()).filter(Boolean))].sort((left, right) => left.localeCompare(right)), [availableOrders]);
   const matchingOrders = useCallback((collection: string, delivery: string) => {
     const collectionKey = normalise(collection);
     const deliveryKey = normalise(delivery);
     if (!collectionKey || !deliveryKey) return [];
-    return effectiveOrders.filter(order => normalise(order.collection) === collectionKey && normalise(order.destination) === deliveryKey);
-  }, [effectiveOrders]);
+    return availableOrders.filter(order => normalise(order.collection) === collectionKey && normalise(order.destination) === deliveryKey);
+  }, [availableOrders]);
 
   const visibleRuns = useMemo(
     () => periodFilter === "ALL" ? runs : runs.filter((run) => run.period === periodFilter || !run.period),
@@ -409,7 +410,7 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
     void createPlanningRun({ ...currentRun, lines: linkedLines });
   };
   const chooseCollection = (runKey: string, lineKey: string, value: string) => {
-    const source = effectiveOrders.find((order) => normalise(order.collection) === normalise(value));
+    const source = availableOrders.find((order) => normalise(order.collection) === normalise(value));
     updateLine(runKey, lineKey, { collectionSite: source?.collection.trim() || value, deliverySite: "", pallets: "", orderId: undefined, orderIds: undefined, orderAllocations: undefined });
   };
   const chooseDelivery = (runKey: string, lineKey: string, collection: string, destination: string) => {
@@ -715,7 +716,7 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
               const typedRoute = Boolean(line.collectionSite.trim() || line.deliverySite.trim());
               const collectionSuggestions = liveCollections.filter((collection) => !line.collectionSite || normalise(collection).includes(normalise(line.collectionSite))).slice(0, 8);
               const deliveryByName = new Map<string, { destination: string; pallets: number }>();
-              effectiveOrders.filter((order) => normalise(order.collection) === normalise(line.collectionSite)).forEach((order) => {
+              availableOrders.filter((order) => normalise(order.collection) === normalise(line.collectionSite)).forEach((order) => {
                 const destination = order.destination.trim();
                 const current = deliveryByName.get(normalise(destination));
                 deliveryByName.set(normalise(destination), { destination, pallets: (current?.pallets || 0) + Math.max(order.outstandingPallets, 0) });

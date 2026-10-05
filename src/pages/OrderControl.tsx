@@ -76,6 +76,43 @@ function refreshVisibleReviewData() {
   window.dispatchEvent(new Event(SILENT_API_REFRESH_EVENT));
 }
 
+function OrderReviewDateStrip({ selectedDate, onChange }: { selectedDate: string; onChange: (date: string) => void }) {
+  const token = useAccessToken();
+  const dates = useMemo(() => Array.from({ length: 11 }, (_, index) => addDays(selectedDate, index - 5)), [selectedDate]);
+  const [counts, setCounts] = useState<Record<string, number | undefined>>({});
+
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      const results = await Promise.all(dates.map(async (date) => {
+        try {
+          const result = await request<{ total: number }>(`/api/v1/staging/queue?status=PendingReview&entityType=order&page=1&pageSize=1&planningDate=${encodeURIComponent(date)}`, await token());
+          return [date, result.total] as const;
+        } catch {
+          return [date, undefined] as const;
+        }
+      }));
+      if (active) setCounts(Object.fromEntries(results));
+    })();
+    return () => { active = false; };
+  }, [dates, token]);
+
+  return <div className="order-date-strip" aria-label="Pending order dates">
+    {dates.map((date) => {
+      const value = new Date(`${date}T12:00:00`);
+      const count = counts[date];
+      const selected = date === selectedDate;
+      return <button key={date} type="button" className={`${count ? "has-orders" : "empty"} ${selected ? "selected" : ""}`} onClick={() => onChange(date)} aria-pressed={selected} title={`${date}: ${count == null ? "checking" : `${count} pending order${count === 1 ? "" : "s"}`}`}>
+        <span>{new Intl.DateTimeFormat("en-GB", { weekday: "short" }).format(value)}</span>
+        <strong>{value.getDate()}</strong>
+        <small>{new Intl.DateTimeFormat("en-GB", { month: "short" }).format(value)}</small>
+        <b>{count == null ? "…" : count}</b>
+        <em>{count === 1 ? "order" : "orders"}</em>
+      </button>;
+    })}
+  </div>;
+}
+
 export function ApprovedOrdersList({ date, token }: { date: string; token: ReturnType<typeof useAccessToken> }) {
   const [orders, setOrders] = useState<TransportOrder[]>([]);
   const [runs, setRuns] = useState<Load[]>([]);
@@ -294,6 +331,7 @@ export function OrderControl({ initialTab = "review" }: { initialTab?: OrderCont
       </div>
       {repairNotice && <p className="notice inline-notice" style={{ marginBottom: 0 }}>{repairNotice}</p>}
     </section>
+    <OrderReviewDateStrip selectedDate={selectedDate} onChange={updateDate} />
     {tab === "review" ? <><OrderIntakeCacheRecovery date={selectedDate} /><UndatedOrderReviewQueue /><OrderReviewBulk date={selectedDate} /></> : <><ApprovedOrdersList date={selectedDate} token={token} /><JobsOperational date={selectedDate} /></>}
     {sourceEmailStagingId && <SourceEmailEvidenceDrawer stagingId={sourceEmailStagingId} onClose={closeSourceEmail} />}
   </>;
