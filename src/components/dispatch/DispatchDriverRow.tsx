@@ -1,5 +1,7 @@
+import { useEffect, useMemo, useState } from "react";
 import { canDriverTakeRun, dispatchSkills, parseSkillFlags, tachoVehicleId, trailerEligible, ukTime, wtdClass } from "./dispatchRules";
 import { canUnassignDispatchRun, dispatchActionForStatus } from "./dispatchMessaging";
+import { filterDispatchAssetOptions, type DispatchAssetSearchOption } from "./dispatchAssetSearch";
 import type {
   DispatchAllocationSelection,
   DispatchAvailableTimeDto,
@@ -57,6 +59,63 @@ function statusTone(status?: string): string {
   return "empty";
 }
 
+function DispatchAssetTypeahead({ value, options, placeholder, ariaLabel, disabled, onChange }: {
+  value: string;
+  options: DispatchAssetSearchOption[];
+  placeholder: string;
+  ariaLabel: string;
+  disabled?: boolean;
+  onChange: (value: string) => void;
+}) {
+  const selected = options.find(option => option.id === value);
+  const [text, setText] = useState(selected?.label || "");
+  const [open, setOpen] = useState(false);
+  const matches = useMemo(() => filterDispatchAssetOptions(options, text).slice(0, 18), [options, text]);
+
+  useEffect(() => setText(selected?.label || ""), [selected?.label, value]);
+
+  function choose(option: DispatchAssetSearchOption) {
+    setText(option.label);
+    onChange(option.id);
+    setOpen(false);
+  }
+
+  return <div className="dispatch-asset-typeahead">
+    <input
+      role="combobox"
+      aria-label={ariaLabel}
+      aria-expanded={open}
+      value={text}
+      disabled={disabled}
+      placeholder={placeholder}
+      autoComplete="off"
+      onFocus={() => setOpen(true)}
+      onChange={event => {
+        const next = event.target.value;
+        setText(next);
+        setOpen(true);
+        if (!next.trim()) onChange("");
+      }}
+      onBlur={() => window.setTimeout(() => setOpen(false), 120)}
+      onKeyDown={event => {
+        if (event.key === "Enter" && matches[0]) {
+          event.preventDefault();
+          choose(matches[0]);
+        }
+        if (event.key === "Escape") {
+          setOpen(false);
+          setText(selected?.label || "");
+        }
+      }}
+    />
+    {open && !disabled && <div className="dispatch-asset-typeahead-menu">
+      {matches.length === 0
+        ? <span>No matching asset</span>
+        : matches.map(option => <button type="button" key={option.id} className={option.id === value ? "selected" : ""} onMouseDown={event => event.preventDefault()} onClick={() => choose(option)}>{option.label}</button>)}
+    </div>}
+  </div>;
+}
+
 export function DispatchDriverRow({
   driver,
   runs,
@@ -97,6 +156,16 @@ export function DispatchDriverRow({
   const serviceableVehicles = vehicles.filter(vehicle => vehicle.active !== false && !/(vor|out\s*of\s*service|off\s*road|inactive|maintenance)/i.test(vehicle.fleetioStatus || "") && !overlaps(vehicle.id, "vehicleId"));
   const legalTrailers = trailers.filter(trailer => trailer.active !== false && trailerEligible(selectedRun, trailer) && !overlaps(trailer.id, "trailerId"));
   const tachoVehicle = tachoVehicleId(driver, vehicles);
+  const vehicleOptions = useMemo(() => serviceableVehicles.map(vehicle => ({
+    id: vehicle.id,
+    label: `${vehicle.registration}${vehicle.id === tachoVehicle ? " · Tacho: last used" : ""}`,
+    search: `${vehicle.registration} ${vehicle.fleetNumber || ""}`,
+  })), [serviceableVehicles, tachoVehicle]);
+  const trailerOptions = useMemo(() => legalTrailers.map(trailer => ({
+    id: trailer.id,
+    label: `${trailer.trailerNumber}${trailer.id === driver.previousTrailerId ? " · Last used / continuity" : trailer.type ? ` · ${trailer.type}` : ""}`,
+    search: `${trailer.trailerNumber} ${trailer.type || ""}`,
+  })), [driver.previousTrailerId, legalTrailers]);
   const wtdHours = availableTime?.weeklyWorkingTimeUsed ?? driver.tachoData.weeklyWorkingTime;
   const wtdTone = availableTime?.wtdStatus || wtdClass(wtdHours);
   const blocked = driver.isBlocked;
@@ -168,21 +237,11 @@ export function DispatchDriverRow({
         </select>
       </td>
       <td>
-        <select aria-label={`Vehicle for ${driver.name}`} value={selection.vehicleId} onChange={event => onSelectionChange(driver.driverId, { vehicleId: event.target.value })} disabled={lockedToDriver && dispatchStatus !== "No Run"}>
-          <option value="">Vehicle…</option>
-          {serviceableVehicles.map(vehicle => <option key={vehicle.id} value={vehicle.id}>
-            {vehicle.registration}{vehicle.id === tachoVehicle ? " · Tacho: last used" : ""}
-          </option>)}
-        </select>
+        <DispatchAssetTypeahead ariaLabel={`Vehicle for ${driver.name}`} value={selection.vehicleId} onChange={value => onSelectionChange(driver.driverId, { vehicleId: value })} options={vehicleOptions} placeholder="Vehicle…" disabled={lockedToDriver && dispatchStatus !== "No Run"} />
         {driver.tachoData.lastVehicleRegistration && <small>Tacho: last used · {driver.tachoData.lastVehicleRegistration}</small>}
       </td>
       <td>
-        <select aria-label={`Trailer for ${driver.name}`} value={selection.trailerId} onChange={event => onSelectionChange(driver.driverId, { trailerId: event.target.value })} disabled={lockedToDriver && dispatchStatus !== "No Run"}>
-          <option value="">Trailer…</option>
-          {legalTrailers.map(trailer => <option key={trailer.id} value={trailer.id}>
-            {trailer.trailerNumber}{trailer.id === driver.previousTrailerId ? " · Last used / continuity" : trailer.type ? ` · ${trailer.type}` : ""}
-          </option>)}
-        </select>
+        <DispatchAssetTypeahead ariaLabel={`Trailer for ${driver.name}`} value={selection.trailerId} onChange={value => onSelectionChange(driver.driverId, { trailerId: value })} options={trailerOptions} placeholder="Trailer…" disabled={lockedToDriver && dispatchStatus !== "No Run"} />
         {driver.previousTrailerNumber && <small>Last used · {driver.previousTrailerNumber}{driver.previousTrailerPlanningDate ? ` · ${driver.previousTrailerPlanningDate}` : ""}</small>}
         {selectedRun?.trailerSwapRequested && <small className="smart-inline-warning">Planner note requests a trailer swap · continuity trailer not auto-selected</small>}
         {selectedRun?.requiresDoubleDeck && <small>Double-deck only</small>}
