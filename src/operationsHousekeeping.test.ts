@@ -64,7 +64,7 @@ describe("operations housekeeping contract", () => {
     expect(master).not.toContain("MasterDataCsvImport");
     expect(pages).toContain("import { MasterDataCsvImport }");
     expect(app).toContain('path="/admin/imports" element={<StagingQueue masterOnly />}');
-    expect(app).toContain('path="/staging" element={<StagingQueue ordersOnly />}');
+    expect(app).toContain('path="/staging" element={<OrderControl />}');
   });
 
   it("uses SQL as the sole master-data write authority and keeps master controls usable", () => {
