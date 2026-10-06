@@ -31,6 +31,10 @@ function isLikelyDriverName(value: string) {
   return /^[\p{L}][\p{L}'’.-]*(?:\s+[\p{L}][\p{L}'’.-]*)+$/u.test(text);
 }
 
+function normaliseDriverName(value: string) {
+  return value.trim().replace(/\s+/g, " ").toLocaleLowerCase("en-GB");
+}
+
 const agencyStatusCodes = new Set([
   "AV", "AVAILABLE", "A", "REST", "REST DAY", "RESTDAY", "RES", "R", "R?",
   "HOL", "HOLIDAY", "LEAVE", "SICK", "OFF", "N", "N?", "D", "D?", "C", "X",
@@ -164,8 +168,8 @@ export function Staffing() {
     return () => { cancelled = true; };
   }, [weekStart, token, calendarReload]);
 
-  const byGroup = useMemo(() => new Map(groups.map(group => [group, snapshot?.drivers.filter(driver => driver.group === group && (availabilityTab === "staff" ? driver.employmentType === "Employed" : ["Agency", "Casual"].includes(driver.employmentType))) || []])), [availabilityTab, snapshot]);
-  const matchedRows = useMemo(() => importRows.map(row => ({ ...row, driver: snapshot?.drivers.find(driver => driver.displayName.trim().toLowerCase() === row.driverName.trim().toLowerCase()) })), [importRows, snapshot]);
+  const byGroup = useMemo(() => new Map(groups.map(group => [group, (snapshot?.drivers.filter(driver => driver.group === group && (availabilityTab === "staff" ? driver.employmentType === "Employed" : ["Agency", "Casual"].includes(driver.employmentType))) || []).sort((left, right) => Number(right.dispatchable) - Number(left.dispatchable) || Number(right.availabilityConfirmed) - Number(left.availabilityConfirmed) || left.displayName.localeCompare(right.displayName))])), [availabilityTab, snapshot]);
+  const matchedRows = useMemo(() => importRows.map(row => ({ ...row, driver: snapshot?.drivers.find(driver => normaliseDriverName(driver.displayName) === normaliseDriverName(row.driverName)) })), [importRows, snapshot]);
   const unmatchedRows = matchedRows.filter(row => !row.driver);
   const creatableRows = unmatchedRows.filter(row => isLikelyDriverName(row.driverName));
 
@@ -174,9 +178,10 @@ export function Staffing() {
     setImportBusy(true); setImportMessage(undefined);
     let created = 0; let skipped = 0; let newDrivers = 0;
     try {
-      const uniqueRows = [...new Map(importRows.map(row => [`${row.driverName.toLowerCase()}|${row.date}|${row.source}`, row])).values()];
+      const uniqueRows = [...new Map(importRows.map(row => [`${normaliseDriverName(row.driverName)}|${row.date}`, row])).values()];
       const createdDrivers = new Map<string, string>();
-      for (const row of uniqueRows.map(item => ({ ...item, driver: snapshot.drivers.find(driver => driver.displayName.trim().toLowerCase() === item.driverName.trim().toLowerCase()) }))) {
+      let reviewRows = 0;
+      for (const row of uniqueRows.map(item => ({ ...item, driver: snapshot.drivers.find(driver => normaliseDriverName(driver.displayName) === normaliseDriverName(item.driverName)) }))) {
         let driverId = row.driver?.driverId;
         if (!driverId && isLikelyDriverName(row.driverName)) {
           const key = `${row.driverName.trim().toLowerCase()}|${row.agencyName.trim().toLowerCase()}`;
@@ -188,12 +193,16 @@ export function Staffing() {
             if (added.created) newDrivers++;
           }
         }
-        if (!driverId || !["Agency", "Casual"].includes(row.driver?.employmentType || "Agency")) { skipped++; continue; }
-        await request("/api/v1/driver-availability", await token(), { method: "POST", body: JSON.stringify({ driverId, ...dayWindow(row.date), confirmed: true, longTermPlacement: false, placementEndDate: null, usualDays: null, notes: `Imported from ${row.source}`, bookingReference: row.source }) });
-        created++;
+        if (!driverId || !["Agency", "Casual"].includes(row.driver?.employmentType || "Agency")) { skipped++; reviewRows++; continue; }
+        try {
+          await request("/api/v1/driver-availability", await token(), { method: "POST", body: JSON.stringify({ driverId, ...dayWindow(row.date), confirmed: true, longTermPlacement: false, placementEndDate: null, usualDays: null, notes: `Imported from ${row.source}`, bookingReference: row.source }) });
+          created++;
+        } catch {
+          reviewRows++;
+        }
       }
-      setImportMessage(`${created} confirmed availability day${created === 1 ? "" : "s"} imported. ${newDrivers} new agency driver${newDrivers === 1 ? "" : "s"} added to Driver Master. ${unmatchedRows.length + skipped} row${unmatchedRows.length + skipped === 1 ? "" : "s"} held for review.`);
-      setImportRows([]); await refresh();
+      setImportMessage(`${created} confirmed availability day${created === 1 ? "" : "s"} imported or updated. ${newDrivers} new agency driver${newDrivers === 1 ? "" : "s"} added to Driver Master. ${reviewRows} row${reviewRows === 1 ? "" : "s"} held for review.`);
+      setImportRows([]); await refresh(); setCalendarReload(value => value + 1);
     } catch (exception) { setImportMessage(exception instanceof Error ? exception.message : "The availability import could not be completed."); }
     finally { setImportBusy(false); }
   }
@@ -256,7 +265,7 @@ function AvailabilityCalendar({ weekStart, snapshots, onChanged, employmentType 
   const [savingCell, setSavingCell] = useState<string>();
   const drivers = useMemo(() => {
     const all = Object.values(snapshots).flatMap(snapshot => snapshot.drivers);
-    return [...new Map(all.filter(driver => employmentType === "Employed" ? driver.employmentType === "Employed" : ["Agency", "Casual"].includes(driver.employmentType)).map(driver => [driver.driverId, driver])).values()].sort((a, b) => a.displayName.localeCompare(b.displayName));
+    return [...new Map(all.filter(driver => employmentType === "Employed" ? driver.employmentType === "Employed" : ["Agency", "Casual"].includes(driver.employmentType)).map(driver => [driver.driverId, driver])).values()].sort((a, b) => Number(b.dispatchable) - Number(a.dispatchable) || Number(b.availabilityConfirmed) - Number(a.availabilityConfirmed) || a.displayName.localeCompare(b.displayName));
   }, [employmentType, snapshots]);
   async function setStatus(driver: DriverAvailabilityItem, date: string, status: "AV" | "Leave" | "Not available") {
     if (employmentType === "Employed" || (driver.employmentType !== "Agency" && driver.employmentType !== "Casual")) return;
