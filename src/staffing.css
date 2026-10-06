@@ -1,4 +1,7 @@
 .staffing-page { max-width: none; }
+.staffing-section-tabs { display: flex; gap: 6px; margin: 0 0 12px; border-bottom: 1px solid #cbd8e2; }
+.staffing-section-tabs button { border: 1px solid #cbd8e2; border-bottom: 0; border-radius: 7px 7px 0 0; background: #eef3f7; color: #173b57; padding: 9px 16px; font-weight: 800; cursor: pointer; }
+.staffing-section-tabs button.active { background: #0d3b66; color: #fff; border-color: #0d3b66; }
 .staffing-import-panel { display: grid; gap: 10px; }
 .staffing-import-panel .title-row { align-items: start; }
 .staffing-import-panel input[type=file] { max-width: 620px; }
@@ -8,4 +11,22 @@
 .staffing-inline-editor label { display: grid; gap: 4px; }
 .staffing-inline-editor label:last-of-type { grid-column: 1 / -1; }
 .staffing-inline-editor textarea { min-height: 52px; }
+.staffing-calendar-panel { margin: 10px 0 14px; }
+.calendar-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.staffing-calendar-wrap { overflow-x: auto; border: 1px solid #d6e3ea; border-radius: 8px; }
+.staffing-calendar { width: 100%; min-width: 820px; border-collapse: collapse; background: #fff; }
+.staffing-calendar th, .staffing-calendar td { padding: 7px 8px; border-bottom: 1px solid #e5edf1; text-align: center; }
+.staffing-calendar thead th { background: #f2f8fa; color: #34515d; font-size: 12px; }
+.staffing-calendar tbody th { text-align: left; min-width: 190px; }
+.staffing-calendar tbody th span, .staffing-calendar tbody th small { display: block; }
+.staffing-calendar tbody th small { color: #6a7d86; font-weight: 400; margin-top: 2px; }
+.calendar-cell { width: 68px; min-height: 30px; border: 1px solid #cadce4; border-radius: 5px; font-size: 11px; font-weight: 700; background: #f8fbfc; color: #536b75; }
+.calendar-cell.available { background: #dff4e8; border-color: #76bf91; color: #176b38; }
+.calendar-cell.booked { background: #dceeff; border-color: #79aeda; color: #145486; }
+.calendar-cell.pattern { background: #edf2f5; color: #47606b; }
+.calendar-cell.blocked { background: #ffe7e2; border-color: #e19b8b; color: #9a3525; }
+.calendar-cell.empty { color: #a4b2b8; }
+.calendar-cell:disabled { cursor: default; opacity: 1; }
+.calendar-cell:not(:disabled) { cursor: pointer; }
+.calendar-cell:not(:disabled):hover { outline: 2px solid #2d8b57; outline-offset: 1px; }
 @media (max-width: 800px) { .staffing-inline-editor { grid-template-columns: 1fr; } .staffing-inline-editor label:last-of-type { grid-column: auto; } }

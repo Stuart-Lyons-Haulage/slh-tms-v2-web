@@ -63,6 +63,7 @@ export interface DriverAssignmentDto {
   trailerNumber?: string;
   stopCount: number;
   finalStop?: string;
+  shiftLengthMinutes?: number;
   finalLatitude?: number;
   finalLongitude?: number;
 }

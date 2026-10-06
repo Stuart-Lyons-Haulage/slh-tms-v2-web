@@ -38,13 +38,11 @@ const coreNavigation: NavItem[] = [
   ['/bookings', 'Booking & Capacity'],
   ['/driver-dispatch', 'Dispatch'],
   ['/staffing', 'Staffing'],
-  ['/driver-timesheets', 'Timesheets'],
   ['/master-data', 'Master Data'],
 ];
 
 const complianceNavigation: NavItem[] = [
   ['/compliance', 'Compliance'],
-  ['/driver-assignments', 'Driver History'],
   ['/night-outs', 'Invoice / Job History'],
 ];
 

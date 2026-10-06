@@ -15,6 +15,7 @@ const loadPlanCss = readFileSync(new URL("../customer-load-plans.css", import.me
 const availabilitySource = readFileSync(new URL("../components/DriverAvailabilityPanel.tsx", import.meta.url), "utf8");
 const plannerSource = readFileSync(new URL("./RunPlannerLive.tsx", import.meta.url), "utf8");
 const staffingSource = readFileSync(new URL("./Staffing.tsx", import.meta.url), "utf8");
+const timesheetSource = readFileSync(new URL("./DriverTimesheets.tsx", import.meta.url), "utf8");
 
 describe("Driver Dispatch UI contract", () => {
   it("uses one Driver Availability decision in Staffing and Dispatch", () => {
@@ -29,6 +30,13 @@ describe("Driver Dispatch UI contract", () => {
     expect(availabilitySource).toContain("Employment type is read-only here and remains controlled by Master Data.");
     expect(availabilitySource).toContain("Booking confirmed");
     expect(availabilitySource).toContain("Long-term placement");
+  });
+  it("keeps the staffing calendar and timesheet anomaly feed visible", () => {
+    expect(staffingSource).toContain("Availability calendar");
+    expect(staffingSource).toContain("Sage HR working patterns");
+    expect(staffingSource).toContain("STAFFING-CALENDAR");
+    expect(timesheetSource).toContain("staffingAnomalies");
+    expect(timesheetSource).toContain("confirmed agency availability");
   });
   it("keeps status visible and puts the calculated Start column beside the driver", () => {
     expect(source).toContain("<th>Status</th>");
