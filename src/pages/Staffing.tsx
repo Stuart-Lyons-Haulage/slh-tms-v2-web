@@ -19,7 +19,23 @@ function dateKey(value: unknown) {
   return text && !Number.isNaN(parsed.getTime()) ? parsed.toISOString().slice(0, 10) : "";
 }
 
-const agencyStatusCodes = new Set(["AV", "AVAILABLE", "A", "REST", "HOL", "HOLIDAY", "OFF", "N", "N?", "D", "D?", "R?", "C", "X", "N/A", "NA"]);
+const agencyStatusCodes = new Set([
+  "AV", "AVAILABLE", "A", "REST", "REST DAY", "RESTDAY", "RES", "R", "R?",
+  "HOL", "HOLIDAY", "LEAVE", "SICK", "OFF", "N", "N?", "D", "D?", "C", "X",
+  "N/A", "NA", "UNAVAILABLE", "NOT AVAILABLE", "CANCELLED", "CANCELED",
+  "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY",
+]);
+
+export function isIgnorableAgencyStatus(value: unknown) {
+  const status = String(value || "").trim().toUpperCase();
+  if (!status || agencyStatusCodes.has(status)) return true;
+  // Some providers export the date/weekday label into the status grid. It is
+  // structural workbook data, not an availability decision, so do not turn it
+  // into a false import exception.
+  if (/^(MON|TUE|WED|THU|FRI|SAT|SUN)\b/.test(status)) return true;
+  if (!Number.isNaN(new Date(status).getTime())) return true;
+  return false;
+}
 
 function findDriverNameColumn(matrix: unknown[][], dateRow: number) {
   const headerRows = matrix.slice(Math.max(0, dateRow - 1), Math.min(matrix.length, dateRow + 5));
@@ -62,7 +78,7 @@ async function parseAgencyWorkbook(file: File): Promise<{ rows: ImportRow[]; iss
         const status = String(value || "").trim().toUpperCase();
         if (!date || !status) return;
         if (["AV", "AVAILABLE", "A"].includes(status)) rows.push({ driverName, date, status, source: `${file.name} · ${sheetName}` });
-        else if (status && !agencyStatusCodes.has(status)) issues.push({ row: `${driverName} ${date}`, reason: `Unrecognised status “${status}”; not imported.` });
+        else if (status && !isIgnorableAgencyStatus(status)) issues.push({ row: `${driverName} ${date}`, reason: `Unrecognised status “${status}”; not imported.` });
       });
     }
   }
