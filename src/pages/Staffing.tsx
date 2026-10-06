@@ -18,27 +18,29 @@ function dateKey(value: unknown) {
 
 async function parseAgencyWorkbook(file: File): Promise<{ rows: ImportRow[]; issues: ImportIssue[] }> {
   const workbook = XLSX.read(await file.arrayBuffer(), { type: "array", cellDates: true });
-  const sheet = workbook.Sheets[workbook.SheetNames[0]];
-  const matrix = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: "", raw: true });
-  const dateRow = matrix.findIndex(row => row.filter(cell => Boolean(dateKey(cell))).length >= 5);
-  if (dateRow < 0) return { rows: [], issues: [{ row: "Workbook", reason: "No row containing at least five usable dates was found." }] };
-  const dates = matrix[dateRow].map(dateKey);
-  const headerRow = matrix[Math.max(0, dateRow - 1)] || [];
-  const nameColumn = headerRow.findIndex(value => /driver\s*name|driver|name/i.test(String(value)));
-  const resolvedNameColumn = nameColumn >= 0 ? nameColumn : 3;
   const rows: ImportRow[] = [];
   const issues: ImportIssue[] = [];
-  for (const row of matrix.slice(dateRow + 1)) {
-    const driverName = String(row[resolvedNameColumn] || "").trim();
-    if (!driverName) continue;
-    row.forEach((value, column) => {
-      const date = dates[column];
-      const status = String(value || "").trim().toUpperCase();
-      if (!date || !status) return;
-      if (["AV", "AVAILABLE", "A"].includes(status)) rows.push({ driverName, date, status, source: file.name });
-      else if (!["REST", "HOL", "HOLIDAY", "OFF", "N", "D", "D?", "C", ""].includes(status)) issues.push({ row: `${driverName} ${date}`, reason: `Unrecognised status “${status}”; not imported.` });
-    });
+  for (const sheetName of workbook.SheetNames) {
+    const matrix = XLSX.utils.sheet_to_json<unknown[]>(workbook.Sheets[sheetName], { header: 1, defval: "", raw: true });
+    const dateRow = matrix.findIndex(row => row.filter(cell => Boolean(dateKey(cell))).length >= 5);
+    if (dateRow < 0) continue;
+    const dates = matrix[dateRow].map(dateKey);
+    const headerRow = matrix[Math.max(0, dateRow - 1)] || [];
+    const nameColumn = headerRow.findIndex(value => /driver\s*name|driver|name/i.test(String(value)));
+    const resolvedNameColumn = nameColumn >= 0 ? nameColumn : 3;
+    for (const row of matrix.slice(dateRow + 1)) {
+      const driverName = String(row[resolvedNameColumn] || "").trim();
+      if (!driverName) continue;
+      row.forEach((value, column) => {
+        const date = dates[column];
+        const status = String(value || "").trim().toUpperCase();
+        if (!date || !status) return;
+        if (["AV", "AVAILABLE", "A"].includes(status)) rows.push({ driverName, date, status, source: `${file.name} · ${sheetName}` });
+        else if (!["REST", "HOL", "HOLIDAY", "OFF", "N", "D", "D?", "C", ""].includes(status)) issues.push({ row: `${driverName} ${date}`, reason: `Unrecognised status “${status}”; not imported.` });
+      });
+    }
   }
+  if (!rows.length && !issues.length) issues.push({ row: "Workbook", reason: "No sheet contained a row with at least five usable dates and driver availability cells." });
   return { rows, issues };
 }
 
@@ -73,7 +75,8 @@ export function Staffing() {
     setImportBusy(true); setImportMessage(undefined);
     let created = 0; let skipped = 0;
     try {
-      for (const row of matchedRows) {
+      const uniqueRows = [...new Map(importRows.map(row => [`${row.driverName.toLowerCase()}|${row.date}|${row.source}`, row])).values()];
+      for (const row of uniqueRows.map(item => ({ ...item, driver: snapshot.drivers.find(driver => driver.displayName.trim().toLowerCase() === item.driverName.trim().toLowerCase()) }))) {
         if (!row.driver || !["Agency", "Casual"].includes(row.driver.employmentType)) { skipped++; continue; }
         await request("/api/v1/driver-availability", await token(), { method: "POST", body: JSON.stringify({ driverId: row.driver.driverId, ...dayWindow(row.date), confirmed: true, longTermPlacement: false, placementEndDate: null, usualDays: null, notes: `Imported from ${row.source}`, bookingReference: row.source }) });
         created++;
