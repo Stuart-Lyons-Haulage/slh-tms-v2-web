@@ -347,12 +347,16 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
   // collection and delivery choices shown to the planner.
   const availableOrders = useMemo(() => effectiveOrders.filter(order => order.outstandingPallets > 0), [effectiveOrders]);
   const liveCollections = useMemo(() => [...new Set(availableOrders.map(order => order.collection.trim()).filter(Boolean))].sort((left, right) => left.localeCompare(right)), [availableOrders]);
-  const matchingOrders = useCallback((collection: string, delivery: string) => {
+  const matchingLiveOrders = useCallback((collection: string, delivery: string) => {
     const collectionKey = normalise(collection);
     const deliveryKey = normalise(delivery);
     if (!collectionKey || !deliveryKey) return [];
-    return availableOrders.filter(order => normalise(order.collection) === collectionKey && normalise(order.destination) === deliveryKey);
-  }, [availableOrders]);
+    return orders.filter(order => normalise(order.collection) === collectionKey && normalise(order.destination) === deliveryKey);
+  }, [orders]);
+  const matchingAvailableOrders = useCallback((collection: string, delivery: string) =>
+    effectiveOrders.filter(order => order.outstandingPallets > 0
+      && normalise(order.collection) === normalise(collection)
+      && normalise(order.destination) === normalise(delivery)), [effectiveOrders]);
 
   const visibleRuns = useMemo(
     () => periodFilter === "ALL" ? runs : runs.filter((run) => run.period === periodFilter || !run.period),
@@ -402,7 +406,7 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
     // Manual entry follows the same autosave path as a picker selection once
     // the typed route resolves to live work for the selected date.
     if (field !== "deliverySite" || currentRun.loadId) return;
-    const matches = matchingOrders(nextLine.collectionSite, nextLine.deliverySite);
+    const matches = matchingAvailableOrders(nextLine.collectionSite, nextLine.deliverySite);
     if (!matches.length) return;
     const linkedLine: RunLine = {
       ...nextLine,
@@ -421,7 +425,7 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
     updateLine(runKey, lineKey, { collectionSite: source?.collection.trim() || value, deliverySite: "", pallets: "", orderId: undefined, orderIds: undefined, orderAllocations: undefined });
   };
   const chooseDelivery = (runKey: string, lineKey: string, collection: string, destination: string) => {
-    const matches = matchingOrders(collection, destination);
+    const matches = matchingAvailableOrders(collection, destination);
     if (!matches.length) return;
     const outstanding = matches.reduce((sum, order) => sum + Math.max(order.outstandingPallets, 0), 0);
     const currentRun = runs.find((run) => run.key === runKey);
@@ -513,12 +517,13 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
     if (run.loadId || busyKey) return run.loadId;
     setBusyKey(run.key);
     setMessage(undefined);
+    let createdRun: Load | undefined;
     try {
       const access = await token();
       const enteredLines = run.lines.filter((line) =>
         Boolean(line.collectionSite.trim() || line.deliverySite.trim() || line.pallets.trim()));
       const linkedLines = run.lines.map((line) => {
-        const matches = matchingOrders(line.collectionSite, line.deliverySite);
+        const matches = matchingAvailableOrders(line.collectionSite, line.deliverySite);
         if (lineOrderIds(line).length || matches.length === 0) return line;
         return {
           ...line,
@@ -528,7 +533,7 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
         };
       });
       const unresolved = enteredLines.filter((line) =>
-        !matchingOrders(line.collectionSite, line.deliverySite).length &&
+        !matchingAvailableOrders(line.collectionSite, line.deliverySite).length &&
         !lineOrderIds(line).length);
       if (unresolved.length > 0) {
         setMessage("Choose a live collection and delivery from the selected date before creating this run. The draft has been kept.");
@@ -554,18 +559,37 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
         plannerNotes: notesForRun(run),
         stops,
       }, access);
+      createdRun = created;
+      // Keep the created run on screen even if one of the subsequent allocation
+      // writes fails. The run and its stops are already live at this point.
+      setLoads((current) => current.some((load) => load.id === created.id) ? current : [...current, created]);
+      updateRun(run.key, (current) => ({ ...current, loadId: created.id, lines: linkedLines }));
+      // Persist the order allocations explicitly before allowing an event refresh
+      // to rebuild this run. Relying on stop inference alone can recreate the run
+      // without its jobs when another allocation already exists for the day.
+      const allocationWrites = linkedLines.flatMap((line) => {
+        const ids = lineOrderIds(line);
+        if (!ids.length) return [];
+        const quantity = validPallets(line.pallets) || 0;
+        const allocations = line.orderAllocations || distributeQuantity(ids, quantity, run.key).allocations;
+        return Object.entries(allocations).map(([orderId, pallets]) => allocate(orderId, created.id, pallets, access));
+      });
+      await Promise.all(allocationWrites);
       const confirmed = (await listRuns(date, access)).find((item) => item.id === created.id);
       if (!confirmed) throw new Error(`${created.reference} was accepted but could not be confirmed in the saved run list. It was not made available for allocation.`);
       if (run.relayEnabled) await updateRunRelay(created.id, relayPayload(run), access);
-      setLoads((current) => current.some((load) => load.id === created.id) ? current : [...current, created]);
-      updateRun(run.key, (current) => ({ ...current, loadId: created.id }));
       dirtyRunKeys.current.delete(run.key);
       signalPlanningChange();
       setMessage(`${created.reference} created. It is now available in Pallet Order for allocation.`);
+      void refreshControl().catch(() => undefined);
       return created.id;
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Run could not be created.");
-      return undefined;
+      const reason = error instanceof Error ? error.message : "The save could not be completed.";
+      setMessage(createdRun
+        ? `${createdRun.reference} was created and kept, but its order allocations need retrying: ${reason}`
+        : reason);
+      if (createdRun) signalPlanningChange();
+      return createdRun?.id;
     } finally {
       setBusyKey((current) => current === run.key ? undefined : current);
     }
@@ -727,13 +751,13 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
           return <article key={run.key} className={`simple-run-card ${activeKey === run.key ? "active" : ""}`} onClick={() => setActiveKey(run.key)}>
             <div className="simple-run-header"><div className="simple-run-heading"><strong>RUN {index + 1}{run.period ? ` ${run.period}` : ""}{run.nightOut ? " O/N" : ""}</strong><small>{run.loadId ? "Live" : "New"}</small><span className={`simple-run-capacity ${capacityStatus}`} title={`${capacityBreakdown} · ${usedCapacity.toFixed(1)} / ${totalCapacity} standard-equivalent spaces`}><i><b style={{ width: `${Math.min(utilisation, 100)}%` }} /></i><strong>{utilisation.toFixed(1)}%</strong></span><span className="simple-run-capacity-breakdown" aria-label={`Capacity: ${capacityBreakdown}`}><span>Std {capacity.standardPallets}/{capacity.standardCapacity}</span><span>Euro {capacity.euroPallets}/{capacity.euroCapacity}</span><span>Trolley {capacity.trolleys}</span><span>Tray/Crate {capacity.nonPalletUnits}</span>{capacity.unknownPallets ? <span>Unknown {capacity.unknownPallets}</span> : null}</span></div><div className="run-period-selector"><span>Period</span>{(["AM", "PM"] as const).map((period) => <button key={period} type="button" className={run.period === period ? "selected" : ""} onClick={(event) => { event.stopPropagation(); updateRun(run.key, (current) => ({ ...current, period })); void persistRunDetails(run, { period }); }}>{period}</button>)}</div></div>
             <div className="simple-run-details"><label className="simple-night-out"><input type="checkbox" checked={run.nightOut} onChange={(event) => { const nightOut = event.target.checked; updateRun(run.key, (current) => ({ ...current, nightOut })); void persistRunDetails(run, { nightOut }); }} /> Overnight / night-out confirmed</label><label className="simple-night-out"><input type="checkbox" checked={run.relayEnabled} onChange={(event) => { const relayEnabled = event.target.checked; updateRun(run.key, (current) => ({ ...current, relayEnabled })); void persistRunDetails(run, { relayEnabled }); }} /> Trailer swap / relay</label><label>Operational amendment<input value={run.operationalAmendment} placeholder="e.g. swap to trailer 123 / breakdown" onChange={(event) => updateRun(run.key, (current) => ({ ...current, operationalAmendment: event.target.value }))} onBlur={() => void persistRunDetails(run, { operationalAmendment: run.operationalAmendment })} /></label>{run.relayEnabled && <><label>Handover site<input list={`relay-sites-${run.key}`} value={run.handoverSite} placeholder="e.g. Cherwell Valley" onChange={(event) => updateRun(run.key, (current) => ({ ...current, handoverSite: event.target.value }))} onBlur={(event) => void persistRunDetails(run, { handoverSite: event.currentTarget.value })} /></label><label>Handover after stop<input type="number" min="1" value={run.handoverAfterStopSequence} placeholder="Optional" onChange={(event) => updateRun(run.key, (current) => ({ ...current, handoverAfterStopSequence: event.target.value }))} onBlur={(event) => void persistRunDetails(run, { handoverAfterStopSequence: event.currentTarget.value })} /></label><datalist id={`relay-sites-${run.key}`}>{sites.map(site => <option key={site.id} value={site.name} />)}</datalist></>}</div>
-            {nextOrderSuggestions.length > 0 && <section className="simple-run-suggestions" aria-label={`Suggested next orders for ${run.key}`} onClick={(event) => event.stopPropagation()}><div className="simple-run-suggestions-heading"><div><strong>Suggested next orders</strong><small>Compact route options based on fit, direction and remaining capacity.</small></div><span className="simple-run-suggestion-hint">Check before adding</span></div><div className="simple-run-suggestion-list">{nextOrderSuggestions.map(item => { const confidencePercent = suggestionConfidencePercent(item.score); const confidence = confidencePercent >= 70 ? "high" : confidencePercent >= 45 ? "medium" : "low"; const loadType = item.order.palletType || item.order.loadUnitType; return <article key={item.order.id} className={`simple-run-suggestion confidence-${confidence}`}><div className="simple-run-suggestion-route"><span><small>From</small><strong>{item.order.collection}</strong></span><b aria-hidden="true">→</b><span><small>To</small><strong>{item.order.destination}</strong></span></div><div className="simple-run-suggestion-meta"><span><small>Pallets</small><strong>{item.order.outstandingPallets}{loadType ? ` ${loadType}` : ""}</strong></span><span><small>Confidence</small><strong>{confidencePercent}%</strong></span></div><details><summary>Why?</summary><small>{item.reasons.join(" · ")}</small></details><button type="button" onClick={() => addSuggestedOrder(run, item.order)}>Add</button></article>; })}</div></section>}
+            {nextOrderSuggestions.length > 0 && <details className="simple-run-suggestions" aria-label={`Suggested next orders for ${run.key}`} onClick={(event) => event.stopPropagation()}><summary className="simple-run-suggestions-heading"><span><strong>Route suggestions</strong><small>{nextOrderSuggestions.length} sensible fit{nextOrderSuggestions.length === 1 ? "" : "s"} · mileage and direction checked</small></span><span className="simple-run-suggestion-hint">Show</span></summary><div className="simple-run-suggestion-list">{nextOrderSuggestions.map(item => { const confidencePercent = suggestionConfidencePercent(item.score); const confidence = confidencePercent >= 70 ? "high" : confidencePercent >= 45 ? "medium" : "low"; const loadType = item.order.palletType || item.order.loadUnitType; return <article key={item.order.id} className={`simple-run-suggestion confidence-${confidence}`}><div className="simple-run-suggestion-route"><span><small>From</small><strong>{item.order.collection}</strong></span><b aria-hidden="true">→</b><span><small>To</small><strong>{item.order.destination}</strong></span></div><div className="simple-run-suggestion-meta"><span><small>Load</small><strong>{item.order.outstandingPallets}{loadType ? ` ${loadType}` : ""}</strong></span>{item.connectorMiles != null && <span><small>Reposition</small><strong>~{Math.round(item.connectorMiles)} mi</strong></span>}<span><small>Fit</small><strong>{confidencePercent}%</strong></span></div><details><summary>Why?</summary><small>{item.reasons.join(" · ")}</small></details><button type="button" onClick={() => addSuggestedOrder(run, item.order)}>Add</button></article>; })}</div></details>}
             {builderWarnings.length > 0 && <aside className="simple-run-warnings" aria-label="Run builder checks"><strong>Planner checks</strong><ul>{builderWarnings.map(warning => <li key={warning}>{warning}</li>)}</ul></aside>}
             <div className="simple-run-columns"><span>Collection</span><span>Pallets</span><span>Delivery</span><span>Line note</span><span /></div>
             <div className="simple-run-lines">{run.lines.map((line, lineIndex) => {
               const refs = lineOrderIds(line).map((id) => effectiveOrders.find((order) => order.id === id)?.reference).filter(Boolean);
-              const matches = matchingOrders(line.collectionSite, line.deliverySite);
-              const typedRoute = Boolean(line.collectionSite.trim() || line.deliverySite.trim());
+              const matches = matchingLiveOrders(line.collectionSite, line.deliverySite);
+              const completeRoute = Boolean(line.collectionSite.trim() && line.deliverySite.trim());
               const collectionSuggestions = liveCollections.filter((collection) => !line.collectionSite || normalise(collection).includes(normalise(line.collectionSite))).slice(0, 8);
               const deliveryByName = new Map<string, { destination: string; pallets: number }>();
               availableOrders.filter((order) => normalise(order.collection) === normalise(line.collectionSite)).forEach((order) => {
@@ -749,8 +773,10 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
                 <div className="simple-picker"><input autoComplete="off" value={line.deliverySite} onFocus={() => setOpenPicker(`${run.key}:${line.key}:delivery`)} onBlur={() => window.setTimeout(() => setOpenPicker((current) => current === `${run.key}:${line.key}:delivery` ? undefined : current), 120)} onChange={(event) => changeLineLocation(run.key, line, "deliverySite", event.target.value)} placeholder="Choose delivery from this collection…" />{openPicker === `${run.key}:${line.key}:delivery` && deliverySuggestions.length > 0 && <div className="simple-picker-options delivery-options">{deliverySuggestions.map((choice) => <button type="button" key={choice.destination} onMouseDown={(event) => event.preventDefault()} onClick={() => { chooseDelivery(run.key, line.key, line.collectionSite, choice.destination); setOpenPicker(undefined); }}><span>{choice.destination}</span><small>{choice.pallets} pallet{choice.pallets === 1 ? "" : "s"}</small></button>)}</div>}</div>
                 <input value={line.note} onChange={(event) => updateLine(run.key, line.key, { note: event.target.value })} onBlur={(event) => void persistLineNote(run, line, event.currentTarget.value)} placeholder={refs.length > 1 ? `${refs.length} orders consolidated` : "Facility / load-line note"} />
                 <button type="button" className="simple-clear-line" aria-label={`Clear line ${lineIndex + 1}`} disabled={busyKey === `${run.key}:${line.key}`} onClick={(event) => { event.stopPropagation(); void clearLine(run, line); }}>×</button>
-                {typedRoute && <small className={`simple-line-match ${matches.length ? "matched" : "unmatched"}`}>
-                  {matches.length
+                {completeRoute && <small className={`simple-line-match ${lineOrderIds(line).length || matches.length ? "matched" : "unmatched"}`}>
+                  {lineOrderIds(line).length
+                    ? `Linked to ${lineOrderIds(line).length} live order${lineOrderIds(line).length === 1 ? "" : "s"}`
+                    : matches.length
                     ? `${matches.length} live order${matches.length === 1 ? "" : "s"} · ${matches.reduce((sum, order) => sum + order.outstandingPallets, 0)} available`
                     : "No live order matches this collection and delivery for the selected date"}
                 </small>}

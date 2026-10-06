@@ -3,8 +3,8 @@ import { buildHistoricalRouteAffinity, suggestJobsForRun, suggestionConfidencePe
 
 describe("suggestionConfidencePercent", () => {
   it("converts the optimiser score to a bounded planner percentage", () => {
-    expect(suggestionConfidencePercent(83)).toBe(100);
-    expect(suggestionConfidencePercent(41.5)).toBe(50);
+    expect(suggestionConfidencePercent(91)).toBe(100);
+    expect(suggestionConfidencePercent(45.5)).toBe(50);
     expect(suggestionConfidencePercent(-5)).toBe(0);
     expect(suggestionConfidencePercent(200)).toBe(100);
   });
@@ -121,5 +121,49 @@ describe("suggestJobsForRun", () => {
     expect(suggestions[0].order.id).toBe("fits");
     expect(suggestions[0].reasons).toContain("Fits remaining capacity");
     expect(suggestions[1].reasons).toContain("Exceeds current capacity");
+  });
+
+  it("does not suggest an unrelated one-pallet job merely because it fits", () => {
+    const suggestions = suggestJobsForRun(
+      [{ orderId: "current", collectionSite: "Selsey", deliverySite: "Leeds" }],
+      [{ id: "tiny-detour", reference: "TINY", collection: "Bristol", destination: "Cardiff", outstandingPallets: 1 }],
+      sites,
+      18,
+    );
+
+    expect(suggestions).toEqual([]);
+  });
+
+  it("rejects same-collection work travelling on a different lane", () => {
+    const suggestions = suggestJobsForRun(
+      [{ orderId: "current", collectionSite: "Selsey", deliverySite: "Leeds" }],
+      [{ id: "wrong-way", reference: "WRONG", collection: "Selsey", destination: "Cardiff", outstandingPallets: 1 }],
+      sites,
+      18,
+    );
+
+    expect(suggestions).toEqual([]);
+  });
+
+  it("uses mapped mileage to favour a nearby continuation and expose the reposition", () => {
+    const mappedSites = sites.map(site => ({
+      ...site,
+      ...({
+        Selsey: { latitude: 50.73, longitude: -0.79 },
+        Leeds: { latitude: 53.80, longitude: -1.55 },
+        York: { latitude: 53.96, longitude: -1.08 },
+        Newcastle: { latitude: 54.98, longitude: -1.62 },
+      } as Record<string, { latitude: number; longitude: number }>)[site.name],
+    }));
+    const suggestions = suggestJobsForRun(
+      [{ orderId: "current", collectionSite: "Selsey", deliverySite: "Leeds" }],
+      [{ id: "nearby", reference: "NEAR", collection: "York", destination: "Newcastle", outstandingPallets: 4 }],
+      mappedSites,
+      18,
+    );
+
+    expect(suggestions[0].connectorMiles).toBeGreaterThan(15);
+    expect(suggestions[0].connectorMiles).toBeLessThan(35);
+    expect(suggestions[0].reasons.some(reason => reason.includes("mile reposition from"))).toBe(true);
   });
 });
