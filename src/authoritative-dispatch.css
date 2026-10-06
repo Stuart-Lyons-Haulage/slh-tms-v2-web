@@ -147,15 +147,25 @@
 
 .smart-dispatch-workspace {
   display: grid;
-  grid-template-columns: minmax(220px, 260px) minmax(0, 1fr);
+  /* The planner's primary decision is driver-to-run allocation. Keep the
+     driver table in the left working area and the complete timed run board
+     visible alongside it. */
+  grid-template-columns: minmax(560px, 1.08fr) minmax(360px, .92fr);
   gap: 10px;
   align-items: start;
   padding: 0 12px 12px;
 }
 
-.smart-dispatch-workspace .smart-dispatch-table-wrap { margin: 0; }
+.smart-dispatch-workspace .smart-dispatch-table-wrap {
+  grid-column: 1;
+  grid-row: 1;
+  margin: 0;
+  min-width: 0;
+}
 
 .smart-run-sidebar {
+  grid-column: 2;
+  grid-row: 1;
   position: sticky;
   top: 12px;
   max-height: calc(100vh - 150px);
@@ -267,6 +277,8 @@
 
 @media (max-width: 1150px) {
   .smart-dispatch-workspace { grid-template-columns: 1fr; }
+  .smart-dispatch-workspace .smart-dispatch-table-wrap,
+  .smart-run-sidebar { grid-column: 1; grid-row: auto; }
   .smart-run-sidebar { position: static; max-height: none; }
   .smart-run-card-list { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
 }
