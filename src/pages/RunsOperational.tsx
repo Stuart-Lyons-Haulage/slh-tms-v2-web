@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { intelligenceApi } from "../lib/intelligenceApi";
 import { useAccessToken } from "../lib/auth";
-import { formatDate, formatDateTime, todayIsoDate } from "../lib/dateUtils";
+import { formatDate, formatDateTime, tomorrowIsoDate } from "../lib/dateUtils";
 import { useApi } from "../lib/useApi";
 import { RunsCapacityAllocation } from "./RunsCapacityAllocation";
 
@@ -18,7 +18,7 @@ function ukLocalDateTimeFromUtcFields(value: string) {
 
 export function RunsOperational() {
   const token = useAccessToken();
-  const [lockDate, setLockDate] = useState(todayIsoDate());
+  const [lockDate, setLockDate] = useState(tomorrowIsoDate());
   const [locking, setLocking] = useState(false);
   const [lockMessage, setLockMessage] = useState<string>();
   const readiness = useApi(useCallback(async () => intelligenceApi.readiness(lockDate, await token()), [lockDate, token]));

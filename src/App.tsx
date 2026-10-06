@@ -12,8 +12,10 @@ const BookingReservations = lazy(() => import('./pages/BookingReservations').the
 const DriverAssignments = lazy(() => import('./pages/Pages').then(module => ({ default: module.DriverAssignments })));
 const Orders = lazy(() => import('./pages/Pages').then(module => ({ default: module.Orders })));
 const StagingQueue = lazy(() => import('./pages/Pages').then(module => ({ default: module.StagingQueue })));
+const OrderControl = lazy(() => import('./pages/OrderControl').then(module => ({ default: module.OrderControl })));
 const DriverDispatchOperational = lazy(() => import('./pages/DriverDispatchOperational').then(module => ({ default: module.DriverDispatchOperational })));
 const DriverTimesheets = lazy(() => import('./pages/DriverTimesheets').then(module => ({ default: module.DriverTimesheets })));
+const Staffing = lazy(() => import('./pages/Staffing').then(module => ({ default: module.Staffing })));
 const AdminIntegrationSyncControls = lazy(() => import('./components/AdminIntegrationSyncControls').then(module => ({ default: module.AdminIntegrationSyncControls })));
 const OrderIntakeMappingAdmin = lazy(() => import('./pages/OrderIntakeMappingAdmin').then(module => ({ default: module.OrderIntakeMappingAdmin })));
 const MobileOperations = lazy(() => import('./pages/MobileOperations').then(module => ({ default: module.MobileOperations })));
@@ -35,13 +37,12 @@ const coreNavigation: NavItem[] = [
   ['/pallet-control', 'Pallet Order'],
   ['/bookings', 'Booking & Capacity'],
   ['/driver-dispatch', 'Dispatch'],
-  ['/driver-timesheets', 'Timesheets'],
+  ['/staffing', 'Staffing'],
   ['/master-data', 'Master Data'],
 ];
 
 const complianceNavigation: NavItem[] = [
   ['/compliance', 'Compliance'],
-  ['/driver-assignments', 'Driver History'],
   ['/night-outs', 'Invoice / Job History'],
 ];
 
@@ -201,10 +202,11 @@ function Shell() {
         <Route path="/dashboard" element={<DashboardOperational />} />
         <Route path="/mobile" element={<MobileOperations />} />
         <Route path="/orders" element={<Orders />} />
-        <Route path="/staging" element={<StagingQueue ordersOnly />} />
+        <Route path="/staging" element={<OrderControl />} />
         <Route path="/pallet-control" element={<PalletPlanningControl />} />
         <Route path="/bookings" element={<BookingReservations />} />
         <Route path="/driver-dispatch" element={<DriverDispatchOperational />} />
+        <Route path="/staffing" element={<Staffing />} />
         <Route path="/master-data" element={<MasterDataHub />} />
         <Route path="/drivers" element={<MasterDataHub initialSection="drivers" />} />
         <Route path="/fleet-assets" element={<MasterDataHub initialSection="vehicles" />} />

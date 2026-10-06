@@ -98,6 +98,22 @@ async function installApi(page: Page, state: State) {
         summary: { ordered: 4, planned, outstanding, overplanned: 0, lateAdditions: 0, orders: 1, runs: state.runCreated ? 1 : 0 }
       });
     }
+
+    if (path === '/api/v1/driver-availability' && method === 'GET') {
+      return json(route, {
+        planningDate: state.planningDate,
+        generatedAtUtc: new Date().toISOString(),
+        classificationMismatchCount: 0,
+        summary: {
+          employedAvailable: 0,
+          agencyConfirmed: 0,
+          casualConfirmed: 0,
+          driversRequired: state.runCreated ? 1 : 0,
+          surplusShortfall: state.runCreated ? -1 : 0
+        },
+        drivers: []
+      });
+    }
     if (path === '/api/v1/planning-control/regions' && method === 'GET') {
       return json(route, {
         date: state.planningDate,
@@ -281,15 +297,19 @@ test('planner → dispatch → geofence arrival/departure → completion stays c
   await installApi(page, state);
 
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'Run builder' })).toBeVisible();
-  await page.getByRole('button', { name: 'Create run', exact: true }).click();
+  await expect(page.getByText('Run builder', { exact: true })).toBeVisible();
+  await page.locator('input[type="date"]').first().fill(state.planningDate);
+  await page.getByPlaceholder('Start typing live collection…').fill('Hall');
+  await page.getByRole('button', { name: 'Hall Hunter', exact: true }).click();
+  await page.getByPlaceholder('Choose delivery from this collection…').fill('Ley');
+  await page.getByRole('button', { name: /Leyland\s+4 pallets/i }).click();
   await expect(page.getByText(/created\. It is now available in Pallet Order for allocation\./i)).toBeVisible();
   expect(state.runCreated).toBe(true);
   expect(state.allocatedPallets).toBe(0);
 
   await page.getByRole('link', { name: 'Pallet Order' }).click();
   await expect(page.getByRole('heading', { name: 'Pallet Control' })).toBeVisible();
-  await page.getByTitle('Hall Hunter → Leyland: 4 ordered, 0 planned, 4 to plan').click();
+  await page.getByTitle('Hall Hunter → Leyland: 4 ordered, 0 planned, 4 to plan').first().click();
   await expect(page.getByRole('heading', { name: 'Collect: Hall Hunter · Deliver: Leyland' })).toBeVisible();
   await page.locator('.pallet-control-allocation select').selectOption(runId);
   await page.getByRole('spinbutton', { name: 'Allocated load units' }).fill('4');
@@ -298,9 +318,9 @@ test('planner → dispatch → geofence arrival/departure → completion stays c
   expect(state.allocatedPallets).toBe(4);
 
   // The second-screen allocation must hydrate back into Planner with source references in Line note.
-  await page.getByRole('link', { name: 'Planner Builder' }).click();
-  await expect(page.getByRole('heading', { name: 'Run builder' })).toBeVisible();
-  await expect(page.getByPlaceholder('Facility / load-line note')).toHaveValue(/X No: X-E2E-01/);
+  await page.getByRole('link', { name: 'Planner', exact: true }).click();
+  await expect(page.getByText('Run builder', { exact: true })).toBeVisible();
+  await expect(page.getByPlaceholder('Facility / load-line note').first()).toHaveValue(/X No: X-E2E-01/);
 
   await page.getByRole('link', { name: 'Dispatch' }).first().click();
   await expect(page.getByRole('heading', { name: 'Driver Dispatch' })).toBeVisible();

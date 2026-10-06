@@ -28,7 +28,23 @@ type SamsaraStatus = {
   connected: boolean;
   vehicleCount: number;
   driverCount: number;
+  assetSyncEnabled: boolean;
   missingSettings: string[];
+  message: string;
+};
+
+type SamsaraSiteAddressStatus = {
+  configured: boolean;
+  addressSyncEnabled: boolean;
+  activeSites: number;
+  sitesWithReference: number;
+  sitesWithAddress: number;
+  sitesWithCoordinates: number;
+  eligibleSites: number;
+  alreadyMapped: number;
+  pending: number;
+  missingCoordinates: number;
+  missingAddress: number;
   message: string;
 };
 
@@ -65,6 +81,7 @@ export function AdminIntegrationSyncControls() {
   const [roadTech, setRoadTech] = useState<RoadTechStatus>();
   const [roadTechError, setRoadTechError] = useState<string>();
   const [samsara, setSamsara] = useState<SamsaraStatus>();
+  const [samsaraSites, setSamsaraSites] = useState<SamsaraSiteAddressStatus>();
   const [runtimeStatus, setRuntimeStatus] = useState<IntegrationRuntimeStatus>();
   const feedHealth = useApi(useCallback(async () => intelligenceApi.freshness(await token()), [token]));
 
@@ -72,15 +89,17 @@ export function AdminIntegrationSyncControls() {
     setRoadTechError(undefined);
     try {
       const accessToken = await token();
-      const [system, tracking, samsaraStatus, runtime] = await Promise.all([
+      const [system, tracking, samsaraStatus, samsaraSiteStatus, runtime] = await Promise.all([
         request<SystemState>('/api/v1/system-sync/state', accessToken),
         request<RoadTechStatus>('/api/v1/integrations/roadtech/status', accessToken),
         request<SamsaraStatus>('/api/v1/integrations/samsara/status', accessToken),
+        request<SamsaraSiteAddressStatus>('/api/v1/integrations/samsara/sites/address-sync/status', accessToken),
         request<IntegrationRuntimeStatus>('/api/v1/integrations/status', accessToken),
       ]);
       setState(system);
       setRoadTech(tracking);
       setSamsara(samsaraStatus);
+      setSamsaraSites(samsaraSiteStatus);
       setRuntimeStatus(runtime);
     } catch (error) {
       setRoadTechError(error instanceof Error ? error.message : 'RoadTech diagnostic check failed.');
@@ -132,6 +151,36 @@ export function AdminIntegrationSyncControls() {
   };
 
   const trackingState = roadTech ? roadTechState(roadTech) : undefined;
+
+  const syncSamsaraSiteAddresses = async () => {
+    if (!samsaraSites?.eligibleSites || !window.confirm(`Synchronise ${samsaraSites.eligibleSites} eligible Master Site address${samsaraSites.eligibleSites === 1 ? '' : 's'} to Samsara? Existing addresses will be updated, not duplicated.`)) return;
+    setBusy('samsara-sites');
+    setMessage(undefined);
+    try {
+      const result = await request<{ message: string; failed: number }>('/api/v1/integrations/samsara/sites/address-sync', await token(), { method: 'POST' }, 120000);
+      setMessage(result.message);
+      await loadState();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Samsara Master Site address synchronisation failed.');
+    } finally {
+      setBusy(undefined);
+    }
+  };
+
+  const syncSamsaraMasterData = async () => {
+    if (!samsara?.connected || !window.confirm('Synchronise active SLH Sites, Vehicles and Trailers to Samsara? Existing records will be updated, not duplicated.')) return;
+    setBusy('samsara-master-data');
+    setMessage(undefined);
+    try {
+      const result = await request<{ message: string }>('/api/v1/integrations/samsara/master-data/sync', await token(), { method: 'POST' }, 180000);
+      setMessage(result.message);
+      await loadState();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Samsara Master Data synchronisation failed.');
+    } finally {
+      setBusy(undefined);
+    }
+  };
 
   return <section className="panel" style={{ marginBottom: 18 }}>
     <div className="title-row admin-integration-heading">
@@ -203,6 +252,18 @@ export function AdminIntegrationSyncControls() {
           <div className="notice inline-notice"><strong>Specific settings to amend:</strong> {samsara.missingSettings.join(' · ')}</div>}
         {samsara?.connected &&
           <small>{samsara.vehicleCount} vehicles · {samsara.driverCount} drivers visible to the token</small>}
+        {samsaraSites && <>
+          <p className="hint" style={{ marginTop: 10 }}>{samsaraSites.message}</p>
+          <small>{samsaraSites.alreadyMapped} already mapped · {samsaraSites.pending} pending · {samsaraSites.missingCoordinates} need coordinates · {samsaraSites.missingAddress} need address text</small>
+          <div style={{ marginTop: 10 }}>
+            <button className="primary" onClick={() => void syncSamsaraMasterData()} disabled={Boolean(busy) || !samsara?.connected || !samsara.assetSyncEnabled}>
+              {busy === 'samsara-master-data' ? 'Synchronising Master Data…' : 'Sync Sites, Vehicles & Trailers'}
+            </button>{' '}
+            <button className="primary" onClick={() => void syncSamsaraSiteAddresses()} disabled={Boolean(busy) || !samsara?.connected || !samsaraSites.addressSyncEnabled || samsaraSites.eligibleSites === 0}>
+              {busy === 'samsara-sites' ? 'Synchronising sites…' : `Sync Master Sites to Samsara${samsaraSites.eligibleSites ? ` (${samsaraSites.eligibleSites})` : ''}`}
+            </button>
+          </div>
+        </>}
       </article>
 
       <article className="admin-card">
@@ -227,7 +288,7 @@ export function AdminIntegrationSyncControls() {
       </article>
     </div>
 
-    <p className="hint">Automatic cadence: TachoMaster every 20 minutes · Sage HR 05:30 UK daily · Fleetio hourly · DOT/Falcon continuous. Status refreshes on screen every 60 seconds.</p>
+    <p className="hint">Automatic cadence: TachoMaster every 20 minutes · Sage HR 05:00 and 14:00 UK daily · Fleetio hourly · DOT/Falcon continuous. Status refreshes on screen every 60 seconds.</p>
     {state && <p className="hint">Platform state: <strong>{state.status}</strong>{state.lastPlatformUpdateUtc ? ` · last update ${new Date(state.lastPlatformUpdateUtc).toLocaleString('en-GB')}` : ''}</p>}
     {message && <p className="notice inline-notice">{message}</p>}
   </section>;

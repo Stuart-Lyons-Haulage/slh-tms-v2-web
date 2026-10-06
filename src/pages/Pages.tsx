@@ -275,11 +275,11 @@ function StopEditor({ load, onSaved }: { load: Load; onSaved: () => Promise<void
 
 export function Loads() { const token = useAccessToken(); const load = useCallback(async () => api.orders(undefined, undefined, await token()), [token]); const { data, loading, error } = useApi(load); const orders = planningOrders(data); function exportCsv() { const rows = [['Collection date', 'Order / PO', 'Customer', 'Pallets', 'Delivery date', 'Readiness'], ...orders.map(order => [order.collectionDate, order.poNumber, order.customerCode, order.pallets, order.deliveryDate, order.status])]; const csv = rows.map(row => row.map(value => `"${String(value).replaceAll('"', '""')}"`).join(',')).join('\n'); const link = document.createElement('a'); link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })); link.download = `slh-loads-${new Date().toISOString().slice(0, 10)}.csv`; link.click(); URL.revokeObjectURL(link.href); } return <section><div className="title-row"><div><p className="eyebrow">Loads</p><h1>Approved order load list</h1></div><button onClick={exportCsv} disabled={!orders.length}>Download CSV</button></div><State loading={loading} error={error} empty={!orders.length}><div className="table-wrap"><table><thead><tr><th>Collection</th><th>Order</th><th>Customer</th><th>Pallets</th><th>Delivery</th><th>Readiness</th></tr></thead><tbody>{orders.map(order => <tr key={order.id}><td>{order.collectionDate}</td><td>{order.poNumber}</td><td>{order.customerCode}</td><td>{order.pallets}</td><td>{order.deliveryDate}</td><td><span className={`status ${order.status.toLowerCase()}`}>{order.status}</span></td></tr>)}</tbody></table></div></State></section>; }
 
-export function DriverAssignments() {
+export function DriverAssignments({ embedded = false }: { embedded?: boolean }) {
   const token = useAccessToken(); const today = new Date().toISOString().slice(0, 10); const params = new URLSearchParams(window.location.search); const initialFrom = params.get('from') || today; const initialTo = params.get('to') || initialFrom; const [from, setFrom] = useState(initialFrom); const [to, setTo] = useState(initialTo); const assignments = useApi(useCallback(async () => api.driverAssignments(from, to, await token()), [from, to, token]));
   const rows = assignments.data || []; const allocated = rows.filter(item => item.driver && item.vehicle).length; const unallocated = rows.length - allocated;
   function exportAssignments() { downloadCsv(`slh-driver-assignments-${from}-to-${to}`, [['Date', 'Load', 'Driver', 'Employee number', 'Vehicle', 'Trailer', 'Final stop', 'Stops', 'Status'], ...rows.map(item => [item.planningDate, item.loadReference, item.driver?.displayName, item.driver?.employeeNumber, item.vehicle?.registration, item.trailerNumber, item.finalStop, item.stopCount, item.status])]); }
-  return <section><div className="driver-history-subnav" aria-label="Driver history sections"><NavLink to="/driver-assignments">Driver assignments</NavLink><NavLink to="/driver-timesheets">Timesheets</NavLink></div><div className="title-row"><div><p className="eyebrow">Driver history</p><h1>Driver assignments</h1></div><button onClick={exportAssignments} disabled={!rows.length}>Download CSV</button></div><div className="assignment-toolbar"><label>From <input type="date" value={from} onChange={event => setFrom(event.target.value)} /></label><label>To <input type="date" value={to} min={from} onChange={event => setTo(event.target.value)} /></label><button onClick={() => void assignments.refresh()}>Refresh</button></div><div className="metrics"><Metric label="Loads" value={String(rows.length)} detail={`${from} to ${to}`} /><Metric label="Fully allocated" value={String(allocated)} detail="Driver and vehicle recorded" /><Metric label="Unallocated" value={String(unallocated)} detail="Historic gaps to review" /><Metric label="Drivers used" value={String(new Set(rows.flatMap(item => item.driver ? [item.driver.id] : [])).size)} detail="Distinct assigned drivers" /></div><State loading={assignments.loading} error={assignments.error} empty={!rows.length}><div className="table-wrap"><table><thead><tr><th>Date</th><th>Load</th><th>Driver</th><th>Vehicle</th><th>Trailer</th><th>Final stop</th><th>Status</th></tr></thead><tbody>{rows.map((item: DriverAssignment) => <tr key={item.loadId}><td>{item.planningDate}</td><td><strong>{item.loadReference}</strong><small>{item.stopCount} stop{item.stopCount === 1 ? '' : 's'}</small></td><td>{item.driver ? <><strong>{item.driver.displayName}</strong><small>{item.driver.employeeNumber}</small></> : <span className="status failed">Not assigned</span>}</td><td>{item.vehicle?.registration || '—'}</td><td>{item.trailerNumber || '—'}</td><td>{item.finalStop || '—'}</td><td><span className={`status ${statusClass(item.status)}`}>{stagingStatus(item.status)}</span></td></tr>)}</tbody></table></div></State></section>;
+  return <section>{!embedded && <div className="driver-history-subnav" aria-label="Driver history sections"><NavLink to="/driver-assignments">Driver assignments</NavLink><NavLink to="/driver-timesheets">Timesheets</NavLink></div>}{!embedded && <div className="title-row"><div><p className="eyebrow">Driver history</p><h1>Driver assignments</h1></div><button onClick={exportAssignments} disabled={!rows.length}>Download CSV</button></div>}<div className="assignment-toolbar"><label>From <input type="date" value={from} onChange={event => setFrom(event.target.value)} /></label><label>To <input type="date" value={to} min={from} onChange={event => setTo(event.target.value)} /></label><button onClick={() => void assignments.refresh()}>Refresh</button><button onClick={exportAssignments} disabled={!rows.length}>Download CSV</button></div><div className="metrics"><Metric label="Runs" value={String(rows.length)} detail={`${from} to ${to}`} /><Metric label="Fully allocated" value={String(allocated)} detail="Driver and vehicle recorded" /><Metric label="Unallocated" value={String(unallocated)} detail="Historic gaps to review" /><Metric label="Drivers used" value={String(new Set(rows.flatMap(item => item.driver ? [item.driver.id] : [])).size)} detail="Distinct assigned drivers" /></div><State loading={assignments.loading} error={assignments.error} empty={!rows.length}><div className="table-wrap"><table><thead><tr><th>Date</th><th>Run</th><th>Driver</th><th>Registration</th><th>Trailer</th><th>Final stop</th><th>Shift length</th><th>Status</th></tr></thead><tbody>{rows.map((item: DriverAssignment) => <tr key={item.loadId}><td>{item.planningDate}</td><td><strong>{item.loadReference}</strong><small>{item.stopCount} stop{item.stopCount === 1 ? '' : 's'}</small></td><td>{item.driver ? <><strong>{item.driver.displayName}</strong><small>{item.driver.employeeNumber}</small></> : <span className="status failed">Not assigned</span>}</td><td>{item.vehicle?.registration || '—'}</td><td>{item.trailerNumber || '—'}</td><td>{item.finalStop || '—'}</td><td>{item.shiftLengthMinutes == null ? '—' : `${Math.floor(item.shiftLengthMinutes / 60)}h ${String(item.shiftLengthMinutes % 60).padStart(2, '0')}m`}</td><td><span className={`status ${statusClass(item.status)}`}>{stagingStatus(item.status)}</span></td></tr>)}</tbody></table></div></State></section>;
 }
 
 type CsvCell = string | number | undefined;
@@ -444,23 +444,52 @@ export function StagingQueue({ ordersOnly = false, masterOnly = false }: { order
       if (!validDateInput(planningDate)) {
         throw new Error('Select a valid planning date before re-parsing.');
       }
-      const result = await request<{ eligibleOrders: number; pendingAfterReplay: number; legacyMappingExceptionsArchived: number }>(
-        '/api/v1/order-intake/replay-retained-evidence',
-        await token(),
-        {
-          method: 'POST',
-          body: JSON.stringify({
-            receivedFromUtc: `${addDays(planningDate, -2)}T00:00:00Z`,
-            minimumPlanningDate: planningDate,
-            maximumPlanningDate: planningDate,
-            // Replace stale unamended review candidates, but never revive an
-            // already-promoted order; the API protects promoted PO references.
-            refreshUnamendedPending: true,
-            maxMessages: 500
-          })
+      const replayToken = await token();
+      const replayRequest = {
+        receivedFromUtc: `${addDays(planningDate, -2)}T00:00:00Z`,
+        minimumPlanningDate: planningDate,
+        maximumPlanningDate: planningDate,
+        // Replace stale unamended review candidates, but never revive an
+        // already-promoted order; the API protects promoted PO references.
+        refreshUnamendedPending: true,
+        maxMessages: 5
+      };
+      let afterReceivedAtUtc: string | undefined;
+      let afterEvidenceId: string | undefined;
+      let eligibleOrders = 0;
+      let legacyMappingExceptionsArchived = 0;
+      let pendingAfterReplay = 0;
+      let batches = 0;
+      let hasMore = true;
+      while (hasMore) {
+        const result = await request<{
+          eligibleOrders: number;
+          pendingAfterReplay: number;
+          legacyMappingExceptionsArchived: number;
+          hasMore: boolean;
+          nextAfterReceivedAtUtc?: string;
+          nextAfterEvidenceId?: string;
+        }>(
+          '/api/v1/order-intake/replay-retained-evidence',
+          replayToken,
+          {
+            method: 'POST',
+            body: JSON.stringify({ ...replayRequest, afterReceivedAtUtc, afterEvidenceId })
+          }
+        );
+        batches += 1;
+        eligibleOrders += result.eligibleOrders;
+        legacyMappingExceptionsArchived += result.legacyMappingExceptionsArchived;
+        pendingAfterReplay = result.pendingAfterReplay;
+        afterReceivedAtUtc = result.nextAfterReceivedAtUtc;
+        afterEvidenceId = result.nextAfterEvidenceId;
+        if (result.hasMore && (!afterReceivedAtUtc || !afterEvidenceId)) {
+          throw new Error('The replay returned more evidence without a continuation cursor.');
         }
-      );
-      setMessage(`Replay complete: ${result.eligibleOrders} order${result.eligibleOrders === 1 ? '' : 's'} re-parsed; ${result.legacyMappingExceptionsArchived} old mapping exception${result.legacyMappingExceptionsArchived === 1 ? '' : 's'} archived; ${result.pendingAfterReplay} now awaiting review.`);
+        hasMore = result.hasMore;
+        if (hasMore) setMessage(`Re-parsing retained evidence… batch ${batches} complete.`);
+      }
+      setMessage(`Replay complete: ${eligibleOrders} order${eligibleOrders === 1 ? '' : 's'} re-parsed; ${legacyMappingExceptionsArchived} old mapping exception${legacyMappingExceptionsArchived === 1 ? '' : 's'} archived; ${pendingAfterReplay} now awaiting review.`);
       await refresh();
     } catch (exception) {
       setMessage(exception instanceof Error ? exception.message : 'Retained evidence replay failed.');

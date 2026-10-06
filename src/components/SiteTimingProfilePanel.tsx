@@ -63,10 +63,6 @@ function fmtTime(value?: string) {
   return value.length >= 5 ? value.slice(0, 5) : value;
 }
 
-function isoDate(value?: string) {
-  return value ? new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '—';
-}
-
 export function SiteTimingProfilePanel({ siteId }: { siteId: string }) {
   const token = useAccessToken();
   const [profile, setProfile] = useState<SiteTimingProfile>();

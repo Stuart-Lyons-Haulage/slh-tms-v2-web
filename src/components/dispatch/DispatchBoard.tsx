@@ -1,11 +1,11 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
-import { getDriverDispatchRoute } from "../../api/runs";
 import { useAccessToken } from "../../lib/auth";
+import { updateRunRelay } from "../../api/runs";
 import "../../smart-dispatch.css";
-import { ComplianceWarningBanner } from "./ComplianceWarningBanner";
 import { DispatchDriverRow } from "./DispatchDriverRow";
 import { DispatchFilters } from "./DispatchFilters";
-import { allocateDispatchRun, checkDispatchReadiness, downloadSamsaraCsv, getAvailableTimes, getSmartDispatch, sendRunToSamsara, syncDispatchDrivers, syncSamsaraMappings, unassignDispatchRun } from "./dispatchApi";
+import { rankDriversForRun } from "./dispatchRunRanking";
+import { allocateDispatchRun, downloadSamsaraCsv, getAvailableTimes, getSmartDispatch, sendRunToSamsara, syncDispatchDrivers, syncSamsaraMappings, unassignDispatchRun } from "./dispatchApi";
 import {
   applyAvailableTimes,
   applyAvailableTime,
@@ -17,13 +17,10 @@ import {
   filterDispatchDrivers,
   filterDriversByEmploymentType,
   globalFailures,
-  reducedRestDriverIds,
   rowFailures,
-  selectedAllocations,
   type DispatchAvailableTimeMap,
   type DispatchSelectionMap
 } from "./dispatchBoardState";
-import { routeDrivingMinutes } from "./dispatchMessaging";
 import type { DispatchAllocationSelection, DispatchDriverDto, DispatchEmploymentFilter, DispatchFilter, DispatchLockFailure, DispatchRunDto } from "./types";
 
 type Props = {
@@ -34,7 +31,7 @@ type Props = {
 };
 
 type SmartDispatchSnapshot = Awaited<ReturnType<typeof getSmartDispatch>>;
-type ActionState = "times" | "lock" | "refresh" | "samsara" | undefined;
+type ActionState = "refresh" | "samsara" | undefined;
 const filterValues: DispatchFilter[] = ["all", "unallocated", "backloads", "warnings", "skills-mismatch"];
 const employmentFilterValues: DispatchEmploymentFilter[] = ["all", "employed", "agency", "casual", "subcontractor", "unmatched"];
 
@@ -49,14 +46,14 @@ function runTime(value?: string): string {
   return Number.isNaN(date.getTime()) ? "Time not set" : date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 }
 
-function RunSidebar({ runs, owners, drivers }: {
+function RouteSidebar({ runs, owners, drivers }: {
   runs: DispatchRunDto[];
   owners: Record<string, string | undefined>;
   drivers: DispatchDriverDto[];
 }) {
-  return <aside className="smart-run-sidebar" aria-label="Runs ready for driver allocation">
+  return <aside className="smart-run-sidebar" aria-label="Routes ready for driver allocation">
     <div className="smart-run-sidebar-head">
-      <strong>Runs</strong>
+      <strong>Routes</strong>
       <span>{runs.length}</span>
     </div>
     <p>First collection → final delivery. Best-fit suggestions use the driver’s last known position plus first collection proximity, skills and continuity.</p>
@@ -64,7 +61,9 @@ function RunSidebar({ runs, owners, drivers }: {
       {runs.map(run => {
         const ownerId = owners[run.runId];
         const owner = ownerId ? drivers.find(driver => driver.driverId === ownerId) : undefined;
-        const suggested = drivers.filter(driver => driver.suggestedRunId === run.runId).slice(0, 2);
+        const suggestedDrivers = drivers.filter(driver => driver.suggestedRunId === run.runId);
+        const rankedDrivers = rankDriversForRun(run, drivers, owners)
+          .sort((left, right) => Number(suggestedDrivers.includes(right.driver)) - Number(suggestedDrivers.includes(left.driver)) || right.score - left.score);
         return <article className={`smart-run-card ${owner ? "allocated" : "available"}`} key={run.runId}>
           <div className="smart-run-card-title">
             <strong>{run.reference}</strong>
@@ -76,18 +75,17 @@ function RunSidebar({ runs, owners, drivers }: {
             <span><b>Deliver</b>{run.finalDeliveryPoint?.name || "Final stop not set"}</span>
           </div>
           {owner && <small>Allocated/selected · {owner.name}</small>}
-          {!owner && suggested.length > 0 && <small className="smart-run-fit">Suggested · {suggested.map(driver => driver.name).join(" / ")}</small>}
-          {run.trailerSwapRequested && <small className="smart-run-warning">Planner note: trailer swap requested</small>}
+          {!owner && rankedDrivers.length > 0 && <details className="smart-run-fit">
+            <summary>Best driver matches</summary>
+            <ol>{rankedDrivers.slice(0, 3).map(match => <li key={match.driver.driverId}><strong>{match.driver.name} · {match.score}/100</strong><small>{match.reasons.join(" · ")}</small></li>)}</ol>
+          </details>}
+          {!owner && rankedDrivers.length === 0 && <small className="smart-run-warning">No eligible driver currently matches this route</small>}
+          {run.relay?.enabled && <small className="smart-run-warning">Relay: collect → {run.relay.handoverSite || "handover site required"} → delivery</small>}
+          {!run.relay?.enabled && run.trailerSwapRequested && <small className="smart-run-warning">Planner note: trailer swap requested</small>}
         </article>;
       })}
     </div>
   </aside>;
-}
-
-export function GetTimesButton({ busy, onGetTimes }: { busy: boolean; onGetTimes: () => void }) {
-  return <button className="smart-action secondary" type="button" disabled={busy} onClick={onGetTimes}>
-    {busy ? "Getting Tacho times…" : "Get Times"}
-  </button>;
 }
 
 export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions, onLocked }: Props) {
@@ -103,6 +101,7 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
   const [busyDriverId, setBusyDriverId] = useState<string>();
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
+  const [relayBusyId, setRelayBusyId] = useState<string>();
 
   const refresh = useCallback(async () => {
     setAction(current => current || "refresh");
@@ -111,12 +110,7 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
       const access = await token();
       const data = await getSmartDispatch(planningDate, access);
       const initialSelections = buildInitialSelections(data.drivers, data.runs, data.equipment);
-      const rows = await getAvailableTimes(
-        planningDate,
-        data.drivers.map(driver => driver.driverId),
-        access,
-        reducedRestDriverIds(initialSelections)
-      );
+      const rows = data.availableTimes;
       setSnapshot(data);
       setSelections(applyAvailableTimes(initialSelections, rows));
       setAvailableTimes(availableTimesByDriver(rows));
@@ -143,20 +137,19 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
   }, [availableTimes, driverSearch, employmentFilter, failures, filter, selections, snapshot]);
 
   const filterCounts = useMemo(() => {
-    const workforce = snapshot ? filterDriversByEmploymentType(snapshot.drivers, employmentFilter) : [];
+    const workforce = snapshot ? filterDriversByEmploymentType(snapshot.drivers, "all") : [];
     const searched = filterDriversByDriverSearch(workforce, driverSearch);
     return Object.fromEntries(filterValues.map(value => [
       value,
       snapshot ? filterDispatchDrivers(searched, value, selections, snapshot.runs, availableTimes, failures).length : 0
     ])) as Record<DispatchFilter, number>;
-  }, [availableTimes, driverSearch, employmentFilter, failures, selections, snapshot]);
+  }, [availableTimes, driverSearch, failures, selections, snapshot]);
 
   const employmentCounts = useMemo(() => Object.fromEntries(employmentFilterValues.map(value => [
     value,
     snapshot ? filterDriversByEmploymentType(snapshot.drivers, value).length : 0
   ])) as Record<DispatchEmploymentFilter, number>, [snapshot]);
 
-  const selectedCount = snapshot ? selectedAllocations(snapshot.drivers, selections).length : 0;
   const samsaraExportCandidates = useMemo(() => {
     if (!snapshot) return [];
     return snapshot.equipment.loads.filter(load =>
@@ -164,8 +157,9 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
       Boolean(load.vehicleId) &&
       (load.stops?.length || 0) >= 2 &&
       !snapshot.samsaraDispatch[load.id] &&
-      !String(load.status || '').toLowerCase().includes('cancel'));
+      !String(load.status || "").toLowerCase().includes("cancel"));
   }, [snapshot]);
+
   const globalLockFailures = useMemo(() => {
     const driverIds = new Set(snapshot?.drivers.map(driver => driver.driverId) || []);
     return globalFailures(failures, driverIds);
@@ -213,22 +207,7 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
     setNotice(undefined);
   }
 
-  async function handleSyncDrivers() {
-    setAction("refresh");
-    setError(undefined);
-    setNotice(undefined);
-    try {
-      await syncDispatchDrivers(await token());
-      await refresh();
-      setNotice("Driver Master sync completed.");
-    } catch (exception) {
-      setError(exception instanceof Error ? exception.message : "Driver Master sync failed.");
-    } finally {
-      setAction(undefined);
-    }
-  }
-
-  async function handleSyncAndGetTimes() {
+  async function handleRefreshStaff() {
     setAction("refresh");
     setError(undefined);
     setNotice(undefined);
@@ -238,19 +217,14 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
       await syncDispatchDrivers(access);
       const nextSnapshot = await getSmartDispatch(planningDate, access);
       const nextSelections = buildInitialSelections(nextSnapshot.drivers, nextSnapshot.runs, nextSnapshot.equipment);
-      const rows = await getAvailableTimes(
-        planningDate,
-        nextSnapshot.drivers.map(driver => driver.driverId),
-        access,
-        reducedRestDriverIds(nextSelections)
-      );
+      const rows = nextSnapshot.availableTimes;
       setSnapshot(nextSnapshot);
       setSelections(applyAvailableTimes(nextSelections, rows));
       setAvailableTimes(availableTimesByDriver(rows));
       const warnings = rows.filter(row => Boolean(row.breachDetail)).length;
       setNotice(warnings > 0
-        ? `Drivers synced and Tacho times refreshed for ${rows.length} drivers · ${warnings} require planner attention.`
-        : `Drivers synced and Tacho times refreshed for ${rows.length} drivers.`);
+        ? `Staff refreshed from Driver Master/Sage and Tacho times recalculated for ${rows.length} staff · ${warnings} require planner attention.`
+        : `Staff refreshed from Driver Master/Sage and Tacho times recalculated for ${rows.length} staff.`);
     } catch (exception) {
       setError(exception instanceof Error ? exception.message : "Driver sync and Tacho refresh failed.");
     } finally {
@@ -258,30 +232,28 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
     }
   }
 
-  async function handleGetTimes() {
-    if (!snapshot || snapshot.drivers.length === 0) return;
-    setAction("times");
-    setError(undefined);
+  async function saveRelayAllocation(runId: string, patch: { deliveryDriverId?: string; deliveryVehicleId?: string; deliveryTrailerId?: string }) {
+    const run = snapshot?.runs.find(item => item.runId === runId);
+    if (!run?.relay?.enabled) return;
+    setRelayBusyId(runId);
     setNotice(undefined);
-    setFailures([]);
     try {
-      const access = await token();
-      const rows = await getAvailableTimes(
-        planningDate,
-        snapshot.drivers.map(driver => driver.driverId),
-        access,
-        reducedRestDriverIds(selections)
-      );
-      setAvailableTimes(availableTimesByDriver(rows));
-      setSelections(current => applyAvailableTimes(current, rows));
-      const warnings = rows.filter(row => Boolean(row.breachDetail)).length;
-      setNotice(warnings > 0
-        ? `Tacho times refreshed for ${rows.length} drivers · ${warnings} require planner attention.`
-        : `Tacho times refreshed for ${rows.length} drivers.`);
+      await updateRunRelay(runId, {
+        enabled: true,
+        handoverSite: run.relay.handoverSite,
+        handoverSiteId: run.relay.handoverSiteId,
+        handoverAfterStopSequence: run.relay.handoverAfterStopSequence,
+        plannedHandoverUtc: run.relay.plannedHandoverUtc,
+        deliveryDriverId: patch.deliveryDriverId ?? run.relay.deliveryDriverId,
+        deliveryVehicleId: patch.deliveryVehicleId ?? run.relay.deliveryVehicleId,
+        deliveryTrailerId: patch.deliveryTrailerId ?? run.relay.deliveryTrailerId,
+      }, await token());
+      await refresh();
+      setNotice(`${run.reference} relay allocation saved. Check both legs before exporting to Samsara.`);
     } catch (exception) {
-      setError(exception instanceof Error ? exception.message : "Tacho available times could not be calculated.");
+      setNotice(exception instanceof Error ? exception.message : "Relay allocation could not be saved.");
     } finally {
-      setAction(undefined);
+      setRelayBusyId(undefined);
     }
   }
 
@@ -314,28 +286,15 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
 
       if (lockedRunId(driver.driverId) !== effectiveSelection.runId) {
         await allocateDispatchRun(effectiveSelection.runId, driver.driverId, effectiveSelection, access);
-        setNotice(`${snapshot.runs.find(run => run.runId === effectiveSelection.runId)?.reference || "Run"} allocated to ${driver.name}. Checking route and Samsara readiness…`);
+        setNotice(`${snapshot.runs.find(run => run.runId === effectiveSelection.runId)?.reference || "Route"} allocated to ${driver.name}. Tacho, Sage and Fleetio checks passed; allocation secured in SLH TMS.`);
         onLocked?.();
       }
 
-      const route = await getDriverDispatchRoute(effectiveSelection.runId, access);
-      const minutes = routeDrivingMinutes(route);
-      if (!minutes) throw new Error("The run could not be routed. No HGV driving time was returned.");
-
-      let readiness = await checkDispatchReadiness(effectiveSelection.runId, minutes, false, access);
-      if (!readiness.canDispatch && readiness.structuralReadiness?.classification === "Unverified" && readiness.structuralReadiness.requiresAcknowledgement) {
-        const warnings = readiness.structuralReadiness.checks.filter(check => !check.passed).map(check => `• ${check.message}`).join("\n");
-        if (!window.confirm(`Pre-dispatch warnings:\n\n${warnings}\n\nAcknowledge and continue?`)) return;
-        readiness = await checkDispatchReadiness(effectiveSelection.runId, minutes, true, access);
-      }
-      if (!readiness.canDispatch) throw new Error(readiness.explanation || "Dispatch readiness did not pass.");
-
       await refresh();
-      setNotice(snapshot.samsaraConfigured
-        ? "Dispatch checks passed. The run is allocated and ready; use Send to Samsara when the plan is final."
-        : "Dispatch checks passed. The run is allocated and ready for route export.");
+      setNotice(`${snapshot.runs.find(run => run.runId === effectiveSelection.runId)?.reference || "Route"} allocation secured for ${driver.name}. Use Export to Samsara when the route is ready to send.`);
     } catch (exception) {
       const reason = exception instanceof Error ? exception.message : "Dispatch could not be prepared.";
+      setNotice(`Dispatch failed for ${driver.name}: ${reason}`);
       setFailures(current => current.some(failure => failure.driverId === driver.driverId && failure.reason === reason)
         ? current
         : [...current.filter(failure => failure.driverId !== driver.driverId), { driverId: driver.driverId, runId: selection.runId, reason }]);
@@ -347,7 +306,7 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
   async function handleSamsaraBatch() {
     if (!snapshot?.samsaraConfigured || samsaraExportCandidates.length === 0) return;
     const count = samsaraExportCandidates.length;
-    if (count > 1 && !window.confirm(`Export ${count} allocated run${count === 1 ? '' : 's'} to Samsara? Existing Samsara routes are not duplicated.`)) return;
+    if (count > 1 && !window.confirm(`Export ${count} allocated route${count === 1 ? "" : "s"} to Samsara? Existing Samsara routes are not duplicated.`)) return;
 
     setAction("samsara");
     setNotice(undefined);
@@ -358,7 +317,6 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
       let exported = 0;
 
       await syncSamsaraMappings(planningDate, access);
-
       for (const load of samsaraExportCandidates) {
         try {
           await sendRunToSamsara(load.id, access);
@@ -375,9 +333,9 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
       await refresh();
       setFailures(batchFailures);
       if (exported > 0)
-        setNotice(`${exported} run${exported === 1 ? '' : 's'} exported to Samsara${batchFailures.length ? `; ${batchFailures.length} need attention` : '.'}`);
+        setNotice(`${exported} route${exported === 1 ? "" : "s"} exported to Samsara${batchFailures.length ? `; ${batchFailures.length} need attention` : "."}`);
       else if (batchFailures.length > 0)
-        setError(`No runs were exported to Samsara. ${batchFailures.length} run${batchFailures.length === 1 ? '' : 's'} need attention.`);
+        setError(`No routes were exported to Samsara. ${batchFailures.length} route${batchFailures.length === 1 ? "" : "s"} need attention.`);
     } finally {
       setAction(undefined);
     }
@@ -396,7 +354,7 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
       await refresh();
       setNotice(result.message);
     } catch (exception) {
-      const reason = exception instanceof Error ? exception.message : "The run could not be sent to Samsara.";
+       const reason = exception instanceof Error ? exception.message : "The route could not be sent to Samsara.";
       setFailures(current => [...current.filter(failure => failure.driverId !== driver.driverId), {
         driverId: driver.driverId,
         runId: selection.runId,
@@ -430,7 +388,7 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
 
   async function handleUnassign(driver: DispatchDriverDto, selection: DispatchAllocationSelection) {
     if (!selection.runId || lockedRunId(driver.driverId) !== selection.runId) return;
-    const reference = snapshot?.runs.find(run => run.runId === selection.runId)?.reference || "this run";
+     const reference = snapshot?.runs.find(run => run.runId === selection.runId)?.reference || "this route";
     if (!window.confirm(`Unassign ${reference} from ${driver.name}? This releases the driver, vehicle and trailer.`)) return;
     setBusyDriverId(driver.driverId);
     setNotice(undefined);
@@ -442,7 +400,7 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
       setFailures(current => [...current.filter(failure => failure.driverId !== driver.driverId), {
         driverId: driver.driverId,
         runId: selection.runId,
-        reason: exception instanceof Error ? exception.message : "Run could not be unassigned."
+         reason: exception instanceof Error ? exception.message : "Route could not be unassigned."
       }]);
     } finally {
       setBusyDriverId(undefined);
@@ -477,46 +435,31 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
           type="button"
           disabled={Boolean(action) || !snapshot.samsaraConfigured || samsaraExportCandidates.length === 0}
           onClick={() => void handleSamsaraBatch()}
-          title={!snapshot.samsaraConfigured ? "Configure Samsara in Admin before exporting runs." : samsaraExportCandidates.length === 0 ? "No allocated unsent runs are ready for Samsara." : "Export all allocated runs not already sent to Samsara."}
+          title={!snapshot.samsaraConfigured ? "Configure Samsara in Admin before exporting routes." : samsaraExportCandidates.length === 0 ? "No allocated unsent routes are ready for Samsara." : "Export all allocated routes not already sent to Samsara."}
         >
-          {action === "samsara" ? "Exporting to Samsara…" : `Export to Samsara${samsaraExportCandidates.length ? ` (${samsaraExportCandidates.length})` : ''}`}
+          {action === "samsara" ? "Exporting to Samsara…" : `Export to Samsara${samsaraExportCandidates.length ? ` (${samsaraExportCandidates.length})` : ""}`}
         </button>
-        <button className="smart-action secondary" type="button" disabled={Boolean(action)} onClick={() => void handleSyncAndGetTimes()}>{action === "refresh" ? "Syncing & getting times…" : "Sync Drivers + Get Times"}</button>
-        <button className="smart-action ghost" type="button" disabled={Boolean(action)} onClick={() => void refresh()}>{action === "refresh" ? "Refreshing…" : "Refresh"}</button>
-        <GetTimesButton busy={action === "times"} onGetTimes={() => void handleGetTimes()} />
+        <button className="smart-action secondary" type="button" disabled={Boolean(action)} onClick={() => void handleRefreshStaff()}>{action === "refresh" ? "Refreshing staff…" : "Refresh Staff & Get Times"}</button>
       </div>
     </header>
 
-    <div className="samsara-dispatch-strip" role="region" aria-label="Samsara dispatch export">
-      <div>
-        <strong>Samsara route export</strong>
-        <span>{snapshot.samsaraConfigured
-          ? `${samsaraExportCandidates.length} allocated unsent run${samsaraExportCandidates.length === 1 ? '' : 's'} ready · ${Object.keys(snapshot.samsaraDispatch).length} already sent`
-          : snapshot.samsaraConnectionMessage || 'Samsara API is unavailable. CSV fallback remains available on each allocated run.'}</span>
-      </div>
-      <button
-        className="smart-action primary"
-        type="button"
-        disabled={Boolean(action) || !snapshot.samsaraConfigured || samsaraExportCandidates.length === 0}
-        onClick={() => void handleSamsaraBatch()}
-      >
-        {action === "samsara" ? "Exporting…" : "Export to Samsara"}
-      </button>
-    </div>
-
-    <ComplianceWarningBanner drivers={snapshot.drivers} availableTimes={availableTimes} failures={failures} />
     {notice && <div className="smart-dispatch-notice" role="status">{notice}</div>}
     {error && <div className="smart-dispatch-error inline" role="alert">{error}</div>}
     {globalLockFailures.map((failure, index) => <div className="smart-dispatch-error inline" role="alert" key={`${failure.reason}-${index}`}>{failure.reason}</div>)}
 
-    <div className="smart-dispatch-summary">
-      <span><strong>{snapshot.drivers.length}</strong> recent/operational drivers</span>
-      <span><strong>{snapshot.visibility.windowDays}</strong> day rolling window</span>
-      <span><strong>{snapshot.runs.length}</strong> runs</span>
-      <span><strong>{selectedCount}</strong> selected/allocated</span>
-      <span><strong>{snapshot.drivers.filter(driver => driver.backloadCandidate).length}</strong> backload candidates</span>
-      <span><strong>{Object.keys(snapshot.samsaraDispatch).length}</strong> Samsara sent</span>
-    </div>
+    {snapshot.runs.filter(run => run.relay?.enabled).map(run => {
+      const relay = run.relay!;
+      const deliveryDriver = snapshot.drivers.find(driver => driver.driverId === relay.deliveryDriverId);
+      const load = snapshot.equipment.loads.find(item => item.id === run.runId);
+      const collectionDriver = snapshot.drivers.find(driver => driver.driverId === load?.driverId);
+      return <section className="relay-dispatch-panel" key={run.runId} aria-label={`Relay allocation for ${run.reference}`}>
+        <div><strong>{run.reference} · Relay / trailer swap</strong><span>{collectionDriver?.name || "Collection driver not allocated"} collects → {relay.handoverSite || "handover site required"} → delivery driver</span></div>
+        <label>Delivery driver<select value={relay.deliveryDriverId || ""} onChange={event => void saveRelayAllocation(run.runId, { deliveryDriverId: event.target.value || undefined })} disabled={relayBusyId === run.runId}><option value="">Select delivery driver…</option>{snapshot.drivers.filter(driver => !driver.onLeave && !driver.isBlocked).map(driver => <option key={driver.driverId} value={driver.driverId}>{driver.name} · {driver.driverCode}</option>)}</select></label>
+        <label>Delivery vehicle<select value={relay.deliveryVehicleId || ""} onChange={event => void saveRelayAllocation(run.runId, { deliveryVehicleId: event.target.value || undefined })} disabled={relayBusyId === run.runId}><option value="">Select delivery vehicle…</option>{snapshot.equipment.vehicles.map(vehicle => <option key={vehicle.id} value={vehicle.id}>{vehicle.registration}{vehicle.fleetNumber ? ` · ${vehicle.fleetNumber}` : ""}</option>)}</select></label>
+        <label>Delivery trailer<select value={relay.deliveryTrailerId || ""} onChange={event => void saveRelayAllocation(run.runId, { deliveryTrailerId: event.target.value || undefined })} disabled={relayBusyId === run.runId}><option value="">Select replacement trailer…</option>{snapshot.equipment.trailers.map(trailer => <option key={trailer.id} value={trailer.id}>{trailer.trailerNumber}{trailer.type ? ` · ${trailer.type}` : ""}</option>)}</select></label>
+        <small>{deliveryDriver ? `Delivery leg: ${deliveryDriver.name}` : "Samsara export will remain blocked until the delivery leg is assigned."}</small>
+      </section>;
+    })}
 
     <DispatchFilters
       value={filter}
@@ -530,12 +473,12 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
     />
 
     <div className="smart-dispatch-workspace">
-      <RunSidebar runs={snapshot.runs} owners={runOwnerById} drivers={snapshot.drivers} />
+      <RouteSidebar runs={snapshot.runs} owners={runOwnerById} drivers={snapshot.drivers} />
       <div className="smart-dispatch-table-wrap">
         <table className="smart-dispatch-table authoritative">
           <thead>
             <tr>
-              <th>Driver</th><th>Duty</th><th>Last location / fit</th><th>Skills</th><th>Run</th><th>Vehicle</th><th>Trailer</th><th>Available / WTD</th><th>Status</th><th>Dispatch</th>
+              <th>Driver</th><th>Duty</th><th>Last location / fit</th><th>Skills</th><th>Route</th><th>Vehicle</th><th>Trailer</th><th>Available / WTD</th><th>Status</th><th>Dispatch</th>
             </tr>
           </thead>
           <tbody>
@@ -567,6 +510,5 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
       </div>
     </div>
 
-     <p className="smart-dispatch-footnote">Select work and press Dispatch to validate and allocate the run. When the plan is final, use Send to Samsara for the explicit route export. The Planner owns the built-run Lock Plan step. Regular 11h daily rest is the default; choose Reduced rest (9h) only when the planner intends to use that concession. Trailer continuity follows the driver's last-used trailer unless the selected run contains a planner trailer-swap instruction. Samsara updates the same external run rather than creating duplicates. Unassign remains audited after the plan is locked.</p>
   </section>;
 }

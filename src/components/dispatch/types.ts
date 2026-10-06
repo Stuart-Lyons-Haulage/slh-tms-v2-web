@@ -21,6 +21,17 @@ export interface DispatchCollectionPointDto {
   longitude?: number;
 }
 
+export interface DispatchRelayDto {
+  enabled: boolean;
+  handoverSite?: string;
+  handoverSiteId?: string;
+  handoverAfterStopSequence?: number;
+  plannedHandoverUtc?: string;
+  deliveryDriverId?: string;
+  deliveryVehicleId?: string;
+  deliveryTrailerId?: string;
+}
+
 export interface DispatchTachoDataDto {
   currentDutyDay: number;
   shiftEndTimeUtc?: string;
@@ -65,17 +76,30 @@ export interface DispatchDriverDto {
   contractedDays: string[];
   homeDepot?: string;
   tachoData: DispatchTachoDataDto;
+  dayNumber?: number;
+  onLeave?: boolean;
+  leaveType?: string;
+  leaveDetails?: string;
+  partDayLeave?: boolean;
   trackingData: DispatchTrackingDataDto;
   needsReturn: boolean;
   availableFrom?: string;
   isBlocked: boolean;
   blockedReason?: string;
+  availabilityGroup?: string;
+  availabilityUntil?: string;
+  availabilityConfirmed?: boolean;
+  agencyName?: string;
+  placementEndDate?: string;
+  classificationMismatch?: boolean;
   suggestedRunId?: string;
   suggestedRunReference?: string;
   distanceToSuggestedCollectionMiles?: number;
   backloadCandidate: boolean;
   deadheadReductionMiles?: number;
   suggestion?: string;
+  suggestionScore?: number;
+  suggestionReasons?: string[];
   previousRunReference?: string;
   previousPlanningDate?: string;
   previousTrailerId?: string;
@@ -97,6 +121,7 @@ export interface DispatchRunDto {
   finalDeliveryPoint?: DispatchCollectionPointDto;
   plannerNotes?: string;
   trailerSwapRequested?: boolean;
+  relay?: DispatchRelayDto;
 }
 
 export interface DispatchAvailableTimeDto {
@@ -164,6 +189,7 @@ export interface LegacyDispatchLoad {
   trailerId?: string;
   plannedStartUtc?: string;
   plannerNotes?: string;
+  relayPlan?: DispatchRelayDto;
   southbound?: boolean;
   stops?: LegacyDispatchStop[];
 }
@@ -214,4 +240,54 @@ export interface DispatchVisibilitySnapshot {
   windowDays: number;
   cutoffDate: string;
   drivers: DispatchVisibilityItem[];
+}
+
+export interface DriverAvailabilityItem {
+  driverId: string;
+  availabilityWindowId?: string;
+  employeeNumber: string;
+  displayName: string;
+  employmentType: "Employed" | "Agency" | "Casual" | "Unknown" | string;
+  group: "Employed available" | "Agency confirmed" | "Agency unconfirmed" | "Casual confirmed" | "Casual unconfirmed" | "Unavailable/blocked" | string;
+  dispatchable: boolean;
+  blockReasons: string[];
+  classificationMismatch: boolean;
+  classificationReviewReason?: string;
+  agencyName?: string;
+  skills?: string;
+  driverGroup?: string;
+  availableFromUtc?: string;
+  availableUntilUtc?: string;
+  availabilityConfirmed: boolean;
+  longTermPlacement: boolean;
+  placementEndDate?: string;
+  usualDays?: string;
+  notes?: string;
+  bookingReference?: string;
+  currentAllocationCount: number;
+  currentAllocationReference?: string;
+  driveAvailableTodayMinutes?: number;
+  workAvailableWeekMinutes?: number;
+  licenceExpiry?: string;
+  cpcExpiry?: string;
+  tachoCardExpiry?: string;
+  licenceStatus?: string;
+}
+
+export interface DriverAvailabilitySnapshot {
+  planningDate: string;
+  generatedAtUtc: string;
+  summary: {
+    employedAvailable: number;
+    agencyConfirmed: number;
+    agencyUnconfirmed: number;
+    casualConfirmed: number;
+    casualUnconfirmed: number;
+    unavailableBlocked: number;
+    driversRequired: number;
+    availableDrivers: number;
+    surplusShortfall: number;
+  };
+  drivers: DriverAvailabilityItem[];
+  classificationMismatchCount: number;
 }

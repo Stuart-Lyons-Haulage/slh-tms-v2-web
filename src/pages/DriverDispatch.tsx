@@ -113,6 +113,7 @@ type DriverDispatchStatus = {
 type MessageMode = "initial" | "amendment" | "update";
 type MessageState = { load: DispatchLoad; text: string; routeMinutes: number; acknowledgeUnverified: boolean; mode: MessageMode };
 type OperationalHistoryItem = { id: string; entityType: string; entityId: string; eventType: string; actor?: string; payloadJson: string; occurredAtUtc: string };
+const normaliseTypeaheadText = (value: unknown) => String(value ?? "").replace(/[^a-z0-9]/gi, "").toLowerCase();
 type DispatchReadiness = {
   canDispatch: boolean;
   explanation?: string;
@@ -278,8 +279,8 @@ function TypeaheadSelect({ value, options, placeholder, onChange, disabled, list
   const [open, setOpen] = useState(false);
   useEffect(() => setText(selected?.label || ""), [selected?.label, value]);
   const matches = useMemo(() => {
-    const query = text.trim().toLowerCase();
-    return (query ? options.filter(option => `${option.label} ${option.search || ""}`.toLowerCase().includes(query)) : options).slice(0, 18);
+    const query = normaliseTypeaheadText(text);
+    return (query ? options.filter(option => normaliseTypeaheadText(`${option.label} ${option.search || ""} ${option.id}`).includes(query)) : options).slice(0, 18);
   }, [options, text]);
   const choose = (option: SearchOption) => {
     setText(option.label);
@@ -698,7 +699,7 @@ function DispatchRow({ driver, data, status, calculatedStart, showGroup, token, 
     .map(trailer => ({
       id: trailer.id,
       label: `${trailer.trailerNumber}${trailer.id === suggestedTrailerId ? " · Assistant" : trailer.type ? ` · ${trailer.type}` : ""}`,
-      search: `${trailer.trailerNumber} ${trailer.type || ""}`
+      search: `${trailer.trailerNumber} ${trailer.type || ""} trailer`
     }));
 
   const runOptions: SearchOption[] = [...data.loads]

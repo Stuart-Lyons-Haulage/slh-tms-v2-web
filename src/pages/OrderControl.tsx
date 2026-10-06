@@ -9,6 +9,7 @@ import { JobsOperational } from "./JobsOperational";
 import { OrderReviewBulk } from "./OrderReviewBulk";
 import { UndatedOrderReviewQueue } from "./UndatedOrderReviewQueue";
 import { listRuns } from "../api/runs";
+import { tomorrowIsoDate } from "../lib/dateUtils";
 import type { Load, TransportOrder } from "../lib/api";
 
 type OrderControlTab = "review" | "live";
@@ -49,10 +50,14 @@ type ForceReviewResponse = {
   stagedImportId?: string;
 };
 
-function localDate() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
+type RetainedReplayResponse = {
+  eligibleOrders: number;
+  pendingAfterReplay: number;
+  legacyMappingExceptionsArchived: number;
+  hasMore: boolean;
+  nextAfterReceivedAtUtc?: string;
+  nextAfterEvidenceId?: string;
+};
 
 function addDays(date: string, days: number) {
   const [year, month, day] = date.split("-").map(Number);
@@ -78,6 +83,43 @@ function formatShortDateTime(value?: string) {
 
 function refreshVisibleReviewData() {
   window.dispatchEvent(new Event(SILENT_API_REFRESH_EVENT));
+}
+
+function OrderReviewDateStrip({ selectedDate, onChange }: { selectedDate: string; onChange: (date: string) => void }) {
+  const token = useAccessToken();
+  const dates = useMemo(() => Array.from({ length: 11 }, (_, index) => addDays(selectedDate, index - 5)), [selectedDate]);
+  const [counts, setCounts] = useState<Record<string, number | undefined>>({});
+
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      const results = await Promise.all(dates.map(async (date) => {
+        try {
+          const result = await request<{ total: number }>(`/api/v1/staging/queue?status=PendingReview&entityType=order&page=1&pageSize=1&planningDate=${encodeURIComponent(date)}`, await token());
+          return [date, result.total] as const;
+        } catch {
+          return [date, undefined] as const;
+        }
+      }));
+      if (active) setCounts(Object.fromEntries(results));
+    })();
+    return () => { active = false; };
+  }, [dates, token]);
+
+  return <div className="order-date-strip" aria-label="Pending order dates">
+    {dates.map((date) => {
+      const value = new Date(`${date}T12:00:00`);
+      const count = counts[date];
+      const selected = date === selectedDate;
+      return <button key={date} type="button" className={`${count ? "has-orders" : "empty"} ${selected ? "selected" : ""}`} onClick={() => onChange(date)} aria-pressed={selected} title={`${date}: ${count == null ? "checking" : `${count} pending order${count === 1 ? "" : "s"}`}`}>
+        <span>{new Intl.DateTimeFormat("en-GB", { weekday: "short" }).format(value)}</span>
+        <strong>{value.getDate()}</strong>
+        <small>{new Intl.DateTimeFormat("en-GB", { month: "short" }).format(value)}</small>
+        <b>{count == null ? "…" : count}</b>
+        <em>{count === 1 ? "order" : "orders"}</em>
+      </button>;
+    })}
+  </div>;
 }
 
 export function ApprovedOrdersList({ date, token }: { date: string; token: ReturnType<typeof useAccessToken> }) {
@@ -128,6 +170,7 @@ function OrderIntakeCacheRecovery({ date }: { date: string }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [forcing, setForcing] = useState<string | "all" | undefined>();
+  const [replaying, setReplaying] = useState(false);
   const [data, setData] = useState<CachedEmailResponse>();
   const [notice, setNotice] = useState<string>();
   const [error, setError] = useState<string>();
@@ -182,6 +225,54 @@ function OrderIntakeCacheRecovery({ date }: { date: string }) {
     }
   }
 
+  async function replayRetainedEvidence() {
+    setReplaying(true);
+    setError(undefined);
+    try {
+      const authToken = await token();
+      const baseRequest = {
+        receivedFromUtc: `${addDays(date, -2)}T00:00:00Z`,
+        minimumPlanningDate: date,
+        maximumPlanningDate: date,
+        refreshUnamendedPending: true,
+        maxMessages: 5
+      };
+      let afterReceivedAtUtc: string | undefined;
+      let afterEvidenceId: string | undefined;
+      let eligibleOrders = 0;
+      let pendingAfterReplay = 0;
+      let archived = 0;
+      let batches = 0;
+      let hasMore = true;
+
+      while (hasMore) {
+        const result = await request<RetainedReplayResponse>("/api/v1/order-intake/replay-retained-evidence", authToken, {
+          method: "POST",
+          body: JSON.stringify({ ...baseRequest, afterReceivedAtUtc, afterEvidenceId })
+        });
+        batches += 1;
+        eligibleOrders += result.eligibleOrders;
+        pendingAfterReplay = result.pendingAfterReplay;
+        archived += result.legacyMappingExceptionsArchived;
+        hasMore = result.hasMore;
+        afterReceivedAtUtc = result.nextAfterReceivedAtUtc;
+        afterEvidenceId = result.nextAfterEvidenceId;
+        if (hasMore && (!afterReceivedAtUtc || !afterEvidenceId)) {
+          throw new Error("Replay continuation cursor was missing.");
+        }
+        if (batches > 500) throw new Error("Replay exceeded the safe batch limit.");
+      }
+
+      setNotice(`Re-parse complete: ${eligibleOrders} order${eligibleOrders === 1 ? "" : "s"} matched for ${date}; ${pendingAfterReplay} awaiting review; ${archived} legacy mapping exception${archived === 1 ? "" : "s"} archived.`);
+      await loadCache();
+      refreshVisibleReviewData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Retained evidence could not be re-parsed.");
+    } finally {
+      setReplaying(false);
+    }
+  }
+
   useEffect(() => {
     if (!open) return;
     void loadCache();
@@ -197,6 +288,7 @@ function OrderIntakeCacheRecovery({ date }: { date: string }) {
       </div>
       <div className="title-actions" style={{ gap: 8, flexWrap: "wrap" }}>
         {data && <span className={missing.length ? "status warning" : "status approved"}>{missing.length} missing order rows</span>}
+        <button type="button" onClick={() => void replayRetainedEvidence()} disabled={replaying || forcing !== undefined || loading}>{replaying ? "Re-parsing…" : `Re-parse ${date}`}</button>
         <button type="button" onClick={() => setOpen(value => !value)}>{open ? "Hide cached emails" : "Show cached emails"}</button>
         {open && <button type="button" onClick={loadCache} disabled={loading}>{loading ? "Checking…" : "Refresh cache"}</button>}
         {open && <button type="button" className="primary" onClick={forceAll} disabled={forcing !== undefined || missing.length === 0}>{forcing === "all" ? "Forcing…" : `Force all missing (${missing.length})`}</button>}
@@ -249,7 +341,7 @@ export function OrderControl({ initialTab = "review" }: { initialTab?: OrderCont
   const [repairNotice, setRepairNotice] = useState<string>();
   const reviewId = searchParams.get("reviewId")?.trim() || undefined;
   const sourceEmailStagingId = searchParams.get("sourceEmail") === "1" ? reviewId : undefined;
-  const selectedDate = searchParams.get("date") || localDate();
+  const selectedDate = searchParams.get("date") || tomorrowIsoDate();
 
   useEffect(() => { if (reviewId) setTab("review"); }, [reviewId]);
 
@@ -298,6 +390,7 @@ export function OrderControl({ initialTab = "review" }: { initialTab?: OrderCont
       </div>
       {repairNotice && <p className="notice inline-notice" style={{ marginBottom: 0 }}>{repairNotice}</p>}
     </section>
+    <OrderReviewDateStrip selectedDate={selectedDate} onChange={updateDate} />
     {tab === "review" ? <><OrderIntakeCacheRecovery date={selectedDate} /><UndatedOrderReviewQueue /><OrderReviewBulk date={selectedDate} /></> : <><ApprovedOrdersList date={selectedDate} token={token} /><JobsOperational date={selectedDate} /></>}
     {sourceEmailStagingId && <SourceEmailEvidenceDrawer stagingId={sourceEmailStagingId} onClose={closeSourceEmail} />}
   </>;

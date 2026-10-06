@@ -6,6 +6,7 @@ import { signalPlanningChange, subscribePlanningChanges } from "../lib/planningE
 import { useApi } from "../lib/useApi";
 import { startVisiblePolling } from "../lib/visiblePolling";
 import { planningDeliveryLocation } from "../lib/planningLocations";
+import { tomorrowIsoDate } from "../lib/dateUtils";
 
 type Allocation = { loadId: string; loadReference?: string; pallets: number; updatedAtUtc: string; updatedBy?: string };
 type SourceLine = { sourceLineId: string; sourcePalletType?: string; palletType?: string; loadUnitType?: string; palletColourKey?: string; orderedPallets: number; plannedPallets: number; outstandingPallets: number };
@@ -17,7 +18,7 @@ type RegionData = { date: string; destinations: string[]; destinationRegions: Re
 type ViewMode = "toPlan" | "planned" | "summary";
 type PalletTone = "standard" | "euro" | "traycrate" | "trolley" | "mixed" | "unknown";
 
-function planningDate() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
+function planningDate() { return tomorrowIsoDate(); }
 function ukDate(value: string) { return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(`${value}T12:00:00`)); }
 function fmtTime(value?: string) { if (!value) return "—"; const d = new Date(value); return Number.isNaN(d.getTime()) ? value : d.toLocaleString("en-GB", { hour: "2-digit", minute: "2-digit" }); }
 function palletTone(colourKey?: string, loadUnitType?: string, palletType?: string): PalletTone { const clean = `${colourKey || ""} ${loadUnitType || ""} ${palletType || ""}`.toLowerCase(); if (clean.includes("tray") || clean.includes("crate")) return "traycrate"; if (clean.includes("trolley") || clean.includes("dolly")) return "trolley"; if (clean.includes("euro")) return "euro"; if (clean.includes("standard") || clean.includes("std")) return "standard"; if (clean.includes("mixed")) return "mixed"; return "unknown"; }
@@ -25,6 +26,7 @@ function palletLabel(order: PlanningOrder) { if (order.loadUnitType && order.loa
 function toneBackground(tone: PalletTone) { if (tone === "standard") return "#dbeafe"; if (tone === "euro") return "#ffedd5"; if (tone === "traycrate") return "#dcfce7"; if (tone === "trolley") return "#fef9c3"; if (tone === "mixed") return "linear-gradient(135deg, #dbeafe 0 25%, #ffedd5 25% 50%, #dcfce7 50% 75%, #fef9c3 75% 100%)"; return "#f3f4f6"; }
 function toneBorder(tone: PalletTone) { if (tone === "standard") return "#2563eb"; if (tone === "euro") return "#ea580c"; if (tone === "traycrate") return "#16a34a"; if (tone === "trolley") return "#ca8a04"; if (tone === "mixed") return "#7c3aed"; return "#9ca3af"; }
 function sectionLabel(value?: string) { return value?.toLowerCase().includes("pm") ? "PM / Overnight" : "AM"; }
+export function planningCollectionGroup(order: { planningGroup?: string; collection: string }) { return order.planningGroup?.trim() || order.collection.trim(); }
 
 export function PalletPlanningControl() {
   const token = useAccessToken();
@@ -47,18 +49,28 @@ export function PalletPlanningControl() {
   const data = control.data;
   const orders = useMemo(() => data?.orders || [], [data?.orders]);
   const orderById = useMemo(() => new Map(orders.map(order => [order.id, order])), [orders]);
-  const planningGroups = useMemo(() => [...new Set(orders.map(order => order.collection.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [orders]);
+  const planningGroups = useMemo(() => [...new Set(orders.map(planningCollectionGroup).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [orders]);
   const liveDestinations = useMemo(() => [...new Set(orders.map(order => planningDeliveryLocation(order)).filter(Boolean))], [orders]);
   const orderedDestinations = useMemo(() => {
     const live = new Set(liveDestinations);
     const ranked = (regions.data?.destinations || []).filter(destination => live.has(destination));
     return [...ranked, ...liveDestinations.filter(destination => !ranked.includes(destination)).sort((a, b) => a.localeCompare(b))];
   }, [liveDestinations, regions.data]);
+  const destinationRegions = useMemo(() => {
+    const groups: Array<{ region: string; destinations: string[] }> = [];
+    for (const destination of orderedDestinations) {
+      const region = regions.data?.destinationRegions?.[destination] || "Other";
+      const existing = groups.find(item => item.region === region);
+      if (existing) existing.destinations.push(destination);
+      else groups.push({ region, destinations: [destination] });
+    }
+    return groups;
+  }, [orderedDestinations, regions.data]);
   const destinationLabel = useCallback((destination: string) => regions.data?.destinationLabels?.[destination] || destination, [regions.data]);
   const cellMap = useMemo(() => {
     const map = new Map<string, PlanningCell>();
     for (const order of orders) {
-      const group = order.collection.trim();
+      const group = planningCollectionGroup(order);
       const destination = planningDeliveryLocation(order);
       if (!group || !destination) continue;
       const key = `${group}|||${destination}`;
@@ -83,7 +95,7 @@ export function PalletPlanningControl() {
     }
     return map;
   }, [orders]);
-  const selectedOrders = useMemo(() => !selectedCell ? [] : orders.filter(order => order.collection === selectedCell.group && planningDeliveryLocation(order) === selectedCell.destination), [orders, selectedCell]);
+  const selectedOrders = useMemo(() => !selectedCell ? [] : orders.filter(order => planningCollectionGroup(order) === selectedCell.group && planningDeliveryLocation(order) === selectedCell.destination), [orders, selectedCell]);
   const groupedSelectedOrders = useMemo(() => {
     const groups = new Map<string, PlanningOrder[]>();
     for (const order of selectedOrders) {
@@ -121,7 +133,7 @@ export function PalletPlanningControl() {
     const eyebrow = mode === "toPlan" ? "Work remaining" : mode === "planned" ? "Allocated work" : "All ordered work";
     const boardClass = mode === "toPlan" ? "to-plan" : mode === "planned" ? "planned" : "summary";
     const showTotals = mode !== "toPlan";
-    return <section className={`panel pallet-control-board ${boardClass}`}><div className="pallet-control-board-title"><div><p className="eyebrow">{eyebrow}</p><h2>{title}</h2></div><strong>{total}</strong></div><div className="pallet-control-matrix-wrap"><table className="pallet-control-matrix"><thead><tr><th className="pallet-row-label">Collection</th>{orderedDestinations.map(destination => { const label = destinationLabel(destination); const siteCode = regions.data?.destinationSiteCodes?.[destination]; return <th key={destination} className="pallet-destination-heading" title={label === destination ? destination : `${label} · ${destination}${siteCode ? ` · ${siteCode}` : ""}`}><span>{label}</span></th>; })}{showTotals ? <th className="pallet-total-col">Total</th> : null}</tr></thead><tbody>
+    return <section className={`panel pallet-control-board ${boardClass}`}><div className="pallet-control-board-title"><div><p className="eyebrow">{eyebrow}</p><h2>{title}</h2></div><strong>{total}</strong></div><div className="pallet-control-matrix-wrap"><table className="pallet-control-matrix"><thead>{mode === "toPlan" && <tr className="pallet-region-row"><th className="pallet-row-label">Region</th>{destinationRegions.map(group => <th key={group.region} colSpan={group.destinations.length} className="pallet-region-heading">{group.region}</th>)}</tr>}<tr><th className="pallet-row-label">Collection</th>{orderedDestinations.map(destination => { const label = destinationLabel(destination); const siteCode = regions.data?.destinationSiteCodes?.[destination]; return <th key={destination} className="pallet-destination-heading" title={label === destination ? destination : `${label} · ${destination}${siteCode ? ` · ${siteCode}` : ""}`}><span>{label}</span></th>; })}{showTotals ? <th className="pallet-total-col">Total</th> : null}</tr></thead><tbody>
       {planningGroups.map(group => { const cells = orderedDestinations.map(destination => cellMap.get(`${group}|||${destination}`)); const rowTotal = cells.reduce((sum, cell) => sum + quantity(mode, cell), 0); if (rowTotal === 0 && !(mode === "toPlan" && cells.some(cell => (cell?.overplanned || 0) > 0))) return null; return <tr key={group}><td className="pallet-row-label" title={group}><strong>{group}</strong></td>{orderedDestinations.map((destination, index) => { const cell = cells[index]; const amount = quantity(mode, cell); const over = cell?.overplanned || 0; const tone = cellTone(mode, cell); return <td key={destination}>{amount > 0 || (mode === "toPlan" && over > 0) ? <button type="button" className="pallet-cell-button" style={{ background: toneBackground(tone), borderColor: toneBorder(tone), opacity: amount > 0 || over > 0 ? 1 : 0.7 }} onClick={() => setSelectedCell({ group, destination })} title={`${group} → ${destinationLabel(destination)}: ${cell?.ordered || 0} ordered, ${cell?.planned || 0} planned, ${cell?.outstanding || 0} to plan`}><strong>{amount || "—"}</strong>{mode === "toPlan" && over > 0 ? <small>+{over}</small> : null}</button> : null}</td>; })}{showTotals ? <td className="pallet-total-col"><strong>{rowTotal}</strong></td> : null}</tr>; })}
       {showTotals ? <tr className="destination-totals"><td className="pallet-row-label"><strong>Destination total</strong></td>{orderedDestinations.map(destination => { const totalForDestination = planningGroups.reduce((sum, group) => sum + quantity(mode, cellMap.get(`${group}|||${destination}`)), 0) || 0; return <td key={destination}><strong>{totalForDestination || ""}</strong></td>; })}<td className="pallet-total-col"><strong>{total}</strong></td></tr> : null}
     </tbody></table></div></section>;

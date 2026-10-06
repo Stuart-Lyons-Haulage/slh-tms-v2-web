@@ -4,6 +4,7 @@ import type {
   DispatchAvailableTimeDto,
   DispatchDriverDto,
   DispatchDriverStatusDto,
+  DriverAvailabilitySnapshot,
   DispatchEquipmentWorkbench,
   DispatchHistoryItem,
   DispatchLockResponse,
@@ -30,6 +31,7 @@ export type SamsaraDispatchState = {
   runId: string;
   reference?: string;
   routeId: string;
+  deliveryRouteId?: string;
   exportedAtUtc: string;
   executionState?: string;
   executionOperation?: string;
@@ -37,22 +39,25 @@ export type SamsaraDispatchState = {
   lastStopName?: string;
 };
 
+type DriverDispatchAuthority = DispatchEquipmentWorkbench & {
+  drivers: Array<{
+    driverId: string;
+    dayNumber: number;
+    onLeave: boolean;
+    leaveType?: string;
+    leaveDetails?: string;
+    partDayLeave: boolean;
+  }>;
+};
+
 type SamsaraDispatchStatusResponse = {
   planningDate: string;
   configured: boolean;
   connected: boolean;
   connectionMessage?: string;
+  remoteVerification?: boolean;
+  staleRouteCount?: number;
   runs: SamsaraDispatchState[];
-};
-
-export type DispatchReadiness = {
-  canDispatch: boolean;
-  explanation?: string;
-  structuralReadiness?: {
-    classification: "Recommended" | "Unverified" | "Blocked";
-    requiresAcknowledgement: boolean;
-    checks: Array<{ passed: boolean; message: string }>;
-  };
 };
 
 export async function getDispatchVisibility(planningDate: string, token: string): Promise<DispatchVisibilitySnapshot> {
@@ -60,6 +65,10 @@ export async function getDispatchVisibility(planningDate: string, token: string)
     `/api/dispatch/driver-visibility?date=${encodeURIComponent(planningDate)}`,
     token
   );
+}
+
+export async function getDriverAvailability(planningDate: string, token: string): Promise<DriverAvailabilitySnapshot> {
+  return request<DriverAvailabilitySnapshot>(`/api/v1/driver-availability?date=${encodeURIComponent(planningDate)}`, token);
 }
 
 export async function getDispatchHistory(planningDate: string, token: string): Promise<DispatchHistoryItem[]> {
@@ -91,7 +100,8 @@ function runDetail(run: DispatchRunDto, equipment: DispatchEquipmentWorkbench): 
       longitude: delivery.longitude
     } : undefined,
     plannerNotes: load.plannerNotes,
-    trailerSwapRequested
+    trailerSwapRequested,
+    relay: load.relayPlan
   };
 }
 
@@ -102,19 +112,23 @@ export async function getSmartDispatch(
   drivers: DispatchDriverDto[];
   runs: DispatchRunDto[];
   equipment: DispatchEquipmentWorkbench;
+  availableTimes: DispatchAvailableTimeDto[];
   statuses: Record<string, DispatchDriverStatusDto>;
   visibility: DispatchVisibilitySnapshot;
+  availability: DriverAvailabilitySnapshot;
   samsaraConfigured: boolean;
   samsaraConnectionMessage?: string;
+  samsaraStaleRouteCount: number;
   samsaraDispatch: Record<string, SamsaraDispatchState>;
 }> {
   const encoded = encodeURIComponent(planningDate);
-  const [drivers, runs, equipment, statusResponse, visibility, history, samsaraStatus] = await Promise.all([
+  const [drivers, runs, driverAuthority, statusResponse, visibility, availability, history, samsaraStatus] = await Promise.all([
     request<DispatchDriverDto[]>(`/api/dispatch/drivers?date=${encoded}`, token),
     request<DispatchRunDto[]>(`/api/dispatch/runs?date=${encoded}`, token),
-    request<DispatchEquipmentWorkbench>(`/api/v1/driver-dispatch?date=${encoded}`, token),
+    request<DriverDispatchAuthority>(`/api/v1/driver-dispatch?date=${encoded}`, token),
     request<{ drivers: DispatchDriverStatusDto[] }>(`/api/v1/driver-dispatch-status?date=${encoded}`, token),
     getDispatchVisibility(planningDate, token),
+    getDriverAvailability(planningDate, token),
     getDispatchHistory(planningDate, token).catch(() => [] as DispatchHistoryItem[]),
     request<SamsaraDispatchStatusResponse>(`/api/v1/integrations/samsara/dispatch/status?date=${encoded}`, token)
       .catch(() => ({
@@ -126,21 +140,44 @@ export async function getSmartDispatch(
       } as SamsaraDispatchStatusResponse))
   ]);
   const visibilityByDriver = new Map(visibility.drivers.map(item => [item.driverId, item]));
+  const availabilityByDriver = new Map(availability.drivers.map(item => [item.driverId, item]));
+  const authorityByDriver = new Map(driverAuthority.drivers.map(item => [item.driverId, item]));
+  const equipment: DispatchEquipmentWorkbench = driverAuthority;
   const historyByDriver = new Map(history.map(item => [item.driverId, item]));
-  const enrichedDrivers = drivers.map(driver => {
+  const enrichedDrivers = drivers.filter(driver => authorityByDriver.has(driver.driverId)).map(driver => {
+    const authority = authorityByDriver.get(driver.driverId);
     const visibilityDriver = visibilityByDriver.get(driver.driverId);
     const historical = historyByDriver.get(driver.driverId);
+    const sharedAvailability = availabilityByDriver.get(driver.driverId);
     const hasAuthoritativePosition = Boolean(driver.trackingData.lastKnownPosition);
     const fallbackPosition = historical?.previousFinalLatitude != null && historical?.previousFinalLongitude != null
       ? { latitude: historical.previousFinalLatitude, longitude: historical.previousFinalLongitude }
       : undefined;
     return {
       ...driver,
+      dayNumber: authority?.dayNumber ?? driver.tachoData.currentDutyDay,
+      onLeave: authority?.onLeave === true,
+      leaveType: authority?.leaveType,
+      leaveDetails: authority?.leaveDetails,
+      partDayLeave: authority?.partDayLeave === true,
+      isBlocked: driver.isBlocked || authority?.onLeave === true || sharedAvailability?.dispatchable === false,
+      blockedReason: sharedAvailability?.dispatchable === false
+        ? sharedAvailability.blockReasons.join(" · ")
+        : authority?.onLeave
+        ? `Sage HR ${authority.leaveType || "leave"}${authority.partDayLeave ? " (part day)" : ""}`
+        : driver.blockedReason,
       // Sage HR is the only authority allowed to label a driver Employed. If the
       // visibility snapshot is unavailable, preserve known non-employed categories
       // but never promote the local Driver Master default to Employed.
-      employmentType: visibilityDriver?.employmentType ?? (/agency|casual|subcontractor/i.test(driver.employmentType) ? driver.employmentType : "Unmatched"),
-      skills: visibilityDriver?.skills ?? driver.skills,
+      employmentType: sharedAvailability?.employmentType ?? visibilityDriver?.employmentType ?? "Unknown",
+      skills: sharedAvailability?.skills ?? visibilityDriver?.skills ?? driver.skills,
+      availabilityGroup: sharedAvailability?.group,
+      availableFrom: sharedAvailability?.availableFromUtc ?? driver.availableFrom,
+      availabilityUntil: sharedAvailability?.availableUntilUtc,
+      availabilityConfirmed: sharedAvailability?.availabilityConfirmed,
+      agencyName: sharedAvailability?.agencyName,
+      placementEndDate: sharedAvailability?.placementEndDate,
+      classificationMismatch: sharedAvailability?.classificationMismatch,
       driverCode: visibilityDriver?.coding?.trim() || driver.driverCode,
       trackingData: {
         ...driver.trackingData,
@@ -153,19 +190,34 @@ export async function getSmartDispatch(
       previousTrailerId: historical?.previousTrailerId,
       previousTrailerNumber: historical?.previousTrailerNumber,
       previousTrailerPlanningDate: historical?.previousTrailerPlanningDate,
-      suggestion: driver.suggestion || (!hasAuthoritativePosition && historical?.previousFinalStopName
-        ? `Last known operational stop · ${historical.previousFinalStopName}`
-        : undefined)
+      suggestion: authority?.onLeave
+        ? `Unavailable · Sage HR ${authority.leaveType || "leave"}${authority.partDayLeave ? " (part day)" : ""}.`
+        : driver.suggestion || (!hasAuthoritativePosition && historical?.previousFinalStopName
+          ? `Last known operational stop · ${historical.previousFinalStopName}`
+          : undefined)
     };
   });
+  // Dispatch is an availability workbench, not a complete Driver Master list.
+  // Keep only drivers who pass the shared availability decision and the latest
+  // TachoMaster legal-hours calculation; Sage HR leave/contract blocks are already
+  // reflected in driver.isBlocked by the API authority response.
+  const availableTimeByDriver = new Map((await getAvailableTimes(planningDate, enrichedDrivers.map(driver => driver.driverId), token)).map(item => [item.driverId, item]));
+  const dispatchableDrivers = enrichedDrivers.filter(driver => {
+    const shared = availabilityByDriver.get(driver.driverId);
+    const legal = availableTimeByDriver.get(driver.driverId);
+    return !driver.isBlocked && shared?.dispatchable === true && !legal?.breachDetail;
+  });
   return {
-    drivers: enrichedDrivers,
+    drivers: dispatchableDrivers,
     runs: runs.map(run => runDetail(run, equipment)),
     equipment,
+    availableTimes: [...availableTimeByDriver.values()],
     statuses: Object.fromEntries(statusResponse.drivers.map(status => [status.driverId, status])),
     visibility,
+    availability,
     samsaraConfigured: samsaraStatus.configured && samsaraStatus.connected,
     samsaraConnectionMessage: samsaraStatus.connectionMessage,
+    samsaraStaleRouteCount: samsaraStatus.staleRouteCount || 0,
     samsaraDispatch: Object.fromEntries(samsaraStatus.runs.map(item => [item.runId, item]))
   };
 }
@@ -184,18 +236,6 @@ export async function getAvailableTimes(
     method: "POST",
     body: JSON.stringify({ planningDate, driverIds, reducedRestDriverIds })
   });
-}
-
-export async function checkDispatchReadiness(
-  runId: string,
-  routeDrivingMinutes: number,
-  acknowledgeUnverified: boolean,
-  token: string
-): Promise<DispatchReadiness> {
-  return request<DispatchReadiness>(`/api/v1/loads/${encodeURIComponent(runId)}/dispatch-readiness`, token, {
-    method: "POST",
-    body: JSON.stringify({ routeDrivingMinutes, acknowledgeUnverified })
-  }, 90000);
 }
 
 export async function syncSamsaraMappings(planningDate: string, token: string): Promise<void> {

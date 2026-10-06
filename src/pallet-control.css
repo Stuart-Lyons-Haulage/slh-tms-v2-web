@@ -198,6 +198,19 @@
   text-transform: none;
 }
 
+/* Keep the delivery-point header visible while the To Plan matrix is scrolled. */
+.pallet-control-board.to-plan .pallet-control-matrix thead th {
+  position: sticky;
+  z-index: 4;
+  background: #f3f7f8;
+}
+
+.pallet-control-board.to-plan .pallet-control-matrix thead tr:first-child th {
+  top: 0;
+  background: #eaf2f5;
+  z-index: 5;
+}
+
 .pallet-control-matrix tbody tr:nth-child(even) td:not(.pallet-row-label) {
   background: #fbfcfd;
 }
@@ -219,7 +232,9 @@
 }
 
 .pallet-control-matrix tbody .pallet-row-label {
+  color: #0b5f78;
   font-size: clamp(.58rem, .67vw, .74rem);
+  font-weight: 850;
 }
 
 .pallet-control-matrix .pallet-total-col {
@@ -238,6 +253,8 @@
   vertical-align: middle;
   overflow: hidden;
   background: #f3f7f8;
+  color: #173d50;
+  font-weight: 850;
 }
 
 .pallet-control-matrix .pallet-destination-heading span {
@@ -426,3 +443,5 @@
   }
   .pallet-control-allocation { grid-template-columns: 1fr; }
 }
+.pallet-region-row th { background: #dceaf1; color: #073a5a; border-bottom: 2px solid #9dbbc9; font-size: .78rem; letter-spacing: .02em; text-transform: uppercase; }
+.pallet-region-heading { text-align: center; }

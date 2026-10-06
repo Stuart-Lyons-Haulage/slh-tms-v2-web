@@ -43,6 +43,7 @@
 .bulk-order-pallets { text-align: center; }
 .bulk-order-pallets strong { font-size: 1.2rem; }
 .bulk-order-planning strong { font-size: .9rem; }
+.bulk-order-planning small + small { color: #84959c; }
 .bulk-order-status { justify-self: end; display: inline-flex; align-items: center; min-height: 28px; padding: 4px 9px; border-radius: 999px; font-size: .76rem; font-weight: 800; text-align: center; }
 .bulk-order-status.ready { background: #e5f5e5; color: #247126; }
 .bulk-order-status.review { background: #fff1cf; color: #805900; }

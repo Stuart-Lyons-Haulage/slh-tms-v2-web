@@ -40,6 +40,11 @@ export function addDaysIso(days: number) {
   return `${year}-${month}-${day}`;
 }
 
+/** Default date for forward planning; explicit dates remain unchanged. */
+export function tomorrowIsoDate() {
+  return addDaysIso(1);
+}
+
 export function formatDate(value?: string | Date | null) {
   if (!value) return "—";
   const date = value instanceof Date

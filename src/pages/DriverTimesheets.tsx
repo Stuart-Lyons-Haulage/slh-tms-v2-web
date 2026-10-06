@@ -1,8 +1,9 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { api, type DriverTimesheetDriver } from '../lib/api';
+import { api, request, type DriverTimesheetDriver } from '../lib/api';
 import { useAccessToken } from '../lib/auth';
 import { useApi } from '../lib/useApi';
+import type { DriverAvailabilitySnapshot } from '../components/dispatch/types';
 
 type TimesheetSection = 'Employed' | 'Agency';
 
@@ -135,7 +136,7 @@ function SectionSummary({ drivers, section }: { drivers: DriverTimesheetDriver[]
   </div>;
 }
 
-export function DriverTimesheets() {
+export function DriverTimesheets({ embedded = false }: { embedded?: boolean }) {
   const token = useAccessToken();
   const initial = useMemo(currentLyonsWeek, []);
   const [from, setFrom] = useState(initial.from);
@@ -144,8 +145,18 @@ export function DriverTimesheets() {
   const [search, setSearch] = useState('');
   const [reviewOnly, setReviewOnly] = useState(false);
   const [busyReview, setBusyReview] = useState<string>();
+  const [staffingByDate, setStaffingByDate] = useState<Record<string, DriverAvailabilitySnapshot>>({});
 
   const report = useApi(useCallback(async () => api.driverTimesheets(from, to, await token()), [from, to, token]));
+  useEffect(() => {
+    let cancelled = false;
+    const dates: string[] = [];
+    for (let cursor = asDate(from); cursor <= asDate(to); cursor.setDate(cursor.getDate() + 1)) dates.push(isoDate(cursor));
+    void (async () => { const accessToken = await token(); return Promise.all(dates.map(date => request<DriverAvailabilitySnapshot>(`/api/v1/driver-availability?date=${encodeURIComponent(date)}`, accessToken).then(value => [date, value] as const))); })()
+      .then(entries => { if (!cancelled) setStaffingByDate(Object.fromEntries(entries)); })
+      .catch(() => { if (!cancelled) setStaffingByDate({}); });
+    return () => { cancelled = true; };
+  }, [from, to, token]);
   const reviewNightOut = async (driver: DriverTimesheetDriver, day: DriverTimesheetDriver['days'][number], decision: string) => {
     const key = `${driver.driverId}-${day.date}`;
     setBusyReview(key);
@@ -156,7 +167,7 @@ export function DriverTimesheets() {
       setBusyReview(undefined);
     }
   };
-  const sourceDrivers = report.data?.drivers || [];
+  const sourceDrivers = useMemo(() => report.data?.drivers || [], [report.data?.drivers]);
   const drivers = sourceDrivers
     .filter(driver => driver.employmentType === section)
     .filter(driver => !reviewOnly || driver.reviewDays > 0)
@@ -166,6 +177,13 @@ export function DriverTimesheets() {
       return [driver.driverName, driver.employeeNumber, driver.agencyName]
         .some(value => value?.toLowerCase().includes(q));
     });
+
+  const staffingAnomalies = useMemo(() => sourceDrivers.reduce((count, driver) => count + driver.days.filter(day => {
+    const staffing = staffingByDate[day.date]?.drivers.find(item => item.driverId === driver.driverId);
+    if (!staffing) return false;
+    if (driver.employmentType === 'Agency' && !staffing.availabilityConfirmed) return true;
+    return driver.employmentType === 'Employed' && staffing.blockReasons.some(reason => /leave|outside known working pattern|rest|tacho/i.test(reason));
+  }).length, 0), [sourceDrivers, staffingByDate]);
 
   const setWeek = (direction: -1 | 1) => {
     const moved = moveRange(from, to, direction * 7);
@@ -231,12 +249,12 @@ export function DriverTimesheets() {
   };
 
   return <section className="driver-timesheets-page">
-    <div className="driver-history-subnav" aria-label="Driver history sections">
+    {!embedded && <div className="driver-history-subnav" aria-label="Driver history sections">
       <NavLink to="/driver-assignments">Driver assignments</NavLink>
       <NavLink to="/driver-timesheets">Timesheets</NavLink>
-    </div>
+    </div>}
 
-    <div className="title-row">
+    {!embedded && <div className="title-row">
       <div>
         <p className="eyebrow">Driver history · timesheets</p>
         <h1>Driver timesheets</h1>
@@ -247,7 +265,7 @@ export function DriverTimesheets() {
         <button onClick={summaryExport} disabled={!drivers.length}>Export summary CSV</button>
         <button className="primary" onClick={detailedExport} disabled={!drivers.length}>Export detailed CSV</button>
       </div>
-    </div>
+    </div>}
 
     <div className="timesheet-toolbar">
       <button onClick={() => setWeek(-1)}>← Previous week</button>
@@ -278,6 +296,7 @@ export function DriverTimesheets() {
       <span><strong>Sage HR:</strong> {report.data.sourceStatus.sageHr}</span>
       <span><strong>Range:</strong> {formatDate(report.data.from)} – {formatDate(report.data.to)}</span>
     </div>}
+    {staffingAnomalies > 0 && <div className="notice warn"><strong>{staffingAnomalies} staffing anomaly{staffingAnomalies === 1 ? '' : 'ies'}</strong> found in this timesheet range. Review duties against Sage working pattern, leave/rest and confirmed agency availability in the Staffing calendar.</div>}
 
     <div className="timesheet-filter-row">
       <input value={search} onChange={event => setSearch(event.target.value)} placeholder={section === 'Agency' ? 'Search driver or agency…' : 'Search driver…'} />

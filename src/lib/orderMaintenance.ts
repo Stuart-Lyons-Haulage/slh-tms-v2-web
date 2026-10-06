@@ -20,9 +20,14 @@ export type OrderUpdatePayload = {
   mapLink?: string;
 };
 
+export type OrderUpdateResult = TransportOrder & {
+  siteMasterUpdated?: boolean;
+  siteMasterMessage?: string;
+};
+
 export const orderMaintenance = {
   update: (id: string, payload: OrderUpdatePayload, token?: string) =>
-    request<TransportOrder>(`/api/v1/operational-recovery/orders/${id}`, token, {
+    request<OrderUpdateResult>(`/api/v1/operational-recovery/orders/${id}`, token, {
       method: "PUT",
       body: JSON.stringify(payload),
     }),

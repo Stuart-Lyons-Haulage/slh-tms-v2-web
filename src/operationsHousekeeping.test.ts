@@ -23,6 +23,8 @@ describe("operations housekeeping contract", () => {
   it("removes pallet utilisation from the mixed-unit run builder and gives optimiser more time", () => {
     expect(runBuilder).not.toContain("/ 26 pallets");
     expect(runBuilder).not.toContain("simple-run-pallets");
+    expect(runBuilder).not.toContain("Ref: ${order.reference}");
+    expect(runBuilder).toContain("cleanLineNote");
     expect(optimiser).toContain("180000");
   });
 
@@ -51,6 +53,8 @@ describe("operations housekeeping contract", () => {
     expect(palletControl).not.toContain("2000");
     expect(palletControl).toContain("Trays / Crates");
     expect(palletControl).toContain("Trolleys");
+    expect(palletControl).not.toContain("showCompletedToPlan");
+    expect(palletControl).not.toContain('"✓"');
     expect(palletControl).not.toContain("Current orders");
   });
 
@@ -60,7 +64,7 @@ describe("operations housekeeping contract", () => {
     expect(master).not.toContain("MasterDataCsvImport");
     expect(pages).toContain("import { MasterDataCsvImport }");
     expect(app).toContain('path="/admin/imports" element={<StagingQueue masterOnly />}');
-    expect(app).toContain('path="/staging" element={<StagingQueue ordersOnly />}');
+    expect(app).toContain('path="/staging" element={<OrderControl />}');
   });
 
   it("uses SQL as the sole master-data write authority and keeps master controls usable", () => {
@@ -86,7 +90,8 @@ describe("operations housekeeping contract", () => {
     expect(runBuilder).toContain('simple-picker-options');
     expect(runBuilder).not.toContain('planner-collection-site-options');
     expect(runBuilder).toContain("liveCollections");
-    expect(runBuilder).toContain("matchingOrders");
+    expect(runBuilder).toContain("matchingLiveOrders");
+    expect(runBuilder).toContain("matchingAvailableOrders");
     expect(runBuilder).toContain("Choose both to link the line to the matching order(s)");
     expect(runBuilder).toContain("orderLineNote(order)");
     expect(runBuilder).toContain("mergedOrderLineNote");

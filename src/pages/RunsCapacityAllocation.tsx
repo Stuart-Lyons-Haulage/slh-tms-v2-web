@@ -14,11 +14,9 @@ import { displayRunReference } from "../lib/runDisplay";
 import { useApi } from "../lib/useApi";
 import "../runs-capacity-allocation.css";
 import { allocateRun, getRunDispatch, getRunRoute, listRuns, updateRunOperational, updateRunStops } from '../api/runs';
+import { tomorrowIsoDate } from "../lib/dateUtils";
 
-const localDate = () => {
-  const date = new Date();
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-};
+const localDate = tomorrowIsoDate;
 
 type CapacityType = "Standard pallets" | "Euro pallets" | "Trays" | "Trolleys" | "Mixed load";
 type EditableStop = Omit<Load["stops"][number], "latitude" | "longitude"> & { latitude: string; longitude: string; postcode: string };

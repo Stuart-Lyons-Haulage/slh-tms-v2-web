@@ -117,6 +117,13 @@ function dateKey(value: Date) {
   return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
 }
 
+function shortOperationalDate(value: unknown) {
+  const candidate = text(value);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(candidate)) return "TBC";
+  const date = new Date(`${candidate}T12:00:00`);
+  return Number.isNaN(date.getTime()) ? "TBC" : new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short" }).format(date);
+}
+
 function parse(item: StagedImport): ParsedRow {
   try {
     const payload = JSON.parse(item.payloadJson || "{}") as Payload;
@@ -277,6 +284,7 @@ export function OrderReviewBulk({ date }: { date: string }) {
   const [draft, setDraft] = useState<Payload>();
   const [sourceEmailStagingId, setSourceEmailStagingId] = useState<string>();
   const [requestingOrders, setRequestingOrders] = useState(false);
+  const [loadingAllClean, setLoadingAllClean] = useState(false);
   const [customers, setCustomers] = useState<Array<{ code: string; name: string; active: boolean }>>([]);
   const [sites, setSites] = useState<Array<{ id: string; name: string; driverTextName?: string; externalCode: string; active: boolean }>>([]);
 
@@ -494,11 +502,15 @@ export function OrderReviewBulk({ date }: { date: string }) {
   }
 
   async function approveSelectedOrders() {
-    if (!selectedRows.length || busy || busyId) return;
+    await approveOrders(selectedRows);
+  }
+
+  async function approveOrders(rowsToApprove: ParsedRow[]) {
+    if (!rowsToApprove.length || busy || busyId) return;
     setBusy(true);
     setNotice(undefined);
     try {
-      const approvalChecks = await Promise.all(selectedRows.map(async (row) => ({
+      const approvalChecks = await Promise.all(rowsToApprove.map(async (row) => ({
         row,
         comparison: await request<ApprovalComparison>(
           `/api/v1/order-intake/duplicate-check/staging/${encodeURIComponent(row.item.id)}/comparison`,
@@ -521,23 +533,36 @@ export function OrderReviewBulk({ date }: { date: string }) {
         return;
       }
 
-      const result = await request<BulkApproveResponse>(
-        "/api/v1/staging/orders/bulk-approve",
-        await token(),
-        {
-          method: "POST",
-          body: JSON.stringify({
-            date,
-            ids: approvable.map(({ row }) => row.item.id),
-            acknowledgeReviewFlags: true,
-          }),
-        },
-        120000,
-      );
+      let approved = 0;
+      let skipped = 0;
+      let failed = 0;
+      let firstBatchResult: BulkApproveResponse | undefined;
+      for (let offset = 0; offset < approvable.length; offset += 500) {
+        const result = await request<BulkApproveResponse>(
+          "/api/v1/staging/orders/bulk-approve",
+          await token(),
+          {
+            method: "POST",
+            body: JSON.stringify({
+              date,
+              ids: approvable.slice(offset, offset + 500).map(({ row }) => row.item.id),
+              acknowledgeReviewFlags: true,
+            }),
+          },
+          120000,
+        );
+        firstBatchResult ||= result;
+        approved += result.approved;
+        skipped += result.skipped;
+        failed += result.failed;
+      }
       const duplicateNote = duplicates.length > 0
         ? ` ${duplicates.length} exact duplicate${duplicates.length === 1 ? " was" : "s were"} left unchanged because there were no differences to apply.`
         : "";
-      setNotice(`${result.message}${result.skipped || result.failed ? ` ${result.skipped} skipped and ${result.failed} failed remain for review.` : ""}${approvalFailureDetail(result)}${duplicateNote}`);
+      const approvalMessage = approved > 0
+        ? `${approved} selected order${approved === 1 ? "" : "s"} approved into live Orders and removed from the review queue.`
+        : "No selected orders were approved. Blocked or incomplete work remains in Order Control.";
+      setNotice(`${approvalMessage}${skipped || failed ? ` ${skipped} skipped and ${failed} failed remain for review.` : ""}${firstBatchResult ? approvalFailureDetail(firstBatchResult) : ""}${duplicateNote}`);
       setSelectedIds(new Set());
       setEditingId(undefined);
       setDraft(undefined);
@@ -547,6 +572,38 @@ export function OrderReviewBulk({ date }: { date: string }) {
       setNotice(error instanceof Error ? error.message : "Selected approval failed.");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function approveAllClean() {
+    if (busy || busyId || loadingAllClean) return;
+    setLoadingAllClean(true);
+    setNotice(undefined);
+    try {
+      const allRows: ParsedRow[] = [];
+      let page = 1;
+      let hasMore = true;
+      while (hasMore) {
+        const result = await request<StagingQueuePage>(
+          `/api/v1/staging/queue?status=PendingReview&entityType=order&page=${page}&pageSize=${queuePageSize}&planningDate=${encodeURIComponent(date)}`,
+          await token(),
+        );
+        allRows.push(...result.records.map(parse));
+        hasMore = result.hasMore;
+        page += 1;
+      }
+      const allCleanRows = allRows
+        .filter((row) => matchesPlanningDate(row.payload, date))
+        .filter((row) => !blockingReason(row, date) && !reviewFlagReason(row));
+      if (!allCleanRows.length) {
+        setNotice("There are no clean orders to pass for this date. Orders needing review remain untouched.");
+        return;
+      }
+      await approveOrders(allCleanRows);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "The clean orders for this date could not be loaded.");
+    } finally {
+      setLoadingAllClean(false);
     }
   }
 
@@ -580,6 +637,9 @@ export function OrderReviewBulk({ date }: { date: string }) {
       <button onClick={() => setSelectedIds(new Set())} disabled={busy || Boolean(busyId) || selectedRows.length === 0}>Clear selection</button>
       <button className="primary" onClick={() => void approveSelectedOrders()} disabled={busy || Boolean(busyId) || selectedRows.length === 0}>
         {busy ? "Checking changes…" : `Approve selected (${selectedRows.length})`}
+      </button>
+      <button className="primary" onClick={() => void approveAllClean()} disabled={busy || Boolean(busyId) || loadingAllClean}>
+        {loadingAllClean ? "Checking all pages…" : "Approve all clean for this date"}
       </button>
     </div>
 
@@ -619,7 +679,7 @@ export function OrderReviewBulk({ date }: { date: string }) {
           <span className="bulk-order-ref"><strong>{displayReference(row.payload)}</strong><small>{text(row.payload.poNumber) || "TMS reference missing"}</small></span>
           <span><strong>{text(row.payload.customerCode) || "Customer missing"}</strong><small>{text(row.payload.sellerName) || "Collection site missing"} → {text(row.payload.stallNumber) || "Destination missing"}</small></span>
           <span className="bulk-order-pallets"><strong>{isBackhaul(row.payload) && palletCount(row.payload) <= 0 ? "—" : palletCount(row.payload)}</strong><small>{isBackhaul(row.payload) && palletCount(row.payload) <= 0 ? "backhaul" : "pallets"}</small></span>
-          <span className="bulk-order-planning"><strong>{planningWindow(row.payload)}</strong><small>{temperature(row.payload)} · {orderType(row.payload)}</small></span>
+          <span className="bulk-order-planning"><strong>{planningWindow(row.payload)}</strong><small>Collect {shortOperationalDate(row.payload.collectionDate)} · Deliver {shortOperationalDate(row.payload.deliveryDate || row.payload.collectionDate)}</small><small>{temperature(row.payload)} · {orderType(row.payload)}</small></span>
           <span className={`bulk-order-status ${statusClass}`}>{statusText}</span>
           <div className="bulk-order-actions">
             {hasSourceIdentity && <button type="button" className="source-email-review-button" onClick={() => setSourceEmailStagingId(row.item.id)} disabled={busy || Boolean(busyId)}>Review source email</button>}

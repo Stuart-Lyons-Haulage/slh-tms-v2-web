@@ -4,11 +4,9 @@ import { useAccessToken } from "../lib/auth";
 import { useApi } from "../lib/useApi";
 import { displayRunReference } from "../lib/runDisplay";
 import { listRuns, updateRunStops } from '../api/runs';
+import { tomorrowIsoDate } from "../lib/dateUtils";
 
-function localDate() {
-  const date = new Date();
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-}
+function localDate() { return tomorrowIsoDate(); }
 
 function runNumber(reference?: string) {
   const value = String(reference || "");

@@ -48,7 +48,13 @@ function normaliseBase64(input: unknown) {
 }
 
 function safeDownloadName(name: string) {
-  const cleaned = name.replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_").trim();
+  const cleaned = [...name]
+    .map((character) => {
+      const code = character.charCodeAt(0);
+      return /[\\/:*?"<>|]/.test(character) || code < 0x20 ? "_" : character;
+    })
+    .join("")
+    .trim();
   return cleaned || "source-email-attachment";
 }
 

@@ -4,9 +4,10 @@ import { DispatchBoard } from "../components/dispatch/DispatchBoard";
 import { DispatchResourceQuickAdd } from "../components/dispatch/DispatchResourceQuickAdd";
 import "../authoritative-dispatch.css";
 import "../dispatch-resource-quick-add.css";
+import { tomorrowIsoDate } from "../lib/dateUtils";
 
 function currentDispatchDate() {
-  return new URLSearchParams(window.location.search).get("date") || new Date().toISOString().slice(0, 10);
+  return new URLSearchParams(window.location.search).get("date") || tomorrowIsoDate();
 }
 
 export function DriverDispatchOperational() {
@@ -19,7 +20,7 @@ export function DriverDispatchOperational() {
     window.history.replaceState(null, "", `${window.location.pathname}?${params}`);
   }, [dispatchDate]);
 
-  return <>
+  return <div className="driver-dispatch-operational-page">
     <BackloadMatchNotifications />
     <DispatchBoard
       key={`${dispatchDate}-${dispatchRevision}`}
@@ -29,5 +30,5 @@ export function DriverDispatchOperational() {
         <DispatchResourceQuickAdd onSaved={() => setDispatchRevision(value => value + 1)} />
       </>}
     />
-  </>;
+  </div>;
 }

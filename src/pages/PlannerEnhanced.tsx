@@ -1,10 +1,6 @@
 import { useState } from "react";
 import { RunPlannerLive } from "./RunPlannerLive";
-
-function localDate() {
-  const date = new Date();
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-}
+import { tomorrowIsoDate } from "../lib/dateUtils";
 
 function clickPlannerButton(pattern: RegExp) {
   const buttons = Array.from(document.querySelectorAll<HTMLButtonElement>(".simple-planner-toolbar button"));
@@ -13,7 +9,7 @@ function clickPlannerButton(pattern: RegExp) {
 }
 
 export function PlannerEnhanced() {
-  const [date, setDate] = useState(localDate());
+  const [date, setDate] = useState(tomorrowIsoDate());
 
   return <section className="planner-enhanced-page">
     <div className="panel planner-action-bar">

@@ -1,7 +1,7 @@
 import { useState, type ChangeEvent } from "react";
-import { Link } from "react-router-dom";
 import { api, type StageBatchRequest } from "../lib/api";
 import { useAccessToken } from "../lib/auth";
+import { tomorrowIsoDate } from "../lib/dateUtils";
 import "../orders-operational.css";
 
 type ImportOrder = {
@@ -41,7 +41,7 @@ type ManualOrderLine = {
 
 function clean(value: unknown) { return String(value ?? "").trim(); }
 function normaliseHeader(value: unknown) { return clean(value).toLowerCase().replace(/[^a-z0-9]/g, ""); }
-function today() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
+function today() { return tomorrowIsoDate(); }
 function blankManualLine(): ManualOrderLine {
   return {
     key: typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
