@@ -98,6 +98,22 @@ async function installApi(page: Page, state: State) {
         summary: { ordered: 4, planned, outstanding, overplanned: 0, lateAdditions: 0, orders: 1, runs: state.runCreated ? 1 : 0 }
       });
     }
+
+    if (path === '/api/v1/driver-availability' && method === 'GET') {
+      return json(route, {
+        planningDate: state.planningDate,
+        generatedAtUtc: new Date().toISOString(),
+        classificationMismatchCount: 0,
+        summary: {
+          employedAvailable: 0,
+          agencyConfirmed: 0,
+          casualConfirmed: 0,
+          driversRequired: state.runCreated ? 1 : 0,
+          surplusShortfall: state.runCreated ? -1 : 0
+        },
+        drivers: []
+      });
+    }
     if (path === '/api/v1/planning-control/regions' && method === 'GET') {
       return json(route, {
         date: state.planningDate,
