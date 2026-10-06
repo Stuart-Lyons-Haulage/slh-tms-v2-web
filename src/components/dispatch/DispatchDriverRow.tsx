@@ -208,7 +208,7 @@ export function DispatchDriverRow({
     </td>
 
     <td>
-      <span className={`smart-day ${dayTone(driver)}`}>Day {status?.projectedDayNumber || driver.dayNumber || driver.tachoData.currentDutyDay}</span>
+      <span className={`smart-day ${dayTone(driver)}`}>Day {status?.projectedDayNumber || driver.dayNumber || driver.tachoData.currentDutyDay}{driver.contractedDays.length > 0 ? ` / ${driver.contractedDays.length}` : ""}</span>
       {driver.onLeave && <small className="smart-inline-error">{driver.leaveType || "Sage HR leave"}{driver.partDayLeave ? " · part day" : ""}</small>}
       {!driver.onLeave && driver.needsReturn && <small className="smart-inline-warning">{(driver.dayNumber || driver.tachoData.currentDutyDay) >= 5 ? "Return priority" : "Return soon"}</small>}
     </td>
@@ -272,10 +272,10 @@ export function DispatchDriverRow({
       <small>{driver.tachoData.reducedDailyRestsUsed}/3 reduced rests used · {reducedRestSelected ? "Planner selected 9h" : "Regular 11h default"}</small>
       {!availableTime ? <>
         <strong>{driver.availableFrom ? ukTime(driver.availableFrom) : status?.earliestStartUtc ? ukTime(status.earliestStartUtc) : "—"}</strong>
-        <span className="smart-muted">{driver.availableFrom ? "Tacho start" : status?.earliestStartUtc ? status.earliestStartIsAssumption ? "Assumed start" : "Tacho start" : "No legal start"}</span>
+        <span className="smart-muted">{driver.availableFrom ? "Earliest legal start" : status?.earliestStartUtc ? status.earliestStartIsAssumption ? "Earliest assumed start" : "Earliest legal start" : "No legal start"}</span>
       </> : <>
         <strong>{availableTime.availableFrom ? ukTime(availableTime.availableFrom) : "Blocked"}</strong>
-        <small>{availableTime.availableFrom ? `${availableTime.requiredRestPeriod}h Tacho rest · WTD ${availableTime.weeklyWorkingTimeUsed.toFixed(1)}h` : "No legal start can be calculated"}</small>
+        <small>{availableTime.availableFrom ? `Earliest start · ${availableTime.requiredRestPeriod}h rest · WTD ${availableTime.weeklyWorkingTimeUsed.toFixed(1)}h` : "No legal start can be calculated"}</small>
         <div className={`smart-wtd-bar ${wtdTone}`} title={`WTD ${availableTime.weeklyWorkingTimeUsed.toFixed(1)} hours`}>
           <span style={{ width: `${Math.min(100, Math.max(0, availableTime.weeklyWorkingTimeUsed / 60 * 100))}%` }} />
         </div>

@@ -94,12 +94,12 @@ describe("Driver Dispatch UI contract", () => {
     expect(authoritativeSource).not.toContain("<DispatchMessageDialog");
   });
 
-  it("keeps driver search, sync and customer exports on the routed Driver Dispatch surface", () => {
+  it("keeps sync and customer exports on the routed Driver Dispatch surface", () => {
     expect(operationalSource).not.toContain("CustomerLoadPlanActions");
-    expect(filterSource).toContain('aria-label="Search drivers"');
+    expect(filterSource).not.toContain('aria-label="Search drivers"');
     expect(authoritativeSource).toContain("Refresh Staff & Get Times");
     expect(authoritativeSource).toContain("syncDispatchDrivers");
-    expect(authoritativeSource).toContain("filterDriversByDriverSearch");
+    expect(authoritativeSource).not.toContain("filterDriversByDriverSearch");
   });
 
   it("uses one compact actionable driver filter row without duplicate dashboard panels", () => {
