@@ -6,7 +6,7 @@ import type { DriverAvailabilityItem, DriverAvailabilitySnapshot } from "../comp
 import { DriverTimesheets } from "./DriverTimesheets";
 import { DriverAssignments } from "./Pages";
 
-type ImportRow = { driverName: string; date: string; status: string; source: string };
+type ImportRow = { driverName: string; date: string; status: string; source: string; agencyName: string };
 type ImportIssue = { row: string; reason: string };
 type ForecastDay = { date: string; dayRequired: number; nightRequired: number; notes?: string; opsNotes?: string; agencyRequested: number; agencyConfirmed: number; availableDrivers: number; employedAvailable: number; agencyAvailable: number; casualAvailable: number; shortfall: number; suggestedDayRequired: number; suggestedNightRequired: number; plannedRunCount: number; suggestedShortfall: number };
 
@@ -17,6 +17,18 @@ function dateKey(value: unknown) {
   const text = String(value || "").trim();
   const parsed = new Date(text);
   return text && !Number.isNaN(parsed.getTime()) ? parsed.toISOString().slice(0, 10) : "";
+}
+
+function agencyNameFromFile(fileName: string) {
+  const name = fileName.replace(/\.[^.]+$/, "").replace(/\s+-\s+Lyons\s+Bookings$/i, "").replace(/^Lyons\s+-\s+/i, "").replace(/\s+Bookings$/i, "").trim();
+  return name || "Agency import";
+}
+
+function isLikelyDriverName(value: string) {
+  const text = value.trim();
+  if (text.length < 3 || text.split(/\s+/).length < 2) return false;
+  if (/^(requirements|nights?\s+prefered|days?|driver\s+name|available\s+for)\b/i.test(text)) return false;
+  return /^[\p{L}][\p{L}'’.-]*(?:\s+[\p{L}][\p{L}'’.-]*)+$/u.test(text);
 }
 
 const agencyStatusCodes = new Set([
@@ -77,7 +89,7 @@ async function parseAgencyWorkbook(file: File): Promise<{ rows: ImportRow[]; iss
         const date = dates[column];
         const status = String(value || "").trim().toUpperCase();
         if (!date || !status) return;
-        if (["AV", "AVAILABLE", "A"].includes(status)) rows.push({ driverName, date, status, source: `${file.name} · ${sheetName}` });
+        if (["AV", "AVAILABLE", "A"].includes(status) && isLikelyDriverName(driverName)) rows.push({ driverName, date, status, source: `${file.name} · ${sheetName}`, agencyName: agencyNameFromFile(file.name) });
         else if (status && !isIgnorableAgencyStatus(status)) issues.push({ row: `${driverName} ${date}`, reason: `Unrecognised status “${status}”; not imported.` });
       });
     }
@@ -155,19 +167,32 @@ export function Staffing() {
   const byGroup = useMemo(() => new Map(groups.map(group => [group, snapshot?.drivers.filter(driver => driver.group === group && (availabilityTab === "staff" ? driver.employmentType === "Employed" : ["Agency", "Casual"].includes(driver.employmentType))) || []])), [availabilityTab, snapshot]);
   const matchedRows = useMemo(() => importRows.map(row => ({ ...row, driver: snapshot?.drivers.find(driver => driver.displayName.trim().toLowerCase() === row.driverName.trim().toLowerCase()) })), [importRows, snapshot]);
   const unmatchedRows = matchedRows.filter(row => !row.driver);
+  const creatableRows = unmatchedRows.filter(row => isLikelyDriverName(row.driverName));
 
   async function importAvailability() {
     if (!snapshot || !importRows.length) return;
     setImportBusy(true); setImportMessage(undefined);
-    let created = 0; let skipped = 0;
+    let created = 0; let skipped = 0; let newDrivers = 0;
     try {
       const uniqueRows = [...new Map(importRows.map(row => [`${row.driverName.toLowerCase()}|${row.date}|${row.source}`, row])).values()];
+      const createdDrivers = new Map<string, string>();
       for (const row of uniqueRows.map(item => ({ ...item, driver: snapshot.drivers.find(driver => driver.displayName.trim().toLowerCase() === item.driverName.trim().toLowerCase()) }))) {
-        if (!row.driver || !["Agency", "Casual"].includes(row.driver.employmentType)) { skipped++; continue; }
-        await request("/api/v1/driver-availability", await token(), { method: "POST", body: JSON.stringify({ driverId: row.driver.driverId, ...dayWindow(row.date), confirmed: true, longTermPlacement: false, placementEndDate: null, usualDays: null, notes: `Imported from ${row.source}`, bookingReference: row.source }) });
+        let driverId = row.driver?.driverId;
+        if (!driverId && isLikelyDriverName(row.driverName)) {
+          const key = `${row.driverName.trim().toLowerCase()}|${row.agencyName.trim().toLowerCase()}`;
+          driverId = createdDrivers.get(key);
+          if (!driverId) {
+            const added = await request<{ driverId: string; created?: boolean }>("/api/v1/driver-dispatch/drivers", await token(), { method: "POST", body: JSON.stringify({ displayName: row.driverName, driverType: "Agency", agencyName: row.agencyName, startDate: row.date, days: 1 }) });
+            driverId = added.driverId;
+            createdDrivers.set(key, driverId);
+            if (added.created) newDrivers++;
+          }
+        }
+        if (!driverId || !["Agency", "Casual"].includes(row.driver?.employmentType || "Agency")) { skipped++; continue; }
+        await request("/api/v1/driver-availability", await token(), { method: "POST", body: JSON.stringify({ driverId, ...dayWindow(row.date), confirmed: true, longTermPlacement: false, placementEndDate: null, usualDays: null, notes: `Imported from ${row.source}`, bookingReference: row.source }) });
         created++;
       }
-      setImportMessage(`${created} confirmed availability day${created === 1 ? "" : "s"} imported. ${unmatchedRows.length + skipped} row${unmatchedRows.length + skipped === 1 ? "" : "s"} held for review.`);
+      setImportMessage(`${created} confirmed availability day${created === 1 ? "" : "s"} imported. ${newDrivers} new agency driver${newDrivers === 1 ? "" : "s"} added to Driver Master. ${unmatchedRows.length + skipped} row${unmatchedRows.length + skipped === 1 ? "" : "s"} held for review.`);
       setImportRows([]); await refresh();
     } catch (exception) { setImportMessage(exception instanceof Error ? exception.message : "The availability import could not be completed."); }
     finally { setImportBusy(false); }
@@ -188,7 +213,7 @@ export function Staffing() {
     <div className="staffing-availability-tabs" role="tablist" aria-label="Availability workforce tabs"><button className={availabilityTab === "staff" ? "active" : ""} onClick={() => setAvailabilityTab("staff")}>Staff</button><button className={availabilityTab === "agency" ? "active" : ""} onClick={() => setAvailabilityTab("agency")}>Agency</button></div>
     {availabilityTab === "agency" && <div className="panel staffing-import-panel"><div className="title-row"><div><h2>Import agency availability</h2><p className="hint">Upload agency spreadsheets here. Matched rows feed the Agency availability calendar; manual calendar adjustments remain available after import.</p></div><label>Planning date<input type="date" value={planningDate} onChange={event => setPlanningDate(event.target.value)} /></label></div>
       <input type="file" accept=".xlsx,.xls,.xlsm,.csv" multiple onChange={async event => { const files = Array.from(event.target.files || []); const results = await Promise.all(files.map(parseAgencyWorkbook)); const parsed = results.reduce((all, result) => ({ rows: all.rows.concat(result.rows), issues: all.issues.concat(result.issues) }), { rows: [] as ImportRow[], issues: [] as ImportIssue[] }); setImportRows(parsed.rows); setImportIssues(parsed.issues); setImportMessage(undefined); }} />
-      {importRows.length > 0 && <><p><strong>{importRows.length}</strong> confirmed day{importRows.length === 1 ? "" : "s"} ready · <strong>{unmatchedRows.length}</strong> names not matched to Driver Master.</p><button className="primary" type="button" disabled={importBusy || !matchedRows.some(row => row.driver)} onClick={() => void importAvailability()}>{importBusy ? "Importing…" : "Import confirmed availability"}</button></>}
+      {importRows.length > 0 && <><p><strong>{importRows.length}</strong> confirmed day{importRows.length === 1 ? "" : "s"} ready · <strong>{unmatchedRows.length}</strong> names not matched to Driver Master · <strong>{creatableRows.length}</strong> eligible for provisional Agency creation.</p><button className="primary" type="button" disabled={importBusy || (!matchedRows.some(row => row.driver) && creatableRows.length === 0)} onClick={() => void importAvailability()}>{importBusy ? "Importing…" : "Import confirmed availability and update Master Data"}</button></>}
       {importIssues.length > 0 && <details><summary>{importIssues.length} import issue{importIssues.length === 1 ? "" : "s"}</summary><ul>{importIssues.slice(0, 100).map(issue => <li key={`${issue.row}-${issue.reason}`}>{issue.row}: {issue.reason}</li>)}</ul></details>}
       {importMessage && <p className="notice inline-notice">{importMessage}</p>}
     </div>}
