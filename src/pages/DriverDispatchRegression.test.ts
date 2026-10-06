@@ -14,10 +14,14 @@ const smartDispatchCss = readFileSync(new URL("../smart-dispatch.css", import.me
 const loadPlanCss = readFileSync(new URL("../customer-load-plans.css", import.meta.url), "utf8");
 const availabilitySource = readFileSync(new URL("../components/DriverAvailabilityPanel.tsx", import.meta.url), "utf8");
 const plannerSource = readFileSync(new URL("./RunPlannerLive.tsx", import.meta.url), "utf8");
+const staffingSource = readFileSync(new URL("./Staffing.tsx", import.meta.url), "utf8");
 
 describe("Driver Dispatch UI contract", () => {
-  it("uses one Driver Availability decision in Planner Builder and Dispatch", () => {
-    expect(plannerSource).toContain("<DriverAvailabilityPanel planningDate={date}");
+  it("uses one Driver Availability decision in Staffing and Dispatch", () => {
+    expect(plannerSource).not.toContain("<DriverAvailabilityPanel");
+    expect(staffingSource).toContain("Import agency availability");
+    expect(staffingSource).toContain("Import confirmed availability");
+    expect(staffingSource).toContain("Employment type remains controlled by Master Data");
     expect(authoritativeSource).toContain("<DriverAvailabilityPanel planningDate={planningDate}");
     expect(apiSource).toContain("/api/v1/driver-availability?date=");
     expect(apiSource).toContain("sharedAvailability?.employmentType");

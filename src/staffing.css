@@ -1,0 +1,11 @@
+.staffing-page { max-width: none; }
+.staffing-import-panel { display: grid; gap: 10px; }
+.staffing-import-panel .title-row { align-items: start; }
+.staffing-import-panel input[type=file] { max-width: 620px; }
+.staffing-summary { margin: 10px 0; }
+.staffing-groups { align-items: start; }
+.staffing-inline-editor { display: grid; grid-template-columns: repeat(2, minmax(150px, 1fr)); gap: 8px; padding: 10px; border: 1px solid #c9dbe7; border-radius: 8px; background: #f7fbfd; }
+.staffing-inline-editor label { display: grid; gap: 4px; }
+.staffing-inline-editor label:last-of-type { grid-column: 1 / -1; }
+.staffing-inline-editor textarea { min-height: 52px; }
+@media (max-width: 800px) { .staffing-inline-editor { grid-template-columns: 1fr; } .staffing-inline-editor label:last-of-type { grid-column: auto; } }
