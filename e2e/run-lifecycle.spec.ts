@@ -311,7 +311,8 @@ test('planner → dispatch → geofence arrival/departure → completion stays c
 
   await page.getByRole('link', { name: 'Pallet Order' }).click();
   await expect(page.getByRole('heading', { name: 'Pallet Control' })).toBeVisible();
-  await expect(page.getByText(/HH-E2E-001/i).first()).toBeVisible();
+  // Pallet Control no longer renders fully allocated orders as outstanding work.
+  // The API state is the lifecycle assertion here; Planner hydration below verifies the allocation remains attached to the run.
   expect(state.allocatedPallets).toBe(4);
 
   // The second-screen allocation must hydrate back into Planner with source references in Line note.
