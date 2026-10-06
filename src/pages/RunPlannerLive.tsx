@@ -6,6 +6,7 @@ import { startVisiblePolling } from "../lib/visiblePolling";
 import "../simple-planner.css";
 import { createRun, listRuns, updateRunStatus, updateRunStops } from '../api/runs';
 import { planningDeliveryLocation } from "../lib/planningLocations";
+import { findFinalRunSavings, type FinalCheckLine, type FinalCheckRun } from "./runPlannerFinalCheck";
 
 type Period = "" | "AM" | "PM";
 type PeriodFilter = "ALL" | "AM" | "PM";
@@ -147,6 +148,7 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
   const [message, setMessage] = useState<string>();
   const [openPicker, setOpenPicker] = useState<string>();
   const [periodFilter, setPeriodFilter] = useState<PeriodFilter>("ALL");
+  const [dismissedPlanChecks, setDismissedPlanChecks] = useState(() => new Set<string>());
   const saveTimers = useRef<Record<string, number>>({});
   const mutationCounter = useRef(0);
   const dirtyRunKeys = useRef(new Set<string>());
@@ -317,6 +319,36 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
   );
   const amRunCount = runs.filter((run) => run.period === "AM").length;
   const pmRunCount = runs.filter((run) => run.period === "PM").length;
+  const finalRunSavings = useMemo(() => {
+    const checkerRuns: FinalCheckRun[] = runs.map((run, index) => {
+      let complete = true;
+      const lines = run.lines.flatMap<FinalCheckLine>((line) => {
+        const hasContent = Boolean(line.collectionSite.trim() || line.deliverySite.trim() || line.pallets.trim());
+        if (!hasContent) return [];
+        const quantity = validPallets(line.pallets) || 0;
+        const ids = lineOrderIds(line);
+        if (!quantity || !ids.length) {
+          complete = false;
+          return [];
+        }
+        if (line.orderAllocations) {
+          const allocations = ids.flatMap((orderId) => {
+            const pallets = Math.max(line.orderAllocations?.[orderId] || 0, 0);
+            return pallets > 0 ? [{ orderId, collectionSite: line.collectionSite, deliverySite: line.deliverySite, pallets }] : [];
+          });
+          if (allocations.reduce((sum, allocation) => sum + allocation.pallets, 0) !== quantity) complete = false;
+          return allocations;
+        }
+        if (ids.length !== 1) {
+          complete = false;
+          return [];
+        }
+        return [{ orderId: ids[0], collectionSite: line.collectionSite, deliverySite: line.deliverySite, pallets: quantity }];
+      });
+      return { key: run.key, label: `RUN ${index + 1}`, period: run.period, complete, lines };
+    });
+    return findFinalRunSavings(checkerRuns, orders).filter((suggestion) => !dismissedPlanChecks.has(suggestion.id));
+  }, [dismissedPlanChecks, orders, runs]);
   const newDraft = () => {
     const draft = blankRun(`shell-${date}-${crypto.randomUUID()}`);
     if (periodFilter !== "ALL") draft.period = periodFilter;
@@ -582,6 +614,14 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
     </div>
 
     {message && <p className="notice inline-notice simple-planner-notice">{message}</p>}
+    {finalRunSavings.length > 0 && <details className="simple-plan-check" data-testid="planner-final-run-check">
+      <summary><span><strong>Plan check</strong><small>{finalRunSavings.length} possible run saving{finalRunSavings.length === 1 ? "" : "s"}</small></span><span>Review</span></summary>
+      <div className="simple-plan-check-list">{finalRunSavings.map((suggestion) => <article key={suggestion.id}>
+        <div className="simple-plan-check-title"><span><strong>Could remove {suggestion.sourceRunLabel}</strong><small>Capacity-safe pallet move; route order and timing still need your confirmation.</small></span><button type="button" onClick={() => setDismissedPlanChecks((current) => new Set([...current, suggestion.id]))}>Dismiss</button></div>
+        <ol>{suggestion.movements.map((movement, index) => <li key={`${movement.fromRunKey}:${movement.toRunKey}:${index}`}><strong>{movement.pallets} {movement.palletLabel}</strong> · {movement.collectionSite} → {movement.deliverySite} · {movement.fromRunLabel} to {movement.toRunLabel}</li>)}</ol>
+        <div className="simple-plan-check-results">{suggestion.resultingUtilisation.map((result) => <span key={result.runKey}><strong>{result.runLabel}</strong> {result.percent}% full</span>)}<span className="timing-check">Timing confirmation required</span></div>
+      </article>)}</div>
+    </details>}
     <div className="simple-planner-layout">
       <div className="simple-run-builder">
         <div className="simple-section-heading"><div><p className="eyebrow">Run builder</p><h2>{visibleRuns.length} run{visibleRuns.length === 1 ? "" : "s"}</h2></div><small>Collection and delivery choices come from live jobs for the selected day. Choose both to link the line to the matching order(s).</small></div>
