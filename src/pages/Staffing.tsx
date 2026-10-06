@@ -19,6 +19,26 @@ function dateKey(value: unknown) {
   return text && !Number.isNaN(parsed.getTime()) ? parsed.toISOString().slice(0, 10) : "";
 }
 
+const agencyStatusCodes = new Set(["AV", "AVAILABLE", "A", "REST", "HOL", "HOLIDAY", "OFF", "N", "N?", "D", "D?", "R?", "C", "X", "N/A", "NA"]);
+
+function findDriverNameColumn(matrix: unknown[][], dateRow: number) {
+  const headerRows = matrix.slice(Math.max(0, dateRow - 1), Math.min(matrix.length, dateRow + 5));
+  const score = (column: number) => matrix.slice(dateRow + 1).reduce((total, row) => {
+    const text = String(row[column] || "").trim();
+    return total + (text && text.length >= 3 && !agencyStatusCodes.has(text.toUpperCase()) && !dateKey(row[column]) && /[a-z]/i.test(text) ? 1 : 0);
+  }, 0);
+  for (const header of headerRows) {
+    const exact = header.findIndex(value => /^(driver\s*name|driver|name)$/i.test(String(value || "").trim()));
+    if (exact >= 0 && score(exact) > 0) return exact;
+  }
+  const counts = new Map<number, number>();
+  for (const row of matrix.slice(dateRow + 1)) row.forEach((value, column) => {
+    const text = String(value || "").trim();
+    if (text && text.length >= 3 && !agencyStatusCodes.has(text.toUpperCase()) && !dateKey(value) && /[a-z]/i.test(text)) counts.set(column, (counts.get(column) || 0) + 1);
+  });
+  return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? -1;
+}
+
 async function parseAgencyWorkbook(file: File): Promise<{ rows: ImportRow[]; issues: ImportIssue[] }> {
   const workbook = XLSX.read(await file.arrayBuffer(), { type: "array", cellDates: true });
   const rows: ImportRow[] = [];
@@ -28,9 +48,8 @@ async function parseAgencyWorkbook(file: File): Promise<{ rows: ImportRow[]; iss
     const dateRow = matrix.findIndex(row => row.filter(cell => Boolean(dateKey(cell))).length >= 5);
     if (dateRow < 0) continue;
     const dates = matrix[dateRow].map(dateKey);
-    const headerRow = matrix[Math.max(0, dateRow - 1)] || [];
-    const nameColumn = headerRow.findIndex(value => /driver\s*name|driver|name/i.test(String(value)));
-    const resolvedNameColumn = nameColumn >= 0 ? nameColumn : 3;
+    const resolvedNameColumn = findDriverNameColumn(matrix, dateRow);
+    if (resolvedNameColumn < 0) { issues.push({ row: sheetName, reason: "Could not identify a driver-name column beside the availability dates." }); continue; }
     for (const row of matrix.slice(dateRow + 1)) {
       const driverName = String(row[resolvedNameColumn] || "").trim();
       if (!driverName) continue;
@@ -39,7 +58,7 @@ async function parseAgencyWorkbook(file: File): Promise<{ rows: ImportRow[]; iss
         const status = String(value || "").trim().toUpperCase();
         if (!date || !status) return;
         if (["AV", "AVAILABLE", "A"].includes(status)) rows.push({ driverName, date, status, source: `${file.name} · ${sheetName}` });
-        else if (!["REST", "HOL", "HOLIDAY", "OFF", "N", "D", "D?", "C", ""].includes(status)) issues.push({ row: `${driverName} ${date}`, reason: `Unrecognised status “${status}”; not imported.` });
+        else if (status && !agencyStatusCodes.has(status)) issues.push({ row: `${driverName} ${date}`, reason: `Unrecognised status “${status}”; not imported.` });
       });
     }
   }
