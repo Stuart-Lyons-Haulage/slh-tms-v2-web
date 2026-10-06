@@ -2,7 +2,6 @@ import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react
 import { useAccessToken } from "../../lib/auth";
 import { updateRunRelay } from "../../api/runs";
 import "../../smart-dispatch.css";
-import { ComplianceWarningBanner } from "./ComplianceWarningBanner";
 import { DispatchDriverRow } from "./DispatchDriverRow";
 import { DispatchFilters } from "./DispatchFilters";
 import { rankDriversForRun } from "./dispatchRunRanking";
@@ -19,7 +18,6 @@ import {
   filterDriversByEmploymentType,
   globalFailures,
   rowFailures,
-  selectedAllocations,
   type DispatchAvailableTimeMap,
   type DispatchSelectionMap
 } from "./dispatchBoardState";
@@ -139,20 +137,19 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
   }, [availableTimes, driverSearch, employmentFilter, failures, filter, selections, snapshot]);
 
   const filterCounts = useMemo(() => {
-    const workforce = snapshot ? filterDriversByEmploymentType(snapshot.drivers, employmentFilter) : [];
+    const workforce = snapshot ? filterDriversByEmploymentType(snapshot.drivers, "all") : [];
     const searched = filterDriversByDriverSearch(workforce, driverSearch);
     return Object.fromEntries(filterValues.map(value => [
       value,
       snapshot ? filterDispatchDrivers(searched, value, selections, snapshot.runs, availableTimes, failures).length : 0
     ])) as Record<DispatchFilter, number>;
-  }, [availableTimes, driverSearch, employmentFilter, failures, selections, snapshot]);
+  }, [availableTimes, driverSearch, failures, selections, snapshot]);
 
   const employmentCounts = useMemo(() => Object.fromEntries(employmentFilterValues.map(value => [
     value,
     snapshot ? filterDriversByEmploymentType(snapshot.drivers, value).length : 0
   ])) as Record<DispatchEmploymentFilter, number>, [snapshot]);
 
-  const selectedCount = snapshot ? selectedAllocations(snapshot.drivers, selections).length : 0;
   const samsaraExportCandidates = useMemo(() => {
     if (!snapshot) return [];
     return snapshot.equipment.loads.filter(load =>
@@ -446,24 +443,6 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
       </div>
     </header>
 
-    <div className="samsara-dispatch-strip" role="region" aria-label="Samsara dispatch export">
-      <div>
-        <strong>Samsara route export</strong>
-        <span>{snapshot.samsaraConfigured
-           ? `${samsaraExportCandidates.length} allocated unsent route${samsaraExportCandidates.length === 1 ? '' : 's'} ready · ${Object.keys(snapshot.samsaraDispatch).length} verified in Samsara${snapshot.samsaraStaleRouteCount ? ` · ${snapshot.samsaraStaleRouteCount} stale mapping${snapshot.samsaraStaleRouteCount === 1 ? '' : 's'} available for retry` : ''}`
-          : snapshot.samsaraConnectionMessage || 'Samsara API is unavailable. CSV fallback remains available on each allocated route.'}</span>
-      </div>
-      <button
-        className="smart-action primary"
-        type="button"
-        disabled={Boolean(action) || !snapshot.samsaraConfigured || samsaraExportCandidates.length === 0}
-        onClick={() => void handleSamsaraBatch()}
-      >
-        {action === "samsara" ? "Exporting…" : "Export to Samsara"}
-      </button>
-    </div>
-
-    <ComplianceWarningBanner drivers={snapshot.drivers} availableTimes={availableTimes} failures={failures} />
     {notice && <div className="smart-dispatch-notice" role="status">{notice}</div>}
     {error && <div className="smart-dispatch-error inline" role="alert">{error}</div>}
     {globalLockFailures.map((failure, index) => <div className="smart-dispatch-error inline" role="alert" key={`${failure.reason}-${index}`}>{failure.reason}</div>)}
@@ -481,15 +460,6 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
         <small>{deliveryDriver ? `Delivery leg: ${deliveryDriver.name}` : "Samsara export will remain blocked until the delivery leg is assigned."}</small>
       </section>;
     })}
-
-    <div className="smart-dispatch-summary">
-      <span><strong>{snapshot.drivers.length}</strong> available drivers</span>
-      <span><strong>{snapshot.visibility.windowDays}</strong> day rolling window</span>
-      <span><strong>{snapshot.runs.length}</strong> routes</span>
-      <span><strong>{selectedCount}</strong> selected/allocated</span>
-      <span><strong>{snapshot.drivers.filter(driver => driver.backloadCandidate).length}</strong> backload candidates</span>
-      <span><strong>{Object.keys(snapshot.samsaraDispatch).length}</strong> Samsara sent</span>
-    </div>
 
     <DispatchFilters
       value={filter}

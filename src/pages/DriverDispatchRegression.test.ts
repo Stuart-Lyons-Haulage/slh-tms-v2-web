@@ -88,7 +88,8 @@ describe("Driver Dispatch UI contract", () => {
     expect(authoritativeSource).toContain("await syncSamsaraMappings(planningDate, access)");
     expect(authoritativeSource).toContain("sendRunToSamsara(selection.runId, access)");
     expect(authoritativeSource).toContain("onDownloadSamsaraCsv");
-    expect(authoritativeSource).toContain("Samsara route export");
+    expect(authoritativeSource).toContain("Export to Samsara");
+    expect(authoritativeSource).not.toContain('className="samsara-dispatch-strip"');
     expect(authoritativeSource).not.toContain("sendDriverMessage(");
     expect(authoritativeSource).not.toContain("<DispatchMessageDialog");
   });
@@ -99,6 +100,22 @@ describe("Driver Dispatch UI contract", () => {
     expect(authoritativeSource).toContain("Refresh Staff & Get Times");
     expect(authoritativeSource).toContain("syncDispatchDrivers");
     expect(authoritativeSource).toContain("filterDriversByDriverSearch");
+  });
+
+  it("uses one compact actionable driver filter row without duplicate dashboard panels", () => {
+    const labels = ["All people", "Employed", "Agency", "Casual", "Subbies", "Sage unmatched"];
+    labels.reduce((position, label) => {
+      const nextPosition = filterSource.indexOf(`label: "${label}"`);
+      expect(nextPosition).toBeGreaterThan(position);
+      return nextPosition;
+    }, -1);
+    expect(filterSource.indexOf("Unallocated<span>")).toBeGreaterThan(filterSource.indexOf('label: "Sage unmatched"'));
+    expect(filterSource).not.toContain("All drivers");
+    expect(filterSource).not.toContain("Skills mismatch");
+    expect(filterSource).not.toContain("Backloads");
+    expect(authoritativeSource).not.toContain("<ComplianceWarningBanner");
+    expect(authoritativeSource).not.toContain('className="smart-dispatch-summary"');
+    expect(smartDispatchCss).toContain(".smart-dispatch-filters button.warning:not(.active)");
   });
 
   it("keeps the authoritative Smart Dispatch toolbar visibly rendered in production", () => {
@@ -117,7 +134,9 @@ describe("Driver Dispatch UI contract", () => {
     expect(authoritativeSource).toContain('aria-label="Routes ready for driver allocation"');
     expect(authoritativeSource).toContain("<strong>Routes</strong>");
     expect(authoritativeSource).toContain("<th>Driver</th><th>Duty</th><th>Last location / fit</th><th>Skills</th><th>Route</th>");
-    expect(authoritativeSource).toContain("available drivers");
+    expect(filterSource).toContain("All people");
+    expect(filterSource).toContain("Sage unmatched");
+    expect(filterSource).toContain("Unallocated");
     expect(apiSource).toContain("authorityByDriver.has(driver.driverId)");
     expect(apiSource).toContain("onLeave: authority?.onLeave === true");
     expect(rowSource).toContain('driver.onLeave ? "smart-dispatch-row on-leave"');
@@ -163,7 +182,7 @@ describe("Driver Dispatch UI contract", () => {
   });
 
   it("does not clip the complete Smart Dispatch driver payload to the smaller visibility evidence set", () => {
-    expect(authoritativeSource).toContain("snapshot.drivers.length");
+    expect(authoritativeSource).toContain('filterDriversByEmploymentType(snapshot.drivers, "all")');
     expect(apiSource).not.toContain(".filter(driver => visibilityByDriver.has(driver.driverId))");
   });
 

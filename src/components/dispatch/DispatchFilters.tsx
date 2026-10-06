@@ -11,14 +11,6 @@ type Props = {
   onDriverSearchChange: (value: string) => void;
 };
 
-const filters: Array<{ value: DispatchFilter; label: string }> = [
-  { value: "all", label: "All drivers" },
-  { value: "unallocated", label: "Unallocated" },
-  { value: "backloads", label: "Backloads" },
-  { value: "warnings", label: "Warnings" },
-  { value: "skills-mismatch", label: "Skills mismatch" }
-];
-
 const employmentFilters: Array<{ value: DispatchEmploymentFilter; label: string }> = [
   { value: "all", label: "All people" },
   { value: "employed", label: "Employed" },
@@ -38,6 +30,16 @@ export function DispatchFilters({
   driverSearch,
   onDriverSearchChange
 }: Props) {
+  const chooseEmploymentFilter = (next: DispatchEmploymentFilter) => {
+    onChange("all");
+    onEmploymentChange(next);
+  };
+
+  const chooseUnallocated = () => {
+    onEmploymentChange("all");
+    onChange("unallocated");
+  };
+
   return <div className="smart-dispatch-filter-groups">
     <label className="smart-dispatch-search">
       <span>Driver search</span>
@@ -48,27 +50,24 @@ export function DispatchFilters({
         placeholder="Name, code, skill, vehicle, run or location"
       />
     </label>
-    <div className="smart-dispatch-filters" role="group" aria-label="Dispatch filters">
-      {filters.map(filter => <button
-        key={filter.value}
+    <div className="smart-dispatch-filters smart-dispatch-workforce-filters" role="group" aria-label="Driver filters">
+      {employmentFilters.map(employment => <button
+        key={employment.value}
         type="button"
-        className={value === filter.value ? "active" : ""}
-        aria-pressed={value === filter.value}
-        onClick={() => onChange(filter.value)}
+        className={`${value === "all" && employmentValue === employment.value ? "active" : ""}${employment.value === "unmatched" && employmentCounts.unmatched > 0 ? " warning" : ""}`.trim()}
+        aria-pressed={value === "all" && employmentValue === employment.value}
+        onClick={() => chooseEmploymentFilter(employment.value)}
       >
-        {filter.label}<span>{counts[filter.value]}</span>
+        {employment.label}<span>{employmentCounts[employment.value]}</span>
       </button>)}
-    </div>
-    <div className="smart-dispatch-filters smart-dispatch-workforce-filters" role="group" aria-label="Employment type filters">
-      {employmentFilters.map(filter => <button
-        key={filter.value}
+      <button
         type="button"
-        className={employmentValue === filter.value ? "active" : ""}
-        aria-pressed={employmentValue === filter.value}
-        onClick={() => onEmploymentChange(filter.value)}
+        className={value === "unallocated" ? "active" : ""}
+        aria-pressed={value === "unallocated"}
+        onClick={chooseUnallocated}
       >
-        {filter.label}<span>{employmentCounts[filter.value]}</span>
-      </button>)}
+        Unallocated<span>{counts.unallocated}</span>
+      </button>
     </div>
   </div>;
 }
