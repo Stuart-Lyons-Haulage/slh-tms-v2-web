@@ -20,7 +20,7 @@ export function DriverDispatchOperational() {
     window.history.replaceState(null, "", `${window.location.pathname}?${params}`);
   }, [dispatchDate]);
 
-  return <>
+  return <div className="driver-dispatch-operational-page">
     <BackloadMatchNotifications />
     <DispatchBoard
       key={`${dispatchDate}-${dispatchRevision}`}
@@ -30,5 +30,5 @@ export function DriverDispatchOperational() {
         <DispatchResourceQuickAdd onSaved={() => setDispatchRevision(value => value + 1)} />
       </>}
     />
-  </>;
+  </div>;
 }

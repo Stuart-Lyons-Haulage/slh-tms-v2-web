@@ -265,6 +265,12 @@
 .smart-run-card .smart-run-fit { color: #17633b; font-weight: 750; }
 .smart-run-card .smart-run-warning { color: #8a5c00; font-weight: 750; }
 
+@media (min-width: 901px) {
+  .top-navigation-shell main > .driver-dispatch-operational-page {
+    margin-top: -54px;
+  }
+}
+
 @media (max-width: 1150px) {
   .smart-dispatch-workspace { grid-template-columns: 1fr; }
   .smart-run-sidebar { position: static; max-height: none; }

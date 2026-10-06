@@ -75,6 +75,7 @@ describe("Driver Dispatch UI contract", () => {
     expect(operationalSource).not.toContain("60_000");
     expect(operationalSource).not.toContain("refreshKey");
     expect(operationalSource).toContain("<DispatchBoard");
+    expect(operationalSource).toContain('className="driver-dispatch-operational-page"');
     expect(operationalSource).not.toContain("<DriverDispatch />");
   });
 
@@ -94,12 +95,12 @@ describe("Driver Dispatch UI contract", () => {
     expect(authoritativeSource).not.toContain("<DispatchMessageDialog");
   });
 
-  it("keeps sync and customer exports on the routed Driver Dispatch surface", () => {
+  it("keeps driver search, sync and customer exports on the routed Driver Dispatch surface", () => {
     expect(operationalSource).not.toContain("CustomerLoadPlanActions");
-    expect(filterSource).not.toContain('aria-label="Search drivers"');
+    expect(filterSource).toContain('aria-label="Search drivers"');
     expect(authoritativeSource).toContain("Refresh Staff & Get Times");
     expect(authoritativeSource).toContain("syncDispatchDrivers");
-    expect(authoritativeSource).not.toContain("filterDriversByDriverSearch");
+    expect(authoritativeSource).toContain("filterDriversByDriverSearch");
   });
 
   it("uses one compact actionable driver filter row without duplicate dashboard panels", () => {
@@ -128,6 +129,8 @@ describe("Driver Dispatch UI contract", () => {
     expect(authoritativeCss).toContain(".smart-dispatch-board > .smart-dispatch-header");
     expect(authoritativeCss).toContain("display: flex !important");
     expect(authoritativeCss).toContain("visibility: visible !important");
+    expect(authoritativeCss).toContain(".top-navigation-shell main > .driver-dispatch-operational-page");
+    expect(authoritativeCss).toContain("margin-top: -54px");
   });
 
   it("uses Routes wording and carries Driver Master/Sage duty and leave state into dispatch", () => {

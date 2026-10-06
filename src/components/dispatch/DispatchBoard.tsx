@@ -13,6 +13,7 @@ import {
   buildInitialSelections,
   buildRunOwnerById,
   emptyDispatchSelection,
+  filterDriversByDriverSearch,
   filterDispatchDrivers,
   filterDriversByEmploymentType,
   globalFailures,
@@ -30,7 +31,7 @@ type Props = {
 };
 
 type SmartDispatchSnapshot = Awaited<ReturnType<typeof getSmartDispatch>>;
-type ActionState = "refresh" | undefined;
+type ActionState = "refresh" | "samsara" | undefined;
 const filterValues: DispatchFilter[] = ["all", "unallocated", "backloads", "warnings", "skills-mismatch"];
 const employmentFilterValues: DispatchEmploymentFilter[] = ["all", "employed", "agency", "casual", "subcontractor", "unmatched"];
 
@@ -95,6 +96,7 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
   const [failures, setFailures] = useState<DispatchLockFailure[]>([]);
   const [filter, setFilter] = useState<DispatchFilter>("all");
   const [employmentFilter, setEmploymentFilter] = useState<DispatchEmploymentFilter>("all");
+  const [driverSearch, setDriverSearch] = useState("");
   const [action, setAction] = useState<ActionState>();
   const [busyDriverId, setBusyDriverId] = useState<string>();
   const [error, setError] = useState<string>();
@@ -130,21 +132,33 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
   const visibleDrivers = useMemo(() => {
     if (!snapshot) return [];
     const workforce = filterDriversByEmploymentType(snapshot.drivers, employmentFilter);
-    return filterDispatchDrivers(workforce, filter, selections, snapshot.runs, availableTimes, failures);
-  }, [availableTimes, employmentFilter, failures, filter, selections, snapshot]);
+    const searched = filterDriversByDriverSearch(workforce, driverSearch);
+    return filterDispatchDrivers(searched, filter, selections, snapshot.runs, availableTimes, failures);
+  }, [availableTimes, driverSearch, employmentFilter, failures, filter, selections, snapshot]);
 
   const filterCounts = useMemo(() => {
     const workforce = snapshot ? filterDriversByEmploymentType(snapshot.drivers, "all") : [];
+    const searched = filterDriversByDriverSearch(workforce, driverSearch);
     return Object.fromEntries(filterValues.map(value => [
       value,
-      snapshot ? filterDispatchDrivers(workforce, value, selections, snapshot.runs, availableTimes, failures).length : 0
+      snapshot ? filterDispatchDrivers(searched, value, selections, snapshot.runs, availableTimes, failures).length : 0
     ])) as Record<DispatchFilter, number>;
-  }, [availableTimes, failures, selections, snapshot]);
+  }, [availableTimes, driverSearch, failures, selections, snapshot]);
 
   const employmentCounts = useMemo(() => Object.fromEntries(employmentFilterValues.map(value => [
     value,
     snapshot ? filterDriversByEmploymentType(snapshot.drivers, value).length : 0
   ])) as Record<DispatchEmploymentFilter, number>, [snapshot]);
+
+  const samsaraExportCandidates = useMemo(() => {
+    if (!snapshot) return [];
+    return snapshot.equipment.loads.filter(load =>
+      Boolean(load.driverId) &&
+      Boolean(load.vehicleId) &&
+      (load.stops?.length || 0) >= 2 &&
+      !snapshot.samsaraDispatch[load.id] &&
+      !String(load.status || "").toLowerCase().includes("cancel"));
+  }, [snapshot]);
 
   const globalLockFailures = useMemo(() => {
     const driverIds = new Set(snapshot?.drivers.map(driver => driver.driverId) || []);
@@ -289,6 +303,44 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
     }
   }
 
+  async function handleSamsaraBatch() {
+    if (!snapshot?.samsaraConfigured || samsaraExportCandidates.length === 0) return;
+    const count = samsaraExportCandidates.length;
+    if (count > 1 && !window.confirm(`Export ${count} allocated route${count === 1 ? "" : "s"} to Samsara? Existing Samsara routes are not duplicated.`)) return;
+
+    setAction("samsara");
+    setNotice(undefined);
+    setError(undefined);
+    try {
+      const access = await token();
+      const batchFailures: DispatchLockFailure[] = [];
+      let exported = 0;
+
+      await syncSamsaraMappings(planningDate, access);
+      for (const load of samsaraExportCandidates) {
+        try {
+          await sendRunToSamsara(load.id, access);
+          exported++;
+        } catch (exception) {
+          batchFailures.push({
+            driverId: load.driverId || "",
+            runId: load.id,
+            reason: exception instanceof Error ? exception.message : `${load.reference || load.id} could not be sent to Samsara.`
+          });
+        }
+      }
+
+      await refresh();
+      setFailures(batchFailures);
+      if (exported > 0)
+        setNotice(`${exported} route${exported === 1 ? "" : "s"} exported to Samsara${batchFailures.length ? `; ${batchFailures.length} need attention` : "."}`);
+      else if (batchFailures.length > 0)
+        setError(`No routes were exported to Samsara. ${batchFailures.length} route${batchFailures.length === 1 ? "" : "s"} need attention.`);
+    } finally {
+      setAction(undefined);
+    }
+  }
+
   async function handleSamsaraSingle(driver: DispatchDriverDto, selection: DispatchAllocationSelection) {
     const existingSamsaraRoute = selection.runId ? Boolean(snapshot?.samsaraDispatch[selection.runId]) : false;
     if (!selection.runId || (!snapshot?.samsaraConfigured && !existingSamsaraRoute)) return;
@@ -378,6 +430,15 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
       <div className="smart-dispatch-actions">
         {onPlanningDateChange && <label className="smart-date-control">Planning date<input type="date" value={planningDate} onChange={event => onPlanningDateChange(event.target.value)} /></label>}
         {extraActions}
+        <button
+          className="smart-action primary"
+          type="button"
+          disabled={Boolean(action) || !snapshot.samsaraConfigured || samsaraExportCandidates.length === 0}
+          onClick={() => void handleSamsaraBatch()}
+          title={!snapshot.samsaraConfigured ? "Configure Samsara in Admin before exporting routes." : samsaraExportCandidates.length === 0 ? "No allocated unsent routes are ready for Samsara." : "Export all allocated routes not already sent to Samsara."}
+        >
+          {action === "samsara" ? "Exporting to Samsara…" : `Export to Samsara${samsaraExportCandidates.length ? ` (${samsaraExportCandidates.length})` : ""}`}
+        </button>
         <button className="smart-action secondary" type="button" disabled={Boolean(action)} onClick={() => void handleRefreshStaff()}>{action === "refresh" ? "Refreshing staff…" : "Refresh Staff & Get Times"}</button>
       </div>
     </header>
@@ -401,12 +462,14 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
     })}
 
     <DispatchFilters
+      value={filter}
+      counts={filterCounts}
+      onChange={setFilter}
       employmentValue={employmentFilter}
       employmentCounts={employmentCounts}
-      onEmploymentChange={value => { setEmploymentFilter(value); setFilter("all"); }}
-      unallocatedCount={filterCounts.unallocated}
-      unallocatedSelected={filter === "unallocated"}
-      onUnallocatedChange={() => { setEmploymentFilter("all"); setFilter(current => current === "unallocated" ? "all" : "unallocated"); }}
+      onEmploymentChange={setEmploymentFilter}
+      driverSearch={driverSearch}
+      onDriverSearchChange={setDriverSearch}
     />
 
     <div className="smart-dispatch-workspace">
