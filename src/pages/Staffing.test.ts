@@ -3,7 +3,13 @@ import { isIgnorableAgencyStatus } from "./Staffing";
 
 describe("agency workbook status normalisation", () => {
   it("ignores provider rest, cancellation, and non-availability codes", () => {
-    for (const status of ["R", "RES", "REST", "CANCELLED", "N/A", "NOT AVAILABLE"]) {
+    for (const status of ["R", "RES", "REST", "CANCELLED", "CANX", "NOT REQ", "LICENCE EXP", "DAY SHIFT ONLY", "D NA", "N/A", "NOT AVAILABLE"]) {
+      expect(isIgnorableAgencyStatus(status)).toBe(true);
+    }
+  });
+
+  it("ignores shift requirement cells and free-text spreadsheet notes", () => {
+    for (const status of ["6 N", "1 N 1 D", "5N", "D CANC WITHIN BOOKING TIME", "HES JUST SAID HE'SBACK HOME FOR 2 WEEKS FROM THE 3RD ! ANNOYING"]) {
       expect(isIgnorableAgencyStatus(status)).toBe(true);
     }
   });

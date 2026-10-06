@@ -49,6 +49,9 @@ export function isIgnorableAgencyStatus(value: unknown) {
   // structural workbook data, not an availability decision, so do not turn it
   // into a false import exception.
   if (/^(MON|TUE|WED|THU|FRI|SAT|SUN)\b/.test(status)) return true;
+  if (/^(?:\d+\s*[ND])(?:\s+\d+\s*[ND])*$/i.test(status)) return true;
+  if (/\b(?:NOT\s*REQ|CANX|CANC|CANCEL(?:LED|ED)?|NOT\s+AVAILABLE|D\s+NA|LICENCE\s+EXP|DAY\s+SHIFT\s+ONLY)\b/i.test(status)) return true;
+  if (status === "?" || status.length > 40) return true;
   if (!Number.isNaN(new Date(status).getTime())) return true;
   return false;
 }
@@ -94,7 +97,7 @@ async function parseAgencyWorkbook(file: File): Promise<{ rows: ImportRow[]; iss
         const status = String(value || "").trim().toUpperCase();
         if (!date || !status) return;
         if (["AV", "AVAILABLE", "A"].includes(status) && isLikelyDriverName(driverName)) rows.push({ driverName, date, status, source: `${file.name} · ${sheetName}`, agencyName: agencyNameFromFile(file.name) });
-        else if (status && !isIgnorableAgencyStatus(status)) issues.push({ row: `${driverName} ${date}`, reason: `Unrecognised status “${status}”; not imported.` });
+        else if (isLikelyDriverName(driverName) && status && !isIgnorableAgencyStatus(status)) issues.push({ row: `${driverName} ${date}`, reason: `Unrecognised status “${status}”; not imported.` });
       });
     }
   }
