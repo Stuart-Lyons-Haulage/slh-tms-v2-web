@@ -202,11 +202,7 @@ export async function getSmartDispatch(
   // TachoMaster legal-hours calculation; Sage HR leave/contract blocks are already
   // reflected in driver.isBlocked by the API authority response.
   const availableTimeByDriver = new Map((await getAvailableTimes(planningDate, enrichedDrivers.map(driver => driver.driverId), token)).map(item => [item.driverId, item]));
-  const allocatedDriverIds = new Set(equipment.loads.filter(load => load.driverId).map(load => load.driverId));
   const dispatchableDrivers = enrichedDrivers.filter(driver => {
-    // Keep an existing allocation visible so a planner can correct it; it is
-    // still marked/validated as blocked and cannot be newly locked silently.
-    if (allocatedDriverIds.has(driver.driverId)) return true;
     const shared = availabilityByDriver.get(driver.driverId);
     const legal = availableTimeByDriver.get(driver.driverId);
     return !driver.isBlocked && shared?.dispatchable === true && !legal?.breachDetail;

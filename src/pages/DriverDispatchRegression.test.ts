@@ -27,6 +27,8 @@ describe("Driver Dispatch UI contract", () => {
     expect(apiSource).toContain("/api/v1/driver-availability?date=");
     expect(apiSource).toContain("sharedAvailability?.employmentType");
     expect(apiSource).toContain("sharedAvailability?.dispatchable === false");
+    expect(apiSource).toContain("return !driver.isBlocked && shared?.dispatchable === true && !legal?.breachDetail;");
+    expect(apiSource).not.toContain("allocatedDriverIds.has(driver.driverId)");
     expect(availabilitySource).toContain("Employment type is read-only here and remains controlled by Master Data.");
     expect(availabilitySource).toContain("Booking confirmed");
     expect(availabilitySource).toContain("Long-term placement");
@@ -112,6 +114,7 @@ describe("Driver Dispatch UI contract", () => {
     expect(authoritativeSource).toContain('aria-label="Routes ready for driver allocation"');
     expect(authoritativeSource).toContain("<strong>Routes</strong>");
     expect(authoritativeSource).toContain("<th>Driver</th><th>Duty</th><th>Last location / fit</th><th>Skills</th><th>Route</th>");
+    expect(authoritativeSource).toContain("available drivers");
     expect(apiSource).toContain("authorityByDriver.has(driver.driverId)");
     expect(apiSource).toContain("onLeave: authority?.onLeave === true");
     expect(rowSource).toContain('driver.onLeave ? "smart-dispatch-row on-leave"');

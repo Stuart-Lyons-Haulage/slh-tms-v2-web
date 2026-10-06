@@ -483,7 +483,7 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
     })}
 
     <div className="smart-dispatch-summary">
-      <span><strong>{snapshot.drivers.length}</strong> recent/operational drivers</span>
+      <span><strong>{snapshot.drivers.length}</strong> available drivers</span>
       <span><strong>{snapshot.visibility.windowDays}</strong> day rolling window</span>
       <span><strong>{snapshot.runs.length}</strong> routes</span>
       <span><strong>{selectedCount}</strong> selected/allocated</span>
