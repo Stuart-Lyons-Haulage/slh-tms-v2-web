@@ -23,19 +23,23 @@ const agencyStatusCodes = new Set(["AV", "AVAILABLE", "A", "REST", "HOL", "HOLID
 
 function findDriverNameColumn(matrix: unknown[][], dateRow: number) {
   const headerRows = matrix.slice(Math.max(0, dateRow - 1), Math.min(matrix.length, dateRow + 5));
+  const isNameLike = (value: unknown) => {
+    const text = String(value || "").trim();
+    return text.length >= 3 && text.split(/\s+/).length >= 2 && !agencyStatusCodes.has(text.toUpperCase()) && !dateKey(value) && /[a-z]/i.test(text);
+  };
   const score = (column: number) => matrix.slice(dateRow + 1).reduce((total, row) => {
-    const text = String(row[column] || "").trim();
-    return total + (text && text.length >= 3 && !agencyStatusCodes.has(text.toUpperCase()) && !dateKey(row[column]) && /[a-z]/i.test(text) ? 1 : 0);
+    return total + (isNameLike(row[column]) ? 1 : 0);
   }, 0);
   for (const header of headerRows) {
     const exact = header.findIndex(value => /^(driver\s*name|driver|name)$/i.test(String(value || "").trim()));
-    if (exact >= 0 && score(exact) > 0) return exact;
+    if (exact >= 0) {
+      const nearby = [exact - 2, exact - 1, exact, exact + 1, exact + 2].filter(column => column >= 0);
+      const strongest = Math.max(...nearby.map(score), 0);
+      if (score(exact) > 0 && score(exact) >= strongest * 0.5) return exact;
+    }
   }
   const counts = new Map<number, number>();
-  for (const row of matrix.slice(dateRow + 1)) row.forEach((value, column) => {
-    const text = String(value || "").trim();
-    if (text && text.length >= 3 && !agencyStatusCodes.has(text.toUpperCase()) && !dateKey(value) && /[a-z]/i.test(text)) counts.set(column, (counts.get(column) || 0) + 1);
-  });
+  for (const row of matrix.slice(dateRow + 1)) row.forEach((value, column) => { if (isNameLike(value)) counts.set(column, (counts.get(column) || 0) + 1); });
   return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? -1;
 }
 
