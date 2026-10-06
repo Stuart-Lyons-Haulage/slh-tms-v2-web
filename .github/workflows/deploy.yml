@@ -1,0 +1,48 @@
+name: Deploy SLH TMS Web
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: slh-tms-web-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.0.0
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build React/Vite frontend
+        env:
+          VITE_API_BASE_URL: https://slh-tms-api-prod.azurewebsites.net
+          VITE_ENTRA_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          VITE_ENTRA_CLIENT_ID: b4d086ae-6e9d-4578-8861-e61410127359
+          VITE_ENTRA_API_SCOPE: api://497f6ea5-9753-43ee-8ccf-afaa0a3869c2/Tms.Access
+          VITE_AZURE_MAPS_CLIENT_ID: ${{ vars.AZURE_MAPS_CLIENT_ID }}
+        run: pnpm build
+      - name: Deploy to Azure Static Web Apps
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.SWA_DEPLOYMENT_TOKEN }}
+          action: upload
+          app_location: /
+          output_location: dist
+          skip_app_build: true
+          app_artifact_location: dist
