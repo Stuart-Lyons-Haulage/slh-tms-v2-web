@@ -23,7 +23,7 @@ describe("Driver Dispatch UI contract", () => {
     expect(staffingSource).toContain("Import agency availability");
     expect(staffingSource).toContain("Import confirmed availability");
     expect(staffingSource).toContain("Employment type remains controlled by Master Data");
-    expect(authoritativeSource).toContain("<DriverAvailabilityPanel planningDate={planningDate}");
+    expect(authoritativeSource).not.toContain("<DriverAvailabilityPanel planningDate={planningDate}");
     expect(apiSource).toContain("/api/v1/driver-availability?date=");
     expect(apiSource).toContain("sharedAvailability?.employmentType");
     expect(apiSource).toContain("sharedAvailability?.dispatchable === false");

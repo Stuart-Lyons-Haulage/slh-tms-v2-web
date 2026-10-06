@@ -65,6 +65,10 @@ function monday(value: string) {
 
 function calendarState(driver: DriverAvailabilityItem | undefined) {
   if (!driver) return { label: "—", className: "empty" };
+  const manualStatus = driver.notes?.match(/(?:^|\b)Calendar status:\s*(AV|Leave|Not available)\b/i)?.[1]?.toLowerCase();
+  if (manualStatus === "leave") return { label: "LEAVE", className: "blocked" };
+  if (manualStatus === "not available") return { label: "N/A", className: "blocked" };
+  if (manualStatus === "av") return { label: "AV", className: "available" };
   if (driver.dispatchable) return { label: "AV", className: "available" };
   if (driver.availabilityConfirmed) return { label: "BOOKED", className: "booked" };
   if (driver.blockReasons.some(reason => /leave|holiday/i.test(reason))) return { label: "LEAVE", className: "blocked" };
@@ -82,6 +86,7 @@ export function Staffing() {
   const [importBusy, setImportBusy] = useState(false);
   const [importMessage, setImportMessage] = useState<string>();
   const [section, setSection] = useState<"timesheets" | "availability" | "history">("timesheets");
+  const [availabilityTab, setAvailabilityTab] = useState<"staff" | "agency">("staff");
   const [weekStart, setWeekStart] = useState(() => monday(planningDate));
   const [calendar, setCalendar] = useState<Record<string, DriverAvailabilitySnapshot>>({});
   const [calendarBusy, setCalendarBusy] = useState(false);
@@ -107,7 +112,7 @@ export function Staffing() {
     return () => { cancelled = true; };
   }, [weekStart, token, calendarReload]);
 
-  const byGroup = useMemo(() => new Map(groups.map(group => [group, snapshot?.drivers.filter(driver => driver.group === group) || []])), [snapshot]);
+  const byGroup = useMemo(() => new Map(groups.map(group => [group, snapshot?.drivers.filter(driver => driver.group === group && (availabilityTab === "staff" ? driver.employmentType === "Employed" : ["Agency", "Casual"].includes(driver.employmentType))) || []])), [availabilityTab, snapshot]);
   const matchedRows = useMemo(() => importRows.map(row => ({ ...row, driver: snapshot?.drivers.find(driver => driver.displayName.trim().toLowerCase() === row.driverName.trim().toLowerCase()) })), [importRows, snapshot]);
   const unmatchedRows = matchedRows.filter(row => !row.driver);
 
@@ -129,7 +134,7 @@ export function Staffing() {
   }
 
   return <section className="staffing-page">
-    <div className="page-heading"><div><p className="eyebrow">Workforce control</p><h1>Staffing</h1><p>Timesheets, availability and driver history in one operational workspace. Employment type remains controlled by Master Data. Agency availability imports feed Driver Master classification and the timesheet/dispatch views.</p></div></div>
+    <div className="page-heading"><div><p className="eyebrow">Workforce control</p><h1>Staffing</h1><p>Timesheets, availability and driver history in one operational workspace. Employment type remains controlled by Master Data. Agency availability imports are matched against Driver Master and then feed the availability used by timesheet and dispatch views.</p></div></div>
     <div className="staffing-section-tabs" role="tablist" aria-label="Staffing sections">
       <button className={section === "timesheets" ? "active" : ""} onClick={() => setSection("timesheets")}>Timesheets</button>
       <button className={section === "availability" ? "active" : ""} onClick={() => setSection("availability")}>Availability</button>
@@ -138,37 +143,43 @@ export function Staffing() {
     {section === "timesheets" && <DriverTimesheets embedded />}
     {section === "history" && <DriverAssignments embedded />}
     {section === "availability" && <>
-    <div className="panel staffing-import-panel"><div className="title-row"><div><h2>Import agency availability</h2><p className="hint">Upload one or more agency workbooks. The importer recognises a driver-name column and date columns; only AV / Available cells are confirmed. Unknown names and unusual codes stay visible for review.</p></div><label>Planning date<input type="date" value={planningDate} onChange={event => setPlanningDate(event.target.value)} /></label></div>
+    <div className="staffing-availability-tabs" role="tablist" aria-label="Availability workforce tabs"><button className={availabilityTab === "staff" ? "active" : ""} onClick={() => setAvailabilityTab("staff")}>Staff</button><button className={availabilityTab === "agency" ? "active" : ""} onClick={() => setAvailabilityTab("agency")}>Agency</button></div>
+    {availabilityTab === "agency" && <div className="panel staffing-import-panel"><div className="title-row"><div><h2>Import agency availability</h2><p className="hint">Upload agency spreadsheets here. Matched rows feed the Agency availability calendar; manual calendar adjustments remain available after import.</p></div><label>Planning date<input type="date" value={planningDate} onChange={event => setPlanningDate(event.target.value)} /></label></div>
       <input type="file" accept=".xlsx,.xls,.xlsm,.csv" multiple onChange={async event => { const files = Array.from(event.target.files || []); const results = await Promise.all(files.map(parseAgencyWorkbook)); const parsed = results.reduce((all, result) => ({ rows: all.rows.concat(result.rows), issues: all.issues.concat(result.issues) }), { rows: [] as ImportRow[], issues: [] as ImportIssue[] }); setImportRows(parsed.rows); setImportIssues(parsed.issues); setImportMessage(undefined); }} />
       {importRows.length > 0 && <><p><strong>{importRows.length}</strong> confirmed day{importRows.length === 1 ? "" : "s"} ready · <strong>{unmatchedRows.length}</strong> names not matched to Driver Master.</p><button className="primary" type="button" disabled={importBusy || !matchedRows.some(row => row.driver)} onClick={() => void importAvailability()}>{importBusy ? "Importing…" : "Import confirmed availability"}</button></>}
       {importIssues.length > 0 && <details><summary>{importIssues.length} import issue{importIssues.length === 1 ? "" : "s"}</summary><ul>{importIssues.slice(0, 100).map(issue => <li key={`${issue.row}-${issue.reason}`}>{issue.row}: {issue.reason}</li>)}</ul></details>}
       {importMessage && <p className="notice inline-notice">{importMessage}</p>}
-    </div>
+    </div>}
     {error && <p className="notice inline-notice">{error}</p>}
     {snapshot && <><div className="driver-availability-summary staffing-summary">{[`${snapshot.summary.employedAvailable} employed available`, `${snapshot.summary.agencyConfirmed} agency confirmed`, `${snapshot.summary.casualConfirmed} casual confirmed`, `${snapshot.summary.driversRequired} drivers required`, `${snapshot.summary.surplusShortfall < 0 ? Math.abs(snapshot.summary.surplusShortfall) + " shortfall" : snapshot.summary.surplusShortfall + " surplus"}`, `${snapshot.classificationMismatchCount} Master Data review`].map(item => <span key={item}>{item}</span>)}</div>
-       <div className="panel staffing-calendar-panel"><div className="title-row"><div><h2>Availability calendar</h2><p className="hint">Sage HR working patterns, leave, Tacho/rest and allocations are shown for employed drivers. Agency and casual cells only become dispatchable after a confirmed booking or spreadsheet import.</p></div><div className="calendar-controls"><button type="button" onClick={() => setWeekStart(addDays(weekStart, -7))}>← Previous</button><strong>{weekStart} – {addDays(weekStart, 6)}</strong><button type="button" onClick={() => setWeekStart(addDays(weekStart, 7))}>Next →</button></div></div>{calendarBusy ? <p className="hint">Loading seven-day availability…</p> : <AvailabilityCalendar weekStart={weekStart} snapshots={calendar} onChanged={() => { void refresh(); setCalendarReload(value => value + 1); }} />}</div>
+       <div className="panel staffing-calendar-panel"><div className="title-row"><div><h2>{availabilityTab === "staff" ? "Staff availability" : "Agency availability"} · Availability calendar</h2><p className="hint">{availabilityTab === "staff" ? "Sage HR working patterns are the source for employed staff leave and availability. This view is read-only in Staffing." : "Agency availability comes from imported spreadsheets and controlled manual calendar adjustments."}</p></div><div className="calendar-controls"><button type="button" onClick={() => setWeekStart(addDays(weekStart, -7))}>← Previous</button><strong>{weekStart} – {addDays(weekStart, 6)}</strong><button type="button" onClick={() => setWeekStart(addDays(weekStart, 7))}>Next →</button></div></div>{calendarBusy ? <p className="hint">Loading seven-day availability…</p> : <AvailabilityCalendar employmentType={availabilityTab === "staff" ? "Employed" : "Agency"} weekStart={weekStart} snapshots={calendar} onChanged={() => { void refresh(); setCalendarReload(value => value + 1); }} />}</div>
       <div className="driver-availability-groups staffing-groups">{groups.map(group => <details key={group} open={group.includes("unconfirmed") || group.includes("blocked")}><summary>{group}<b>{byGroup.get(group)?.length || 0}</b></summary><div className="driver-availability-list">{byGroup.get(group)?.map(driver => <StaffingRow key={driver.driverId} driver={driver} onChanged={() => void refresh()} />)}</div></details>)}</div></>}
     </>}
   </section>;
 }
 
-function AvailabilityCalendar({ weekStart, snapshots, onChanged }: { weekStart: string; snapshots: Record<string, DriverAvailabilitySnapshot>; onChanged: () => void }) {
+function AvailabilityCalendar({ weekStart, snapshots, onChanged, employmentType }: { weekStart: string; snapshots: Record<string, DriverAvailabilitySnapshot>; onChanged: () => void; employmentType: "Employed" | "Agency" }) {
   const token = useAccessToken();
+  const [openCell, setOpenCell] = useState<string>();
+  const [savingCell, setSavingCell] = useState<string>();
   const drivers = useMemo(() => {
     const all = Object.values(snapshots).flatMap(snapshot => snapshot.drivers);
-    return [...new Map(all.map(driver => [driver.driverId, driver])).values()].sort((a, b) => a.displayName.localeCompare(b.displayName));
-  }, [snapshots]);
-  async function toggle(driver: DriverAvailabilityItem, date: string) {
-    if (driver.employmentType !== "Agency" && driver.employmentType !== "Casual") return;
+    return [...new Map(all.filter(driver => employmentType === "Employed" ? driver.employmentType === "Employed" : ["Agency", "Casual"].includes(driver.employmentType)).map(driver => [driver.driverId, driver])).values()].sort((a, b) => a.displayName.localeCompare(b.displayName));
+  }, [employmentType, snapshots]);
+  async function setStatus(driver: DriverAvailabilityItem, date: string, status: "AV" | "Leave" | "Not available") {
+    if (employmentType === "Employed" || (driver.employmentType !== "Agency" && driver.employmentType !== "Casual")) return;
+    const key = `${driver.driverId}-${date}`;
+    setSavingCell(key);
     const current = snapshots[date]?.drivers.find(item => item.driverId === driver.driverId);
-    if (current?.availabilityWindowId) {
-      await request(`/api/v1/driver-availability/${current.availabilityWindowId}`, await token(), { method: "PUT", body: JSON.stringify({ driverId: driver.driverId, availableFromUtc: new Date(`${date}T00:00:00`).toISOString(), availableUntilUtc: new Date(`${date}T23:59:59`).toISOString(), confirmed: !current.availabilityConfirmed, longTermPlacement: current.longTermPlacement, placementEndDate: current.placementEndDate || null, usualDays: current.usualDays || null, notes: current.notes || null, bookingReference: current.bookingReference || null }) });
-    } else {
-      await request("/api/v1/driver-availability", await token(), { method: "POST", body: JSON.stringify({ driverId: driver.driverId, ...dayWindow(date), confirmed: true, longTermPlacement: false, placementEndDate: null, usualDays: null, notes: "Confirmed in Staffing calendar", bookingReference: "STAFFING-CALENDAR" }) });
-    }
-    onChanged();
+    try {
+      const accessToken = await token();
+      const payload = { driverId: driver.driverId, ...dayWindow(date), confirmed: status === "AV", longTermPlacement: current?.longTermPlacement || false, placementEndDate: current?.placementEndDate || null, usualDays: current?.usualDays || null, notes: `Calendar status: ${status}`, bookingReference: current?.bookingReference || "STAFFING-CALENDAR" };
+      await request(current?.availabilityWindowId ? `/api/v1/driver-availability/${current.availabilityWindowId}` : "/api/v1/driver-availability", accessToken, { method: current?.availabilityWindowId ? "PUT" : "POST", body: JSON.stringify(payload) });
+      setOpenCell(undefined);
+      onChanged();
+    } finally { setSavingCell(undefined); }
   }
-  return <div className="staffing-calendar-wrap"><table className="staffing-calendar"><thead><tr><th>Driver</th>{Array.from({ length: 7 }, (_, index) => { const date = addDays(weekStart, index); return <th key={date}>{new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "2-digit", month: "2-digit" }).format(new Date(`${date}T12:00:00`))}</th>; })}</tr></thead><tbody>{drivers.map(driver => <tr key={driver.driverId}><th><span>{driver.displayName}</span><small>{driver.employmentType}{driver.agencyName ? ` · ${driver.agencyName}` : ""}</small></th>{Array.from({ length: 7 }, (_, index) => { const date = addDays(weekStart, index); const state = calendarState(snapshots[date]?.drivers.find(item => item.driverId === driver.driverId)); const editable = driver.employmentType === "Agency" || driver.employmentType === "Casual"; return <td key={date}><button type="button" className={`calendar-cell ${state.className}`} disabled={!editable} title={editable ? "Click to confirm or unconfirm this day" : "Sage HR / operational availability"} onClick={() => void toggle(driver, date)}>{state.label}</button></td>; })}</tr>)}</tbody></table></div>;
+  return <div className="staffing-calendar-wrap"><table className="staffing-calendar"><thead><tr><th>Driver</th>{Array.from({ length: 7 }, (_, index) => { const date = addDays(weekStart, index); return <th key={date}>{new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "2-digit", month: "2-digit" }).format(new Date(`${date}T12:00:00`))}</th>; })}</tr></thead><tbody>{drivers.map(driver => <tr key={driver.driverId}><th><span>{driver.displayName}</span><small>{driver.employmentType}{driver.agencyName ? ` · ${driver.agencyName}` : ""}</small></th>{Array.from({ length: 7 }, (_, index) => { const date = addDays(weekStart, index); const state = calendarState(snapshots[date]?.drivers.find(item => item.driverId === driver.driverId)); const editable = driver.employmentType === "Agency" || driver.employmentType === "Casual"; const key = `${driver.driverId}-${date}`; const currentOpen = openCell === key; return <td className="staffing-calendar-cell" key={date}><button type="button" className={`calendar-cell ${state.className}`} disabled={!editable} title={editable ? "Choose AV, Leave or Not available" : "Sage HR / operational availability"} onClick={() => setOpenCell(currentOpen ? undefined : key)}>{state.label}</button>{currentOpen && <div className="availability-popup" role="menu" aria-label={`Set ${driver.displayName} status for ${date}`}><span>Set status</span>{(["AV", "Leave", "Not available"] as const).map(option => <button key={option} type="button" role="menuitem" disabled={savingCell === key} onClick={() => void setStatus(driver, date, option)}>{option}</button>)}</div>}</td>; })}</tr>)}</tbody></table></div>;
 }
 
 function StaffingRow({ driver, onChanged }: { driver: DriverAvailabilityItem; onChanged: () => void }) {

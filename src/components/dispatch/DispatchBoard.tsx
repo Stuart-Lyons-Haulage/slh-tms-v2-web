@@ -3,7 +3,6 @@ import { useAccessToken } from "../../lib/auth";
 import { updateRunRelay } from "../../api/runs";
 import "../../smart-dispatch.css";
 import { ComplianceWarningBanner } from "./ComplianceWarningBanner";
-import { DriverAvailabilityPanel } from "../DriverAvailabilityPanel";
 import { DispatchDriverRow } from "./DispatchDriverRow";
 import { DispatchFilters } from "./DispatchFilters";
 import { rankDriversForRun } from "./dispatchRunRanking";
@@ -19,7 +18,6 @@ import {
   filterDispatchDrivers,
   filterDriversByEmploymentType,
   globalFailures,
-  reducedRestDriverIds,
   rowFailures,
   selectedAllocations,
   type DispatchAvailableTimeMap,
@@ -114,12 +112,7 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
       const access = await token();
       const data = await getSmartDispatch(planningDate, access);
       const initialSelections = buildInitialSelections(data.drivers, data.runs, data.equipment);
-      const rows = await getAvailableTimes(
-        planningDate,
-        data.drivers.map(driver => driver.driverId),
-        access,
-        reducedRestDriverIds(initialSelections)
-      );
+      const rows = data.availableTimes;
       setSnapshot(data);
       setSelections(applyAvailableTimes(initialSelections, rows));
       setAvailableTimes(availableTimesByDriver(rows));
@@ -226,12 +219,7 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
       await syncDispatchDrivers(access);
       const nextSnapshot = await getSmartDispatch(planningDate, access);
       const nextSelections = buildInitialSelections(nextSnapshot.drivers, nextSnapshot.runs, nextSnapshot.equipment);
-      const rows = await getAvailableTimes(
-        planningDate,
-        nextSnapshot.drivers.map(driver => driver.driverId),
-        access,
-        reducedRestDriverIds(nextSelections)
-      );
+      const rows = nextSnapshot.availableTimes;
       setSnapshot(nextSnapshot);
       setSelections(applyAvailableTimes(nextSelections, rows));
       setAvailableTimes(availableTimesByDriver(rows));
@@ -476,7 +464,6 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
     </div>
 
     <ComplianceWarningBanner drivers={snapshot.drivers} availableTimes={availableTimes} failures={failures} />
-    <DriverAvailabilityPanel planningDate={planningDate} onChanged={() => void refresh()} />
     {notice && <div className="smart-dispatch-notice" role="status">{notice}</div>}
     {error && <div className="smart-dispatch-error inline" role="alert">{error}</div>}
     {globalLockFailures.map((failure, index) => <div className="smart-dispatch-error inline" role="alert" key={`${failure.reason}-${index}`}>{failure.reason}</div>)}

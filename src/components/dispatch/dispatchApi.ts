@@ -112,6 +112,7 @@ export async function getSmartDispatch(
   drivers: DispatchDriverDto[];
   runs: DispatchRunDto[];
   equipment: DispatchEquipmentWorkbench;
+  availableTimes: DispatchAvailableTimeDto[];
   statuses: Record<string, DispatchDriverStatusDto>;
   visibility: DispatchVisibilitySnapshot;
   availability: DriverAvailabilitySnapshot;
@@ -196,10 +197,25 @@ export async function getSmartDispatch(
           : undefined)
     };
   });
+  // Dispatch is an availability workbench, not a complete Driver Master list.
+  // Keep only drivers who pass the shared availability decision and the latest
+  // TachoMaster legal-hours calculation; Sage HR leave/contract blocks are already
+  // reflected in driver.isBlocked by the API authority response.
+  const availableTimeByDriver = new Map((await getAvailableTimes(planningDate, enrichedDrivers.map(driver => driver.driverId), token)).map(item => [item.driverId, item]));
+  const allocatedDriverIds = new Set(equipment.loads.filter(load => load.driverId).map(load => load.driverId));
+  const dispatchableDrivers = enrichedDrivers.filter(driver => {
+    // Keep an existing allocation visible so a planner can correct it; it is
+    // still marked/validated as blocked and cannot be newly locked silently.
+    if (allocatedDriverIds.has(driver.driverId)) return true;
+    const shared = availabilityByDriver.get(driver.driverId);
+    const legal = availableTimeByDriver.get(driver.driverId);
+    return !driver.isBlocked && shared?.dispatchable === true && !legal?.breachDetail;
+  });
   return {
-    drivers: enrichedDrivers,
+    drivers: dispatchableDrivers,
     runs: runs.map(run => runDetail(run, equipment)),
     equipment,
+    availableTimes: [...availableTimeByDriver.values()],
     statuses: Object.fromEntries(statusResponse.drivers.map(status => [status.driverId, status])),
     visibility,
     availability,
