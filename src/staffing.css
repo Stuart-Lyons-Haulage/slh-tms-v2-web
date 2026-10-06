@@ -39,6 +39,7 @@
 .forecast-table input[type=number] { width: 78px; }
 .forecast-table input:not([type]) { min-width: 180px; }
 .forecast-table th small, .forecast-table td small { display: block; color: #6a7d86; font-weight: 400; margin-top: 2px; }
+.forecast-suggestion-button { display: block; margin-top: 6px; padding: 3px 7px; font-size: 0.78rem; }
 .forecast-shortfall { background: #fff6f2; }
 .forecast-gap { color: #a33d26; }
 .forecast-ok { color: #176b38; }
