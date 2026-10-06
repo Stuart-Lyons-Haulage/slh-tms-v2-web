@@ -39,6 +39,9 @@ describe("Driver Dispatch UI contract", () => {
     expect(staffingSource).toContain("STAFFING-CALENDAR");
     expect(timesheetSource).toContain("staffingAnomalies");
     expect(timesheetSource).toContain("confirmed agency availability");
+    expect(staffingSource).toContain("Driver requirements forecast");
+    expect(staffingSource).toContain("Management input · Operations action · Planner visibility");
+    expect(staffingSource).toContain("/api/v1/driver-forecast");
   });
   it("keeps status visible and puts the calculated Start column beside the driver", () => {
     expect(source).toContain("<th>Status</th>");

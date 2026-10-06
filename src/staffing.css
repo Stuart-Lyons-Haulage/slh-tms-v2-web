@@ -33,6 +33,15 @@
 .calendar-cell:not(:disabled) { cursor: pointer; }
 .calendar-cell:not(:disabled):hover { outline: 2px solid #2d8b57; outline-offset: 1px; }
 .staffing-calendar-cell { position: relative; }
+.driver-forecast { display: grid; gap: 12px; }
+.forecast-table { min-width: 1060px; }
+.forecast-table th, .forecast-table td { vertical-align: middle; }
+.forecast-table input[type=number] { width: 78px; }
+.forecast-table input:not([type]) { min-width: 180px; }
+.forecast-table th small, .forecast-table td small { display: block; color: #6a7d86; font-weight: 400; margin-top: 2px; }
+.forecast-shortfall { background: #fff6f2; }
+.forecast-gap { color: #a33d26; }
+.forecast-ok { color: #176b38; }
 .availability-popup { position: absolute; z-index: 20; top: calc(100% - 2px); left: 50%; transform: translateX(-50%); display: grid; gap: 3px; min-width: 132px; padding: 7px; border: 1px solid #9bb4c4; border-radius: 7px; background: #fff; box-shadow: 0 8px 20px rgba(16,42,67,.2); text-align: left; }
 .availability-popup span { padding: 1px 4px 4px; color: #536b75; font-size: 10px; font-weight: 800; text-transform: uppercase; }
 .availability-popup button { border: 1px solid #cbd8e2; border-radius: 4px; background: #f8fbfc; color: #173b57; padding: 5px 7px; text-align: left; font-size: 11px; font-weight: 700; cursor: pointer; }

@@ -8,6 +8,7 @@ import { DriverAssignments } from "./Pages";
 
 type ImportRow = { driverName: string; date: string; status: string; source: string };
 type ImportIssue = { row: string; reason: string };
+type ForecastDay = { date: string; dayRequired: number; nightRequired: number; notes?: string; opsNotes?: string; agencyRequested: number; agencyConfirmed: number; availableDrivers: number; employedAvailable: number; agencyAvailable: number; casualAvailable: number; shortfall: number };
 
 const groups = ["Employed available", "Agency confirmed", "Agency unconfirmed", "Casual confirmed", "Casual unconfirmed", "Unavailable/blocked"] as const;
 
@@ -85,7 +86,7 @@ export function Staffing() {
   const [importIssues, setImportIssues] = useState<ImportIssue[]>([]);
   const [importBusy, setImportBusy] = useState(false);
   const [importMessage, setImportMessage] = useState<string>();
-  const [section, setSection] = useState<"timesheets" | "availability" | "history">("timesheets");
+  const [section, setSection] = useState<"forecast" | "timesheets" | "availability" | "history">("forecast");
   const [availabilityTab, setAvailabilityTab] = useState<"staff" | "agency">("staff");
   const [weekStart, setWeekStart] = useState(() => monday(planningDate));
   const [calendar, setCalendar] = useState<Record<string, DriverAvailabilitySnapshot>>({});
@@ -136,10 +137,12 @@ export function Staffing() {
   return <section className="staffing-page">
     <div className="page-heading"><div><p className="eyebrow">Workforce control</p><h1>Staffing</h1><p>Timesheets, availability and driver history in one operational workspace. Employment type remains controlled by Master Data. Agency availability imports are matched against Driver Master and then feed the availability used by timesheet and dispatch views.</p></div></div>
     <div className="staffing-section-tabs" role="tablist" aria-label="Staffing sections">
+      <button className={section === "forecast" ? "active" : ""} onClick={() => setSection("forecast")}>Driver Forecast</button>
       <button className={section === "timesheets" ? "active" : ""} onClick={() => setSection("timesheets")}>Timesheets</button>
       <button className={section === "availability" ? "active" : ""} onClick={() => setSection("availability")}>Availability</button>
       <button className={section === "history" ? "active" : ""} onClick={() => setSection("history")}>Driver History</button>
     </div>
+    {section === "forecast" && <DriverForecast />}
     {section === "timesheets" && <DriverTimesheets embedded />}
     {section === "history" && <DriverAssignments embedded />}
     {section === "availability" && <>
@@ -156,6 +159,28 @@ export function Staffing() {
       <div className="driver-availability-groups staffing-groups">{groups.map(group => <details key={group} open={group.includes("unconfirmed") || group.includes("blocked")}><summary>{group}<b>{byGroup.get(group)?.length || 0}</b></summary><div className="driver-availability-list">{byGroup.get(group)?.map(driver => <StaffingRow key={driver.driverId} driver={driver} onChanged={() => void refresh()} />)}</div></details>)}</div></>}
     </>}
   </section>;
+}
+
+function DriverForecast() {
+  const token = useAccessToken();
+  const [from, setFrom] = useState(() => monday(new Date().toISOString().slice(0, 10)));
+  const [rows, setRows] = useState<ForecastDay[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string>();
+  const to = addDays(from, 6);
+  const load = useCallback(async () => {
+    setBusy(true);
+    try { setRows(await request<ForecastDay[]>(`/api/v1/driver-forecast?from=${from}&to=${to}`, await token())); setMessage(undefined); }
+    catch (exception) { setMessage(exception instanceof Error ? exception.message : "Forecast could not be loaded."); }
+    finally { setBusy(false); }
+  }, [from, to, token]);
+  useEffect(() => { void load(); }, [load]);
+  async function save(row: ForecastDay) {
+    await request(`/api/v1/driver-forecast/${row.date}`, await token(), { method: "PUT", body: JSON.stringify({ dayRequired: row.dayRequired, nightRequired: row.nightRequired, agencyRequested: row.agencyRequested, agencyConfirmed: row.agencyConfirmed, notes: row.notes || null, opsNotes: row.opsNotes || null }) });
+    setMessage(`${row.date} forecast saved.`); await load();
+  }
+  function edit(date: string, field: keyof ForecastDay, value: string) { setRows(current => current.map(row => row.date === date ? { ...row, [field]: field === "notes" || field === "opsNotes" ? value : Math.max(0, Number(value) || 0) } : row)); }
+  return <section className="driver-forecast"><div className="title-row"><div><p className="eyebrow">Management input · Operations action · Planner visibility</p><h2>Driver requirements forecast</h2><p className="hint">Enter the expected day and night requirement. Staffing availability is calculated from Master Data, Sage leave/pattern evidence, Tacho capacity, current allocations and confirmed agency/casual cover.</p></div><div className="calendar-controls"><button type="button" onClick={() => setFrom(addDays(from, -7))}>← Previous week</button><strong>{from} – {to}</strong><button type="button" onClick={() => setFrom(addDays(from, 7))}>Next week →</button></div></div>{message && <p className="notice inline-notice">{message}</p>}{busy ? <p className="hint">Calculating requirements against availability…</p> : <div className="table-wrap"><table className="forecast-table"><thead><tr><th>Date</th><th>Day required</th><th>Night required</th><th>Available now</th><th>Shortfall</th><th>Agency target</th><th>Agency confirmed</th><th>Operations notes</th><th>Save</th></tr></thead><tbody>{rows.map(row => <tr key={row.date} className={row.shortfall > 0 ? "forecast-shortfall" : ""}><th>{row.date}<small>{new Intl.DateTimeFormat("en-GB", { weekday: "short" }).format(new Date(`${row.date}T12:00:00`))}</small></th><td><input aria-label={`${row.date} day drivers required`} type="number" min="0" value={row.dayRequired} onChange={event => edit(row.date, "dayRequired", event.target.value)} /></td><td><input aria-label={`${row.date} night drivers required`} type="number" min="0" value={row.nightRequired} onChange={event => edit(row.date, "nightRequired", event.target.value)} /></td><td><strong>{row.availableDrivers}</strong><small>{row.employedAvailable} employed · {row.agencyAvailable} agency · {row.casualAvailable} casual</small></td><td><strong className={row.shortfall > 0 ? "forecast-gap" : "forecast-ok"}>{row.shortfall > 0 ? `${row.shortfall} needed` : `${Math.abs(row.shortfall)} surplus`}</strong></td><td><input aria-label={`${row.date} agency target`} type="number" min="0" value={row.agencyRequested} onChange={event => edit(row.date, "agencyRequested", event.target.value)} /></td><td><input aria-label={`${row.date} agency confirmed`} type="number" min="0" value={row.agencyConfirmed} onChange={event => edit(row.date, "agencyConfirmed", event.target.value)} /></td><td><input aria-label={`${row.date} operations notes`} value={row.opsNotes || ""} onChange={event => edit(row.date, "opsNotes", event.target.value)} placeholder="Ops action / booking reference" /></td><td><button className="primary" type="button" onClick={() => void save(row)}>Save</button></td></tr>)}</tbody></table></div>}</section>;
 }
 
 function AvailabilityCalendar({ weekStart, snapshots, onChanged, employmentType }: { weekStart: string; snapshots: Record<string, DriverAvailabilitySnapshot>; onChanged: () => void; employmentType: "Employed" | "Agency" }) {
