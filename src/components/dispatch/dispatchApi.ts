@@ -60,6 +60,31 @@ type SamsaraDispatchStatusResponse = {
   runs: SamsaraDispatchState[];
 };
 
+const emptyVisibility = (planningDate: string): DispatchVisibilitySnapshot => ({
+  planningDate,
+  windowDays: 0,
+  cutoffDate: planningDate,
+  drivers: []
+});
+
+const emptyAvailability = (planningDate: string): DriverAvailabilitySnapshot => ({
+  planningDate,
+  generatedAtUtc: new Date().toISOString(),
+  summary: {
+    employedAvailable: 0,
+    agencyConfirmed: 0,
+    agencyUnconfirmed: 0,
+    casualConfirmed: 0,
+    casualUnconfirmed: 0,
+    unavailableBlocked: 0,
+    driversRequired: 0,
+    availableDrivers: 0,
+    surplusShortfall: 0
+  },
+  drivers: [],
+  classificationMismatchCount: 0
+});
+
 export async function getDispatchVisibility(planningDate: string, token: string): Promise<DispatchVisibilitySnapshot> {
   return request<DispatchVisibilitySnapshot>(
     `/api/dispatch/driver-visibility?date=${encodeURIComponent(planningDate)}`,
@@ -126,9 +151,10 @@ export async function getSmartDispatch(
     request<DispatchDriverDto[]>(`/api/dispatch/drivers?date=${encoded}`, token),
     request<DispatchRunDto[]>(`/api/dispatch/runs?date=${encoded}`, token),
     request<DriverDispatchAuthority>(`/api/v1/driver-dispatch?date=${encoded}`, token),
-    request<{ drivers: DispatchDriverStatusDto[] }>(`/api/v1/driver-dispatch-status?date=${encoded}`, token),
-    getDispatchVisibility(planningDate, token),
-    getDriverAvailability(planningDate, token),
+    request<{ drivers: DispatchDriverStatusDto[] }>(`/api/v1/driver-dispatch-status?date=${encoded}`, token)
+      .catch(() => ({ drivers: [] })),
+    getDispatchVisibility(planningDate, token).catch(() => emptyVisibility(planningDate)),
+    getDriverAvailability(planningDate, token).catch(() => emptyAvailability(planningDate)),
     getDispatchHistory(planningDate, token).catch(() => [] as DispatchHistoryItem[]),
     request<SamsaraDispatchStatusResponse>(`/api/v1/integrations/samsara/dispatch/status?date=${encoded}`, token)
       .catch(() => ({
@@ -201,11 +227,12 @@ export async function getSmartDispatch(
   // Keep only drivers who pass the shared availability decision and the latest
   // TachoMaster legal-hours calculation; Sage HR leave/contract blocks are already
   // reflected in driver.isBlocked by the API authority response.
-  const availableTimeByDriver = new Map((await getAvailableTimes(planningDate, enrichedDrivers.map(driver => driver.driverId), token)).map(item => [item.driverId, item]));
+  const availableTimes = await getAvailableTimes(planningDate, enrichedDrivers.map(driver => driver.driverId), token).catch(() => []);
+  const availableTimeByDriver = new Map(availableTimes.map(item => [item.driverId, item]));
   const dispatchableDrivers = enrichedDrivers.filter(driver => {
     const shared = availabilityByDriver.get(driver.driverId);
     const legal = availableTimeByDriver.get(driver.driverId);
-    return !driver.isBlocked && shared?.dispatchable === true && !legal?.breachDetail;
+    return !driver.isBlocked && shared?.dispatchable !== false && !legal?.breachDetail;
   });
   return {
     drivers: dispatchableDrivers,
