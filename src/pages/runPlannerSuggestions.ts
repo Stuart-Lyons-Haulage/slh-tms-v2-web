@@ -13,6 +13,8 @@ export type RunSuggestionOrder = {
   outstandingPallets: number;
   palletType?: string;
   loadUnitType?: string;
+  customerCode?: string;
+  lineNote?: string;
 };
 
 export type RunSuggestionSite = {

@@ -56,13 +56,14 @@ type RunLine = {
   pallets: string;
   note: string;
 };
-type RunDraft = { key: string; loadId?: string; period: Period; nightOut: boolean; operationalAmendment: string; relayEnabled: boolean; handoverSite: string; handoverAfterStopSequence: string; lines: RunLine[] };
+type RunDraft = { key: string; loadId?: string; period: Period; nightOut: boolean; doubleStackingApproved: boolean; operationalAmendment: string; relayEnabled: boolean; handoverSite: string; handoverAfterStopSequence: string; lines: RunLine[] };
 
 const blankLine = (): RunLine => ({ key: crypto.randomUUID(), collectionSite: "", deliverySite: "", pallets: "", note: "" });
 const blankRun = (key: string): RunDraft => ({
   key,
   period: "",
   nightOut: false,
+  doubleStackingApproved: false,
   operationalAmendment: "",
   relayEnabled: false,
   handoverSite: "",
@@ -251,6 +252,7 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
         loadId: load.id,
         period: periodFromLoad(load),
         nightOut: overnightFromLoad(load),
+        doubleStackingApproved: tagged(load.plannerNotes, "Double stacking approved").toLowerCase() === "yes",
         operationalAmendment: tagged(load.plannerNotes, "Operational amendment"),
         relayEnabled: load.relayPlan?.enabled === true,
         handoverSite: load.relayPlan?.handoverSite || tagged(load.plannerNotes, "Handover site"),
@@ -503,7 +505,7 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
         return quantity > 0 ? [{ orderId, collectionSite: line.collectionSite, deliverySite: line.deliverySite, pallets: String(quantity) }] : [];
       });
     });
-    return calculateRunCapacity(capacityLines, orders);
+    return calculateRunCapacity(capacityLines, orders, 26, 33, run.doubleStackingApproved);
   };
 
   function buildStops(lines: RunLine[]) {
@@ -533,6 +535,7 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
   function notesForRun(run: RunDraft, period = run.period) {
     const current = loads.find((item) => item.id === run.loadId)?.plannerNotes;
     let notes = plannerTag(plannerTag(withPlannerPeriod(current, period), "Night out", run.nightOut ? "Yes" : "No"), "Operational amendment", run.operationalAmendment);
+    notes = plannerTag(notes, "Double stacking approved", run.doubleStackingApproved ? "Yes" : "No");
     notes = plannerTag(notes, "Handover site", run.relayEnabled ? run.handoverSite : "");
     return plannerTag(notes, "Trailer swap", run.relayEnabled ? "Yes" : "");
   }
@@ -784,12 +787,16 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
           const utilisation = capacity.utilisationPercent;
           const capacityStatus = capacity.status.toLowerCase();
           const capacityBreakdown = `Std ${capacity.standardPallets}/${capacity.standardCapacity} · Euro ${capacity.euroPallets}/${capacity.euroCapacity} · Trolley ${capacity.trolleys} · Tray/Crate ${capacity.nonPalletUnits}${capacity.unknownPallets ? ` · Unknown ${capacity.unknownPallets}` : ""}`;
+          const capacityRemaining = capacity.status === "Red"
+            ? `Over by ${capacity.overStandardEquivalent.toFixed(1)} floor spaces`
+            : `Space for ${capacity.euroRemaining} more Euro pallets · ${capacity.standardRemaining} Standard · ${capacity.trolleyRemaining} trolleys`;
           const suggestionLines: RunSuggestionLine[] = run.lines.map(line => ({ orderId: lineOrderIds(line)[0], collectionSite: line.collectionSite, deliverySite: line.deliverySite, pallets: line.pallets }));
           const suggestionSites: RunSuggestionSite[] = sites;
           const nextOrderSuggestions = suggestJobsForRun(suggestionLines, effectiveOrders, suggestionSites, { standard: capacity.standardRemaining, euro: capacity.euroRemaining });
           const builderWarnings = runBuilderWarnings(run, capacity, effectiveOrders, sites);
           return <article key={run.key} className={`simple-run-card ${activeKey === run.key ? "active" : ""}`} onClick={() => setActiveKey(run.key)}>
-            <div className="simple-run-header"><div className="simple-run-heading"><strong>RUN {index + 1}{run.period ? ` ${run.period}` : ""}{run.nightOut ? " O/N" : ""}</strong><small>{run.loadId ? "Live" : "New"}</small><span className={`simple-run-capacity ${capacityStatus}`} title={`${capacityBreakdown} · ${usedCapacity.toFixed(1)} / ${totalCapacity} standard-equivalent spaces`}><i><b style={{ width: `${Math.min(utilisation, 100)}%` }} /></i><strong>{utilisation.toFixed(1)}%</strong></span><span className="simple-run-capacity-breakdown" aria-label={`Capacity: ${capacityBreakdown}`}><span>Std {capacity.standardPallets}/{capacity.standardCapacity} · {capacity.standardRemaining} left</span><span>Euro {capacity.euroPallets}/{capacity.euroCapacity} · {capacity.euroRemaining} left</span><span>Trolley {capacity.trolleys}</span><span>Tray/Crate {capacity.nonPalletUnits}</span>{capacity.unknownPallets ? <span>Unknown {capacity.unknownPallets}</span> : null}</span></div><div className="run-period-selector"><span>Period</span>{(["AM", "PM"] as const).map((period) => <button key={period} type="button" className={run.period === period ? "selected" : ""} onClick={(event) => { event.stopPropagation(); updateRun(run.key, (current) => ({ ...current, period })); void persistRunDetails(run, { period }); }}>{period}</button>)}</div></div>
+            <label className="simple-night-out simple-double-stack-toggle" title="Only eligible Barfoots IFCO/CHEP material evidence is included; the original pallet count remains unchanged."><input type="checkbox" checked={run.doubleStackingApproved} onChange={(event) => { const doubleStackingApproved = event.target.checked; updateRun(run.key, (current) => ({ ...current, doubleStackingApproved })); void persistRunDetails(run, { doubleStackingApproved }); }} /> Approve eligible double-stacking</label>
+            <div className="simple-run-header"><div className="simple-run-heading"><strong>RUN {index + 1}{run.period ? ` ${run.period}` : ""}{run.nightOut ? " O/N" : ""}</strong><small>{run.loadId ? "Live" : "New"}</small><span className={`simple-run-capacity ${capacityStatus}`} title={`${capacityBreakdown} · ${usedCapacity.toFixed(1)} / ${totalCapacity} standard-equivalent spaces`}><i><b style={{ width: `${Math.min(utilisation, 100)}%` }} /></i><strong>{utilisation.toFixed(1)}%</strong></span><span className="simple-run-capacity-remaining" aria-label={capacityRemaining}>{capacityRemaining}</span><span className="simple-run-capacity-breakdown" aria-label={`Capacity: ${capacityBreakdown}`}><span>Std {capacity.standardPallets}/{capacity.standardCapacity} · {capacity.standardRemaining} left</span><span>Euro {capacity.euroPallets}/{capacity.euroCapacity} · {capacity.euroRemaining} left</span><span>Trolley {capacity.trolleys}/{capacity.trolleys + capacity.trolleyRemaining} · {capacity.trolleyRemaining} left</span><span>Tray/Crate {capacity.nonPalletUnits}</span>{capacity.unknownPallets ? <span>Unknown {capacity.unknownPallets}</span> : null}</span></div><div className="run-period-selector"><span>Period</span>{(["AM", "PM"] as const).map((period) => <button key={period} type="button" className={run.period === period ? "selected" : ""} onClick={(event) => { event.stopPropagation(); updateRun(run.key, (current) => ({ ...current, period })); void persistRunDetails(run, { period }); }}>{period}</button>)}</div></div>
             <div className="simple-run-details"><label className="simple-night-out"><input type="checkbox" checked={run.nightOut} onChange={(event) => { const nightOut = event.target.checked; updateRun(run.key, (current) => ({ ...current, nightOut })); void persistRunDetails(run, { nightOut }); }} /> Overnight / night-out confirmed</label><label className="simple-night-out"><input type="checkbox" checked={run.relayEnabled} onChange={(event) => { const relayEnabled = event.target.checked; updateRun(run.key, (current) => ({ ...current, relayEnabled })); void persistRunDetails(run, { relayEnabled }); }} /> Trailer swap / relay</label><label>Operational amendment<input value={run.operationalAmendment} placeholder="e.g. swap to trailer 123 / breakdown" onChange={(event) => updateRun(run.key, (current) => ({ ...current, operationalAmendment: event.target.value }))} onBlur={() => void persistRunDetails(run, { operationalAmendment: run.operationalAmendment })} /></label>{run.relayEnabled && <><label>Handover site<input list={`relay-sites-${run.key}`} value={run.handoverSite} placeholder="e.g. Cherwell Valley" onChange={(event) => updateRun(run.key, (current) => ({ ...current, handoverSite: event.target.value }))} onBlur={(event) => void persistRunDetails(run, { handoverSite: event.currentTarget.value })} /></label><label>Handover after stop<input type="number" min="1" value={run.handoverAfterStopSequence} placeholder="Optional" onChange={(event) => updateRun(run.key, (current) => ({ ...current, handoverAfterStopSequence: event.target.value }))} onBlur={(event) => void persistRunDetails(run, { handoverAfterStopSequence: event.currentTarget.value })} /></label><datalist id={`relay-sites-${run.key}`}>{sites.map(site => <option key={site.id} value={site.name} />)}</datalist></>}</div>
             {nextOrderSuggestions.length > 0 && <details className="simple-run-suggestions" aria-label={`Suggested next orders for ${run.key}`} onClick={(event) => event.stopPropagation()}><summary className="simple-run-suggestions-heading"><span><strong>Route suggestions</strong><small>{nextOrderSuggestions.length} sensible fit{nextOrderSuggestions.length === 1 ? "" : "s"} · mileage and direction checked</small></span><span className="simple-run-suggestion-hint">Show</span></summary><div className="simple-run-suggestion-list">{nextOrderSuggestions.map(item => { const confidencePercent = suggestionConfidencePercent(item.score); const confidence = confidencePercent >= 70 ? "high" : confidencePercent >= 45 ? "medium" : "low"; const loadType = item.order.palletType || item.order.loadUnitType; return <article key={item.order.id} className={`simple-run-suggestion confidence-${confidence}`}><div className="simple-run-suggestion-route"><span><small>From</small><strong>{item.order.collection}</strong></span><b aria-hidden="true">→</b><span><small>To</small><strong>{item.order.destination}</strong></span></div><div className="simple-run-suggestion-meta"><span><small>Load</small><strong>{item.order.outstandingPallets}{loadType ? ` ${loadType}` : ""}</strong></span>{item.connectorMiles != null && <span><small>Reposition</small><strong>~{Math.round(item.connectorMiles)} mi</strong></span>}<span><small>Fit</small><strong>{confidencePercent}%</strong></span></div><details><summary>Why?</summary><small>{item.reasons.join(" · ")}</small></details><button type="button" onClick={() => addSuggestedOrder(run, item.order)}>Add</button></article>; })}</div></details>}
             {builderWarnings.length > 0 && <aside className="simple-run-warnings" aria-label="Run builder checks"><strong>Planner checks</strong><ul>{builderWarnings.map(warning => <li key={warning}>{warning}</li>)}</ul></aside>}

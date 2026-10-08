@@ -340,6 +340,8 @@
 .simple-run-capacity.red { color: #9b2c2c; }.simple-run-capacity.red i { background: #fed7d7; }.simple-run-capacity.red i b { background: #c53030; }
 .simple-run-capacity-breakdown { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; color: #385b68; font-size: .68rem; font-weight: 800; }
 .simple-run-capacity-breakdown span { padding: 2px 5px; border: 1px solid #c8d9d5; border-radius: 4px; background: #f7fbf9; white-space: nowrap; }
+.simple-run-capacity-remaining { padding: 3px 7px; border-radius: 999px; background: #e8f5f2; color: #14532d; font-size: .7rem; font-weight: 850; white-space: nowrap; }
+.simple-run-capacity.red + .simple-run-capacity-remaining { background: #fee2e2; color: #991b1b; }
 
 .simple-run-line .simple-pallet-input {
   text-align: center;

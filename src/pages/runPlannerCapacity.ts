@@ -13,6 +13,10 @@ export type RunCapacitySnapshot = {
   standardEquivalentUsed: number;
   standardRemaining: number;
   euroRemaining: number;
+  trolleyRemaining: number;
+  physicalPallets: number;
+  approvedStackablePallets: number;
+  stackingApproved: boolean;
   overStandardEquivalent: number;
   status: "Green" | "Amber" | "Red";
 };
@@ -36,6 +40,7 @@ export function calculateRunCapacity(
   orders: RunSuggestionOrder[],
   standardCapacity = 26,
   euroCapacity = 33,
+  stackingApproved = false,
 ): RunCapacitySnapshot {
   if (standardCapacity <= 0 || euroCapacity <= 0) throw new Error("Pallet capacities must be positive.");
   const byId = new Map(orders.map((order) => [order.id, order]));
@@ -44,6 +49,10 @@ export function calculateRunCapacity(
   let trolleys = 0;
   let nonPalletUnits = 0;
   let unknownPallets = 0;
+  let physicalPallets = 0;
+  let approvedStackablePallets = 0;
+  let approvedStackableStandard = 0;
+  let approvedStackableEuro = 0;
 
   for (const line of lines) {
     if (!line.orderId) continue;
@@ -51,19 +60,32 @@ export function calculateRunCapacity(
     if (!quantity) continue;
     const order = byId.get(line.orderId);
     const kind = palletKind(order?.palletType, order?.loadUnitType);
+    const eligibleForDoubleStack = Boolean(stackingApproved && order?.customerCode?.toUpperCase().includes("BARFOOT") && /CHEP1210|IFCO|4310|6420|6424/i.test(`${order?.palletType || ""} ${order?.lineNote || ""}`));
     if (kind === "Standard") standardPallets += quantity;
     else if (kind === "Euro") euroPallets += quantity;
     else if (kind === "Trolley") trolleys += quantity;
     else if (kind === "NonPallet") nonPalletUnits += quantity;
     else unknownPallets += quantity;
+    if (kind === "Standard" || kind === "Euro") {
+      physicalPallets += quantity;
+      if (eligibleForDoubleStack) {
+        approvedStackablePallets += quantity;
+        if (kind === "Standard") approvedStackableStandard += quantity;
+        if (kind === "Euro") approvedStackableEuro += quantity;
+      }
+    }
   }
 
-  const palletUtilisation = (standardPallets / standardCapacity) + (euroPallets / euroCapacity);
-  const trolleyUtilisation = (trolleys + standardPallets + euroPallets) / 41;
+  const effectiveStandard = standardPallets - approvedStackableStandard / 2;
+  const effectiveEuro = euroPallets - approvedStackableEuro / 2;
+  const footprintPallets = effectiveStandard + effectiveEuro;
+  const palletUtilisation = (effectiveStandard / standardCapacity) + (effectiveEuro / euroCapacity);
+  const trolleyUtilisation = (trolleys + footprintPallets) / 41;
   const utilisation = Math.max(palletUtilisation, trolleyUtilisation);
   const remainingFraction = Math.max(1 - utilisation, 0);
   const standardRemaining = Math.max(Math.floor((remainingFraction * standardCapacity) + 1e-9), 0);
   const euroRemaining = Math.max(Math.floor((remainingFraction * euroCapacity) + 1e-9), 0);
+  const trolleyRemaining = Math.max(Math.floor(41 - trolleys - standardPallets - euroPallets), 0);
   const overStandardEquivalent = utilisation > 1
     ? Math.ceil(((utilisation - 1) * standardCapacity) * 10) / 10
     : 0;
@@ -82,6 +104,10 @@ export function calculateRunCapacity(
     standardEquivalentUsed: Math.round(utilisation * standardCapacity * 100) / 100,
     standardRemaining,
     euroRemaining,
+    trolleyRemaining,
+    physicalPallets,
+    approvedStackablePallets,
+    stackingApproved,
     overStandardEquivalent,
     status,
   };
