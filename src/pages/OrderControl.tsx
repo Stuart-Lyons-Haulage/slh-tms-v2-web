@@ -106,6 +106,20 @@ function OrderReviewDateStrip({ selectedDate, onChange }: { selectedDate: string
     return () => { active = false; };
   }, [dates, token]);
 
+  useEffect(() => {
+    const refresh = () => {
+      void token().then(async (authToken) => {
+        const result = await request<Record<string, number>>(
+          `/api/v1/staging/queue/date-counts?from=${encodeURIComponent(dates[0])}&to=${encodeURIComponent(dates.at(-1) || dates[0])}`,
+          authToken,
+        );
+        setCounts(result);
+      }).catch(() => undefined);
+    };
+    window.addEventListener(SILENT_API_REFRESH_EVENT, refresh);
+    return () => window.removeEventListener(SILENT_API_REFRESH_EVENT, refresh);
+  }, [dates, token]);
+
   return <div className="order-date-strip" aria-label="Pending order dates">
     {dates.map((date) => {
       const value = new Date(`${date}T12:00:00`);
@@ -358,7 +372,7 @@ export function OrderControl({ initialTab = "review" }: { initialTab?: OrderCont
     return () => { active = false; };
   }, [token]);
 
-  useEffect(() => startVisiblePolling(refreshVisibleReviewData, 60_000), []);
+  useEffect(() => startVisiblePolling(refreshVisibleReviewData, 15_000), []);
 
   function updateDate(nextDate: string) {
     const next = new URLSearchParams(searchParams);

@@ -350,7 +350,13 @@ export function OrderReviewBulk({ date }: { date: string }) {
       const result = await api.pollMailboxNow(await token());
       setQueuePage(1);
       setSelectedIds(new Set());
-      await queue.refresh();
+      // Graph ingestion can commit the staged rows just after the poll response.
+      // Recheck briefly so planners see newly captured orders without waiting for
+      // the background safety timer or manually reloading the page.
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        await queue.refresh();
+        if (attempt < 3) await new Promise((resolve) => window.setTimeout(resolve, 1_000));
+      }
       setNotice(`${result.message} ${result.lastMessagesIngested} new message${result.lastMessagesIngested === 1 ? '' : 's'} staged.`);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Graph mailbox poll failed.");
