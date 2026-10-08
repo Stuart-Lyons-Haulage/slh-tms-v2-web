@@ -112,6 +112,10 @@ type ApprovalComparison = {
 const text = (value: unknown) => String(value ?? "").trim();
 const numberText = (value: unknown) => value == null || value === "" ? "" : String(value);
 const queuePageSize = 100;
+// Approval promotes each order synchronously on the API. Keep each request
+// comfortably below the App Service/gateway timeout so a slow order cannot
+// discard the result of every order behind it.
+const approvalBatchSize = 5;
 
 function dateKey(value: Date) {
   return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
@@ -566,7 +570,9 @@ export function OrderReviewBulk({ date }: { date: string }) {
       let skipped = 0;
       let failed = 0;
       let firstBatchResult: BulkApproveResponse | undefined;
-      for (let offset = 0; offset < approvable.length; offset += 500) {
+      for (let offset = 0; offset < approvable.length; offset += approvalBatchSize) {
+        const batch = approvable.slice(offset, offset + approvalBatchSize);
+        setNotice(`Approving orders ${offset + 1}–${Math.min(offset + batch.length, approvable.length)} of ${approvable.length}…`);
         const result = await request<BulkApproveResponse>(
           "/api/v1/staging/orders/bulk-approve",
           await token(),
@@ -574,7 +580,7 @@ export function OrderReviewBulk({ date }: { date: string }) {
             method: "POST",
             body: JSON.stringify({
               date,
-              ids: approvable.slice(offset, offset + 500).map(({ row }) => row.item.id),
+              ids: batch.map(({ row }) => row.item.id),
               acknowledgeReviewFlags: true,
             }),
           },
