@@ -2,20 +2,19 @@
 
 Production React and TypeScript operations portal for the [SLH TMS API](https://github.com/Stuart-Lyons-Haulage/slh-tms-api). The API and Azure SQL database remain the system of record. This repository owns the user-facing portal, planner, operations wallboard, TV wallboard, live runs, staging review, imports, reporting and operational screens.
 
-The production portal runs in Azure Container Apps and publishes automatically when `main` changes.
+The production portal is deployed from `main` to Azure Static Web Apps. The API is hosted separately in Azure App Service.
 
 ## Production
 
 | Item | Value |
 | --- | --- |
-| Portal | `https://slh-tms-portal-prod.gentlepond-08dba66b.uksouth.azurecontainerapps.io/` |
-| API proxy | `/tms-api` |
-| API backing service | `https://slh-tms-api-prod.gentlepond-08dba66b.uksouth.azurecontainerapps.io` |
-| Runtime | Azure Container Apps with Nginx |
+| Portal | `https://tms.lyonshaulage.com/` |
+| API | Azure App Service |
+| Runtime | Azure Static Web Apps |
 | Authentication | Microsoft Entra SPA sign-in |
 | API scope | `api://497f6ea5-9753-43ee-8ccf-afaa0a3869c2/Tms.Access` |
 
-Browser code never receives RoadTech, TachoMaster, Fleetio, Sage HR, SQL or SMS credentials. All provider calls go through the API.
+Browser code never receives RoadTech, TachoMaster, Fleetio, Sage HR, SQL credentials. All provider calls go through the API.
 
 ## Main Screens
 
@@ -25,7 +24,7 @@ Browser code never receives RoadTech, TachoMaster, Fleetio, Sage HR, SQL or SMS 
 | Staging / Review orders | Review staged manual, spreadsheet and email-derived orders before promotion |
 | Planner / Allocation | Build and adjust loads, stops, routes, allocations and capacity |
 | Planner import | Import planner source-line JSON and reset/re-import a planning day safely |
-| Runs / Loads | Manage saved runs, allocation, dispatch readiness and driver messages |
+| Runs / Loads | Manage saved runs, allocation, dispatch readiness |
 | Operations wallboard | Live operational control board for today's runs |
 | TV wallboard / Live runs TV | Office display using the same live run-progress evidence as the main wallboard |
 | Tracking | Live RoadTech/Falcon fleet view |
