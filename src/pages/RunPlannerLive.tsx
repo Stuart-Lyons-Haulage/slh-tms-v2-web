@@ -669,7 +669,10 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
       dirtyRunKeys.current.delete(runKey);
       signalPlanningChange();
       setMessage(`Auto-saved · ${pallets} pallet${pallets === 1 ? "" : "s"} on this consolidated movement.`);
-      void refreshControl().catch(() => undefined);
+      // Re-read runs, allocations and order review together after the server
+      // allocation succeeds. This keeps Planner Builder and Pallet Order on the
+      // same authoritative state instead of refreshing only the local summary.
+      void refreshAll().catch(() => undefined);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Pallet quantity could not be auto-saved.");
       if (mutation === mutationCounter.current) void refreshAll();
