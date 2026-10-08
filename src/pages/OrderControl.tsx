@@ -93,15 +93,15 @@ function OrderReviewDateStrip({ selectedDate, onChange }: { selectedDate: string
   useEffect(() => {
     let active = true;
     void (async () => {
-      const results = await Promise.all(dates.map(async (date) => {
-        try {
-          const result = await request<{ total: number }>(`/api/v1/staging/queue?status=PendingReview&entityType=order&page=1&pageSize=1&planningDate=${encodeURIComponent(date)}`, await token());
-          return [date, result.total] as const;
-        } catch {
-          return [date, undefined] as const;
-        }
-      }));
-      if (active) setCounts(Object.fromEntries(results));
+      try {
+        const result = await request<Record<string, number>>(
+          `/api/v1/staging/queue/date-counts?from=${encodeURIComponent(dates[0])}&to=${encodeURIComponent(dates.at(-1) || dates[0])}`,
+          await token(),
+        );
+        if (active) setCounts(result);
+      } catch {
+        if (active) setCounts(Object.fromEntries(dates.map((date) => [date, undefined])));
+      }
     })();
     return () => { active = false; };
   }, [dates, token]);
