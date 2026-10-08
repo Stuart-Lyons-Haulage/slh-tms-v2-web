@@ -51,12 +51,58 @@ type ForceReviewResponse = {
 
 type RetainedReplayResponse = {
   eligibleOrders: number;
+  evidenceScanned: number;
   pendingAfterReplay: number;
   legacyMappingExceptionsArchived: number;
   hasMore: boolean;
   nextAfterReceivedAtUtc?: string;
   nextAfterEvidenceId?: string;
 };
+
+type RetainedReplayCheckpoint = {
+  afterReceivedAtUtc?: string;
+  afterEvidenceId?: string;
+  startFromBeginning?: boolean;
+  batchSize: number;
+  batches: number;
+  evidenceScanned: number;
+  eligibleOrders: number;
+  archived: number;
+};
+
+function replayCheckpointKey(date: string) {
+  return `slh:retained-order-replay:${date}`;
+}
+
+function readReplayCheckpoint(date: string): RetainedReplayCheckpoint | undefined {
+  try {
+    const raw = sessionStorage.getItem(replayCheckpointKey(date));
+    if (!raw) return undefined;
+    const value = JSON.parse(raw) as Partial<RetainedReplayCheckpoint>;
+    if (!value.startFromBeginning && (!value.afterReceivedAtUtc || !value.afterEvidenceId)) return undefined;
+    return {
+      afterReceivedAtUtc: value.afterReceivedAtUtc,
+      afterEvidenceId: value.afterEvidenceId,
+      startFromBeginning: value.startFromBeginning === true,
+      batchSize: value.batchSize === 1 ? 1 : 5,
+      batches: Number(value.batches) || 0,
+      evidenceScanned: Number(value.evidenceScanned) || 0,
+      eligibleOrders: Number(value.eligibleOrders) || 0,
+      archived: Number(value.archived) || 0,
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+function saveReplayCheckpoint(date: string, checkpoint: RetainedReplayCheckpoint | undefined) {
+  try {
+    if (checkpoint) sessionStorage.setItem(replayCheckpointKey(date), JSON.stringify(checkpoint));
+    else sessionStorage.removeItem(replayCheckpointKey(date));
+  } catch {
+    // Replay remains safe to repeat because staging uses deterministic source keys.
+  }
+}
 
 function addDays(date: string, days: number) {
   const [year, month, day] = date.split("-").map(Number);
@@ -242,6 +288,7 @@ function OrderIntakeCacheRecovery({ date }: { date: string }) {
     setError(undefined);
     try {
       const authToken = await token();
+      const checkpoint = readReplayCheckpoint(date);
       const baseRequest = {
         receivedFromUtc: `${addDays(date, -2)}T00:00:00Z`,
         receivedToUtc: `${addDays(date, 1)}T00:00:00Z`,
@@ -250,22 +297,46 @@ function OrderIntakeCacheRecovery({ date }: { date: string }) {
         refreshUnamendedPending: true,
         maxMessages: 5
       };
-      let afterReceivedAtUtc: string | undefined;
-      let afterEvidenceId: string | undefined;
-      let eligibleOrders = 0;
+      let afterReceivedAtUtc: string | undefined = checkpoint?.afterReceivedAtUtc;
+      let afterEvidenceId: string | undefined = checkpoint?.afterEvidenceId;
+      let batchSize = checkpoint?.batchSize ?? 5;
+      let eligibleOrders = checkpoint?.eligibleOrders ?? 0;
+      let evidenceScanned = checkpoint?.evidenceScanned ?? 0;
       let pendingAfterReplay = 0;
-      let archived = 0;
-      let batches = 0;
+      let archived = checkpoint?.archived ?? 0;
+      let batches = checkpoint?.batches ?? 0;
       let hasMore = true;
+      if (checkpoint) setNotice(`Resuming re-parse at batch ${batches + 1}; ${evidenceScanned} emails already checked.`);
 
       while (hasMore) {
-        const result = await request<RetainedReplayResponse>("/api/v1/order-intake/replay-retained-evidence", authToken, {
+        const sendBatch = (maxMessages: number) => request<RetainedReplayResponse>("/api/v1/order-intake/replay-retained-evidence", authToken, {
           method: "POST",
-          body: JSON.stringify({ ...baseRequest, afterReceivedAtUtc, afterEvidenceId })
+          body: JSON.stringify({ ...baseRequest, maxMessages, afterReceivedAtUtc, afterEvidenceId })
         });
+        let result: RetainedReplayResponse;
+        try {
+          result = await sendBatch(batchSize);
+        } catch (batchError) {
+          if (batchSize === 1) throw batchError;
+          // If a five-email request times out, retry from the same cursor one email
+          // at a time. Each successful reply is checkpointed, so later retries do
+          // not have to replay the whole date window.
+          batchSize = 1;
+          saveReplayCheckpoint(date, checkpoint ? { ...checkpoint, batchSize } : {
+            startFromBeginning: true,
+            batchSize,
+            batches,
+            evidenceScanned,
+            eligibleOrders,
+            archived,
+          });
+          setNotice(`Batch ${batches + 1} failed; retrying one email at a time from the last saved point.`);
+          result = await sendBatch(batchSize);
+        }
         batches += 1;
         eligibleOrders += result.eligibleOrders;
-        pendingAfterReplay = result.pendingAfterReplay;
+        evidenceScanned += result.evidenceScanned;
+        pendingAfterReplay += result.pendingAfterReplay;
         archived += result.legacyMappingExceptionsArchived;
         hasMore = result.hasMore;
         afterReceivedAtUtc = result.nextAfterReceivedAtUtc;
@@ -273,6 +344,16 @@ function OrderIntakeCacheRecovery({ date }: { date: string }) {
         if (hasMore && (!afterReceivedAtUtc || !afterEvidenceId)) {
           throw new Error("Replay continuation cursor was missing.");
         }
+        saveReplayCheckpoint(date, hasMore && afterReceivedAtUtc && afterEvidenceId ? {
+          afterReceivedAtUtc,
+          afterEvidenceId,
+          batchSize,
+          batches,
+          evidenceScanned,
+          eligibleOrders,
+          archived,
+        } : undefined);
+        if (hasMore) setNotice(`Re-parsing… batch ${batches}; ${evidenceScanned} emails checked, ${eligibleOrders} matching orders found.`);
         if (batches > 500) throw new Error("Replay exceeded the safe batch limit.");
         setNotice(`Re-parsing retained evidence… batch ${batches}${hasMore ? "; continuing" : " complete"}.`);
       }
@@ -281,7 +362,11 @@ function OrderIntakeCacheRecovery({ date }: { date: string }) {
       await loadCache();
       refreshVisibleReviewData();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Retained evidence could not be re-parsed.");
+      const checkpoint = readReplayCheckpoint(date);
+      const detail = err instanceof Error ? err.message : "Retained evidence could not be re-parsed.";
+      setError(checkpoint
+        ? `${detail} Stopped before batch ${checkpoint.batches + 1}, after ${checkpoint.evidenceScanned} emails. Progress is saved; press Re-parse to resume.`
+        : detail);
     } finally {
       setReplaying(false);
     }
