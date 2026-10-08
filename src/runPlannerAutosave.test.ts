@@ -6,8 +6,8 @@ describe("Run Planner autosave", () => {
     expect(planner).toContain("void createPlanningRun({ ...currentRun, lines: linkedLines });");
     expect(planner).toContain("void createPlanningRun({ ...currentRun, lines: nextLines });");
     expect(planner).toContain("const confirmed = (await listRuns(date, access)).find((item) => item.id === created.id);");
-    expect(planner).toContain("await Promise.all(allocationWrites);");
-    expect(planner).toContain("was created and kept, but its order allocations need retrying");
+    expect(planner).toContain("Run creation establishes the operational shell only");
+    expect(planner).not.toContain("await Promise.all(allocationWrites);");
     expect(planner).toContain("signalPlanningChange();");
   });
 
