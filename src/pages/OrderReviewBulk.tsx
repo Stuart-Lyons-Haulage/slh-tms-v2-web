@@ -232,8 +232,6 @@ function blockingReason(row: ParsedRow, date: string) {
   if (!text(payload.poNumber)) return "TMS reference is missing";
   if (!text(payload.customerCode)) return "Customer is missing";
   if (!isBackhaul(payload) && palletCount(payload) <= 0) return "Zero or missing pallets";
-  if (payload.plannerReady === false && !payload.orderIntakeRouteRequiresReview) return "Pre-order / not planner-ready";
-  if (text(payload.intakeStatus).toLowerCase() === "preorder") return "Pre-order awaiting instruction";
   return undefined;
 }
 
@@ -242,6 +240,7 @@ function reviewFlagReason(row: ParsedRow) {
   const sourceWarnings = reviewWarnings(payload);
   if (sourceWarnings.length) return sourceWarnings[0];
   if (payload.orderIntakeRouteRequiresReview) return "Route match needs planner review";
+  if (payload.plannerReady === false || text(payload.intakeStatus).toLowerCase() === "preorder") return "Pre-order / planner-ready flag needs explicit acknowledgement";
   const confidence = text(payload.intakeConfidence);
   if (confidence && confidence.toLowerCase() !== "high" && warnings(payload).length > 0 && sourceWarnings.length === 0) return undefined;
   if (!confidence || confidence.toLowerCase() !== "high") return confidence ? `${confidence} confidence — check source` : "Source confidence not set — check source";
