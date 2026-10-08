@@ -290,7 +290,7 @@ export interface TmsApi {
   syncFleetioVehicles(token?: string): Promise<FleetioSync>;
   integrationStatus(token?: string): Promise<IntegrationStatus>;
   intakeHealth(token?: string): Promise<IntakePipelineHealth>;
-  pollMailboxNow(token?: string): Promise<{ message: string; lastAttemptUtc?: string; lastSuccessUtc?: string; lastMessagesSeen: number; lastMessagesIngested: number }>;
+  pollMailboxNow(token?: string): Promise<{ message: string; receivedDate: string; queuedAtUtc: string }>;
   diagnosticsTables(token?: string): Promise<DiagnosticsTables>;
   syncSageHrDrivers(token?: string): Promise<SageHrSync>;
   customerCommunications(token?: string, status?: string, purpose?: string, take?: number): Promise<CustomerCommunication[]>;
@@ -357,7 +357,7 @@ export const api: TmsApi = {
   syncFleetioVehicles: token => request<FleetioSync>('/api/v1/integrations/fleetio/sync-assets-resilient', token, { method: 'POST' }),
   integrationStatus: token => request<IntegrationStatus>('/api/v1/integrations/status', token),
   intakeHealth: token => request<IntakePipelineHealth>('/api/v1/health/intake', token),
-  pollMailboxNow: token => request<{ message: string; queuedAtUtc: string }>('/api/v1/health/intake/poll', token, { method: 'POST' }),
+  pollMailboxNow: token => request<{ message: string; receivedDate: string; queuedAtUtc: string }>('/api/v1/health/intake/poll', token, { method: 'POST' }),
   diagnosticsTables: token => request<DiagnosticsTables>('/api/v1/diagnostics/tables', token),
   syncSageHrDrivers: token => request<SageHrSync>('/api/v1/integrations/sage-hr/sync-drivers', token, { method: 'POST' }),
   customerCommunications: (token, status = 'PendingReview', purpose, take = 100) => request<CustomerCommunication[]>(`/api/v1/customer-communications?${new URLSearchParams({ ...(status ? { status } : {}), ...(purpose ? { purpose } : {}), take: String(take) })}`, token),
