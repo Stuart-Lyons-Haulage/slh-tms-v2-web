@@ -115,7 +115,7 @@ const queuePageSize = 100;
 // Approval promotes each order synchronously on the API. Keep each request
 // comfortably below the App Service/gateway timeout so a slow order cannot
 // discard the result of every order behind it.
-const approvalBatchSize = 5;
+const approvalBatchSize = 1;
 
 function dateKey(value: Date) {
   return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
@@ -573,23 +573,30 @@ export function OrderReviewBulk({ date }: { date: string }) {
       for (let offset = 0; offset < approvable.length; offset += approvalBatchSize) {
         const batch = approvable.slice(offset, offset + approvalBatchSize);
         setNotice(`Approving orders ${offset + 1}–${Math.min(offset + batch.length, approvable.length)} of ${approvable.length}…`);
-        const result = await request<BulkApproveResponse>(
-          "/api/v1/staging/orders/bulk-approve",
-          await token(),
-          {
-            method: "POST",
-            body: JSON.stringify({
-              date,
-              ids: batch.map(({ row }) => row.item.id),
-              acknowledgeReviewFlags: true,
-            }),
-          },
-          120000,
-        );
-        firstBatchResult ||= result;
-        approved += result.approved;
-        skipped += result.skipped;
-        failed += result.failed;
+        try {
+          const result = await request<BulkApproveResponse>(
+            "/api/v1/staging/orders/bulk-approve",
+            await token(),
+            {
+              method: "POST",
+              body: JSON.stringify({
+                date,
+                ids: batch.map(({ row }) => row.item.id),
+                acknowledgeReviewFlags: true,
+              }),
+            },
+            120000,
+          );
+          firstBatchResult ||= result;
+          approved += result.approved;
+          skipped += result.skipped;
+          failed += result.failed;
+        } catch {
+          // A request can fail after the API has committed its approval. Keep
+          // processing the remaining one-order batches and refresh the queue
+          // to determine the final state instead of abandoning the pass.
+          failed += batch.length;
+        }
       }
       const duplicateNote = duplicates.length > 0
         ? ` ${duplicates.length} exact duplicate${duplicates.length === 1 ? " was" : "s were"} left unchanged because there were no differences to apply.`
