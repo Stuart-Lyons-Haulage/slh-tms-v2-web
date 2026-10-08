@@ -246,6 +246,7 @@ function OrderIntakeCacheRecovery({ date }: { date: string }) {
       const authToken = await token();
       const baseRequest = {
         receivedFromUtc: `${addDays(date, -2)}T00:00:00Z`,
+        receivedToUtc: `${addDays(date, 1)}T00:00:00Z`,
         minimumPlanningDate: date,
         maximumPlanningDate: date,
         refreshUnamendedPending: true,
