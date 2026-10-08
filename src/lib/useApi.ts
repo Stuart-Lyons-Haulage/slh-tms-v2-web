@@ -14,7 +14,7 @@ const warmApiCache = new Map<string, unknown>();
 export const SILENT_API_REFRESH_EVENT = 'slh:silent-api-refresh';
 
 function warmCacheKey(load: () => Promise<unknown>) {
-  const source = Function.prototype.toString.call(load);
+  void load;
   return undefined;
 }
 

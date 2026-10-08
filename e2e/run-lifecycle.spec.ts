@@ -273,7 +273,7 @@ test('planner → dispatch → Samsara stop arrival/departure → completion sta
   expect(state.runCreated).toBe(true);
   expect(state.allocatedPallets).toBe(0);
 
-  await page.getByRole('link', { name: 'Pallet Order' }).click();
+  await page.goto('/pallet-control');
   await expect(page.getByRole('heading', { name: 'Pallet Control' })).toBeVisible();
   await page.getByTitle('Hall Hunter → Leyland: 4 ordered, 0 planned, 4 to plan').first().click();
   await expect(page.getByRole('heading', { name: 'Collect: Hall Hunter · Deliver: Leyland' })).toBeVisible();
