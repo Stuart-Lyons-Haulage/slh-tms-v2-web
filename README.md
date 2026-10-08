@@ -28,7 +28,7 @@ Browser code never receives RoadTech, TachoMaster, Fleetio, Sage HR, SQL or SMS 
 | Runs / Loads | Manage saved runs, allocation, dispatch readiness and driver messages |
 | Operations wallboard | Live operational control board for today's runs |
 | TV wallboard / Live runs TV | Office display using the same live run-progress evidence as the main wallboard |
-| Tracking | Live RoadTech/Falcon fleet view |
+| Live runs | Samsara-reported stop progress against planned jobs |
 | Drivers & TachoMaster | Driver master data, TachoMaster linkage and availability imports |
 | Daily compliance | Fleetio walkround, TachoMaster, DOT/Falcon and TMS reconciliation |
 | Pallet control / Reporting / Management | Operational reporting and support workflows |
@@ -39,10 +39,10 @@ Browser code never receives RoadTech, TachoMaster, Fleetio, Sage HR, SQL or SMS 
 2. Review staged rows, required fields, dates, pallets, duplicates and evidence before promotion.
 3. Approve reviewed work into operational orders.
 4. Import or create planner runs, then allocate driver, vehicle and trailer.
-5. Save stops with usable site/postcode coordinates so routing and geofence matching can work.
+5. Keep each stop's physical site address and coordinates in Site Master so routes can be sent to Samsara.
 6. Dispatch only after the API has checked allocation, live sign-on/card evidence, legal-hours data where available, route feasibility and acknowledged warnings.
 7. Operations control the day through the wallboard, live runs, tracking, run screens and exception panels.
-8. Completed geofence departures flow back into progress/completion states.
+8. Samsara stop arrival and departure events flow back into job progress and completion states.
 
 `docs/POWER_AUTOMATE_EMAIL_INTAKE.md` defines the safe Power Automate email-to-staging handoff. Email automation must never bypass staging approval.
 
@@ -55,9 +55,9 @@ The wallboard displays:
 - allocated driver, vehicle and trailer;
 - signed-on/card-confirmed status and time where known;
 - whether legal-hours metrics are available;
-- live tracking state from RoadTech/Falcon;
+- Samsara-reported job progress;
 - current stop or next stop;
-- actual geofence arrival/departure where known;
+- Samsara-reported stop arrival/departure where available;
 - completed stop count and progress percentage;
 - predicted ETA to the next stop where live tracking supports it;
 - completed/finished state after the final linked stop has departed; and
@@ -183,7 +183,7 @@ After a wallboard or integration-facing release, verify:
 6. TV wallboard opens by authenticated account or TV access flow.
 7. Live runs show signed-on/card-confirmed/not-signed-on explicitly.
 8. ETA fields do not use planned start as live ETA.
-9. Completed geofence departures count as completed stops and final completion.
+9. Samsara departure events count as completed stops and final completion.
 10. Exceptions are clear where evidence is missing.
 
 ## Security

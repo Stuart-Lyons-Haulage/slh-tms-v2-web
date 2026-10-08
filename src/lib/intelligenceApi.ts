@@ -8,7 +8,7 @@ export type FreshnessResponse = { generatedAtUtc: string; sources: FreshnessSour
 export type TimelineEvent = { atUtc: string; title: string; detail: string; source: string; by?: string };
 export type TimelineResponse = { entityType: 'Run' | 'Order'; id: string; reference: string; planningDate?: string; status: string; events: TimelineEvent[] };
 export type PlanLockInfo = { planningDate: string; lockedAtUtc: string; lockedBy?: string; baselineRuns: number };
-export type ReadinessResponse = { planningDate: string; generatedAtUtc: string; source?: string; ready: boolean; runs: number; assignedDrivers: number; activeDrivers: number; assignedVehicles: number; assignedVehicleIds?: string[]; activeVehicles: number; missingAllocations: number; vorConflicts: number; tachoConcerns: number; geofenceGaps: number; unreviewedOrders: number; planLock?: PlanLockInfo };
+export type ReadinessResponse = { planningDate: string; generatedAtUtc: string; source?: string; ready: boolean; runs: number; assignedDrivers: number; activeDrivers: number; assignedVehicles: number; assignedVehicleIds?: string[]; activeVehicles: number; missingAllocations: number; vorConflicts: number; tachoConcerns: number; unreviewedOrders: number; planLock?: PlanLockInfo };
 export type PlanStabilityResponse = { from: string; to: string; lockedDays: number; baselineRuns: number; changedRuns: number; stabilityPercent?: number; driverSwaps: number; vehicleSwaps: number; routeAmendments: number; runChanges: number };
 
 type ConfidenceResponse = {

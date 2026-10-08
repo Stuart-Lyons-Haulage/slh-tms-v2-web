@@ -80,7 +80,7 @@ export interface FleetStatusDto {
   vehicles: FleetVehicleTrackingDto[];
 }
 
-export type EtaSource = 'Live' | 'Planned' | 'Unavailable' | 'Estimated';
+export type EtaSource = 'Samsara' | 'Unavailable';
 export type EtaRisk = 'Pending' | 'Late' | 'AtRisk' | 'OnTrack';
 
 export interface DeliveryEtaDto {
@@ -99,17 +99,12 @@ export interface DeliveryEtaDto {
   deliveryWindowEndUtc?: string;
   risk: EtaRisk;
   trackingUpdatedAtUtc?: string;
-  tachoDriverName?: string;
-  driveAvailableTodayMinutes?: number;
-  routeDrivingMinutes?: number;
-  breakMinutesIncluded?: number;
-  tachoStatus?: string;
-  tachoExplanation?: string;
+  explanation?: string;
 }
 
 export interface DeliveryEtasDto {
   planningDate: string;
-  calculatedAtUtc: string;
+  retrievedAtUtc: string;
   records: DeliveryEtaDto[];
 }
 

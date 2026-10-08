@@ -14,7 +14,7 @@ function isoDate(date = new Date()) {
 function atOffset(minutes: number) { return new Date(Date.now() + minutes * 60_000).toISOString(); }
 function runReference(date: string) { return `RUN-${date.replaceAll('-', '')}-01`; }
 
-type State = { runCreated: boolean; allocatedPallets: number; driverAssigned: boolean; vehicleAssigned: boolean; trailerAssigned: boolean; geofenceStage: number; planningDate: string };
+type State = { runCreated: boolean; allocatedPallets: number; driverAssigned: boolean; vehicleAssigned: boolean; trailerAssigned: boolean; samsaraStage: number; planningDate: string };
 
 async function json(route: Route, body: unknown, status = 200) {
   await route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
@@ -26,7 +26,7 @@ function runPayload(state: State) {
     reference: runReference(state.planningDate),
     rawReference: runReference(state.planningDate),
     planningDate: state.planningDate,
-    status: state.geofenceStage >= 4 ? 'Completed' : state.geofenceStage > 0 ? 'InProgress' : 'Planned',
+    status: state.samsaraStage >= 4 ? 'Completed' : state.samsaraStage > 0 ? 'InProgress' : 'Planned',
     palletSpacesUsed: state.allocatedPallets,
     totalPalletSpaces: 26,
     capacityType: 'Standard pallets',
@@ -147,7 +147,7 @@ async function installApi(page: Page, state: State) {
     if (path === '/api/v1/driver-dispatch-status' && method === 'GET') return json(route, { planningDate: state.planningDate, drivers: [{
       driverId,
       dispatchStatus: state.driverAssigned ? 'Awaiting Dispatch' : 'No Run',
-      operationalStatus: state.geofenceStage >= 4 ? 'Completed' : state.geofenceStage > 0 ? 'Working' : state.driverAssigned ? 'Awaiting Dispatch' : 'No Run',
+      operationalStatus: state.samsaraStage >= 4 ? 'Completed' : state.samsaraStage > 0 ? 'Working' : state.driverAssigned ? 'Awaiting Dispatch' : 'No Run',
       driverConfirmed: false,
       weeklyRestStatus: 'Ready', weeklyRestMessage: 'Ready', availabilityStatus: 'Available', availabilityMessage: 'Available', projectedDayNumber: 1
     }] });
@@ -172,8 +172,8 @@ async function installApi(page: Page, state: State) {
         vehicleId,
         registration: 'AB12 CDE',
         loadId: state.runCreated ? runId : undefined,
-        condition: state.geofenceStage === 2 ? 'Moving' : state.geofenceStage > 0 ? 'Stationary' : 'Started',
-        speedKph: state.geofenceStage === 2 ? 30 : 0,
+        condition: state.samsaraStage === 2 ? 'Moving' : state.samsaraStage > 0 ? 'Stationary' : 'Started',
+        speedKph: state.samsaraStage === 2 ? 30 : 0,
         lastEventTimeUtc: new Date().toISOString(),
         driverName: state.driverAssigned ? 'Test Driver' : undefined,
         driverSource: state.driverAssigned ? 'TachoMaster' : undefined
@@ -206,7 +206,7 @@ async function installApi(page: Page, state: State) {
     if (path === '/api/v1/planner-starts' && method === 'GET') return json(route, { planningDate: state.planningDate, rows: [] });
 
     // Current Operations Wallboard contract: the board is anchored by planned-runs and
-    // driver-assignments; live/geofence feeds enrich those rows rather than creating them.
+    // driver-assignments; live Samsara progress enrich those rows rather than creating them.
     if (path === '/api/v1/tv-display/planned-runs' && method === 'GET') return json(route, state.runCreated ? [runPayload(state)] : []);
     if (path === '/api/v1/driver-assignments' && method === 'GET') return json(route, state.driverAssigned ? [{
       loadId: runId,
@@ -219,81 +219,47 @@ async function installApi(page: Page, state: State) {
       trailerId,
       trailerNumber: 'TRL-101'
     }] : []);
-    if (path === '/api/v1/run-geofence-coverage' && method === 'GET') return json(route, { rows: [] });
     if (path === '/api/v1/operations/delivery-etas' && method === 'GET') return json(route, { planningDate: state.planningDate, calculatedAtUtc: new Date().toISOString(), records: [] });
 
     if (path === '/api/v1/run-progress' && method === 'GET') {
-      const completedStops = state.geofenceStage < 2 ? 0 : state.geofenceStage < 4 ? 1 : 2;
-      const runState = state.geofenceStage >= 4 ? 'Completed' : state.geofenceStage === 1 || state.geofenceStage === 3 ? 'OnSiteConfirmed' : state.geofenceStage > 1 ? 'InProgress' : 'Planned';
-      const currentVisit = state.geofenceStage === 1
-        ? { geofenceName: 'Hall Hunter', loadStopId: collectionStopId, enteredAtUtc: atOffset(25), siteArrivalUtc: atOffset(25), confirmedAtUtc: atOffset(25), dwellMinutes: 5, isDelayed: false, status: 'OnSite' }
-        : state.geofenceStage === 3
-          ? { geofenceName: 'Leyland', loadStopId: deliveryStopId, enteredAtUtc: atOffset(75), siteArrivalUtc: atOffset(75), confirmedAtUtc: atOffset(75), dwellMinutes: 5, isDelayed: false, status: 'OnSite' }
+      const completedStops = state.samsaraStage < 2 ? 0 : state.samsaraStage < 4 ? 1 : 2;
+      const runState = state.samsaraStage >= 4 ? 'Completed' : state.samsaraStage === 1 || state.samsaraStage === 3 ? 'OnSiteConfirmed' : state.samsaraStage > 1 ? 'InProgress' : 'Planned';
+      const currentVisit = state.samsaraStage === 1
+        ? { siteName: 'Hall Hunter', loadStopId: collectionStopId, enteredAtUtc: atOffset(25), siteArrivalUtc: atOffset(25), confirmedAtUtc: atOffset(25), dwellMinutes: 5, isDelayed: false, status: 'OnSite' }
+        : state.samsaraStage === 3
+          ? { siteName: 'Leyland', loadStopId: deliveryStopId, enteredAtUtc: atOffset(75), siteArrivalUtc: atOffset(75), confirmedAtUtc: atOffset(75), dwellMinutes: 5, isDelayed: false, status: 'OnSite' }
           : undefined;
       return json(route, {
         planningDate: state.planningDate,
         calculatedAtUtc: new Date().toISOString(),
-        geofenceAvailable: true,
-        geofenceConfiguredRuns: state.runCreated ? 1 : 0,
-        geofenceLinkedRuns: state.runCreated ? 1 : 0,
-        geofenceLinkedStops: state.runCreated ? 2 : 0,
-        geofenceTotalStops: state.runCreated ? 2 : 0,
-        geofenceHitRuns: state.geofenceStage > 0 ? 1 : 0,
-        geofenceHitStops: completedStops,
+        samsaraProgressAvailable: true,
         records: state.runCreated ? [{
           loadId: runId,
           loadReference: runReference(state.planningDate),
-          loadStatus: state.geofenceStage >= 4 ? 'Completed' : state.geofenceStage > 0 ? 'InProgress' : 'Planned',
+          loadStatus: state.samsaraStage >= 4 ? 'Completed' : state.samsaraStage > 0 ? 'InProgress' : 'Planned',
           runState,
-          progressPercent: state.geofenceStage === 0 ? 0 : state.geofenceStage === 1 ? 25 : state.geofenceStage === 2 ? 50 : state.geofenceStage === 3 ? 75 : 100,
+          progressPercent: state.samsaraStage === 0 ? 0 : state.samsaraStage === 1 ? 25 : state.samsaraStage === 2 ? 50 : state.samsaraStage === 3 ? 75 : 100,
           completedStops,
           totalStops: 2,
-          nextStop: state.geofenceStage < 2
+          nextStop: state.samsaraStage < 2
             ? { id: collectionStopId, sequence: 1, name: 'Hall Hunter', plannedArrivalUtc: atOffset(30) }
-            : state.geofenceStage < 4
+            : state.samsaraStage < 4
               ? { id: deliveryStopId, sequence: 2, name: 'Leyland', plannedArrivalUtc: atOffset(80) }
               : undefined,
           currentVisit,
-          geofenceOnSite: state.geofenceStage === 1 || state.geofenceStage === 3,
-          trackingFresh: true,
-          trackingMoving: state.geofenceStage === 2,
-          speedKph: state.geofenceStage === 2 ? 30 : 0,
           stopDwell: [
-            { stopId: collectionStopId, sequence: 1, stopName: 'Hall Hunter', state: state.geofenceStage >= 2 ? 'Departed' : state.geofenceStage === 1 ? 'OnSite' : 'EnRoute', siteArrivalUtc: state.geofenceStage >= 1 ? atOffset(25) : undefined, siteDepartureUtc: state.geofenceStage >= 2 ? atOffset(35) : undefined },
-            { stopId: deliveryStopId, sequence: 2, stopName: 'Leyland', state: state.geofenceStage >= 4 ? 'Departed' : state.geofenceStage === 3 ? 'OnSite' : 'EnRoute', siteArrivalUtc: state.geofenceStage >= 3 ? atOffset(75) : undefined, siteDepartureUtc: state.geofenceStage >= 4 ? atOffset(85) : undefined }
+            { stopId: collectionStopId, sequence: 1, stopName: 'Hall Hunter', state: state.samsaraStage >= 2 ? 'Departed' : state.samsaraStage === 1 ? 'OnSite' : 'EnRoute', siteArrivalUtc: state.samsaraStage >= 1 ? atOffset(25) : undefined, siteDepartureUtc: state.samsaraStage >= 2 ? atOffset(35) : undefined },
+            { stopId: deliveryStopId, sequence: 2, stopName: 'Leyland', state: state.samsaraStage >= 4 ? 'Departed' : state.samsaraStage === 3 ? 'OnSite' : 'EnRoute', siteArrivalUtc: state.samsaraStage >= 3 ? atOffset(75) : undefined, siteDepartureUtc: state.samsaraStage >= 4 ? atOffset(85) : undefined }
           ]
         }] : []
       });
     }
-    if (path === '/api/v1/tv-display/route-progress' && method === 'GET') return json(route, { planningDate: state.planningDate, runs: [] });
-    if (path === '/api/v1/tv-display/live-runs' && method === 'GET') return json(route, { planningDate: state.planningDate, generatedAtUtc: new Date().toISOString(), refreshSeconds: 20, runCount: state.geofenceStage >= 3 ? 0 : state.runCreated ? 1 : 0, runs: state.geofenceStage >= 3 ? [] : state.runCreated ? [{
-      id: runId,
-      reference: runReference(state.planningDate),
-      status: state.geofenceStage > 0 ? 'InProgress' : 'Planned',
-      nextStop: state.geofenceStage === 1 ? 'Hall Hunter' : 'Leyland',
-      finalStop: 'Leyland',
-      etaTarget: 'Leyland',
-      etaUtc: atOffset(80),
-      etaSource: 'Estimated',
-      tracking: 'Moving · now',
-      trackingUpdatedAtUtc: new Date().toISOString(),
-      speedKph: 30,
-      state: state.geofenceStage === 1 ? 'ON SITE' : 'MOVING',
-      stateDetail: 'Live'
-    }] : [] });
-    if (path === '/api/v1/run-timing' && method === 'GET') return json(route, {
-      planningDate: state.planningDate, records: state.runCreated ? [{
-        loadId: runId, loadReference: runReference(state.planningDate), completed: state.geofenceStage >= 4,
-        finalEtaUtc: state.geofenceStage >= 3 ? atOffset(75) : atOffset(80), finalEtaSource: state.geofenceStage >= 3 ? 'Geofence' : 'GeofenceEstimated', finalDestinationStopId: deliveryStopId, finalDestinationName: 'Leyland',
-      }] : [],
-    });
-
     return json(route, {});
   });
 }
 
-test('planner → dispatch → geofence arrival/departure → completion stays coherent', async ({ page }) => {
-  const state: State = { runCreated: false, allocatedPallets: 0, driverAssigned: false, vehicleAssigned: false, trailerAssigned: false, geofenceStage: 0, planningDate: isoDate() };
+test('planner → dispatch → Samsara stop arrival/departure → completion stays coherent', async ({ page }) => {
+  const state: State = { runCreated: false, allocatedPallets: 0, driverAssigned: false, vehicleAssigned: false, trailerAssigned: false, samsaraStage: 0, planningDate: isoDate() };
   await installApi(page, state);
 
   await page.goto('/');
@@ -342,23 +308,23 @@ test('planner → dispatch → geofence arrival/departure → completion stays c
   await expect(page.getByRole('heading', { name: 'Live Runs' })).toBeVisible();
   await expect(page.getByText(/AB12 CDE/).first()).toBeVisible();
 
-  state.geofenceStage = 1;
+  state.samsaraStage = 1;
   await page.reload();
   await expect(page.getByText('ON SITE').first()).toBeVisible();
   await expect(page.getByText(/Hall Hunter/).first()).toBeVisible();
 
-  state.geofenceStage = 2;
+  state.samsaraStage = 2;
   await page.reload();
   await expect(page.getByLabel('1 of 2 stops completed')).toBeVisible();
 
-  state.geofenceStage = 3;
+  state.samsaraStage = 3;
   await page.reload();
   await expect(page.getByText('ON SITE').first()).toBeVisible();
   await expect(page.getByText(/Leyland/).first()).toBeVisible();
 
-  state.geofenceStage = 4;
+  state.samsaraStage = 4;
   await page.reload();
   await expect(page.getByText('COMPLETED').first()).toBeVisible();
-  await expect(page.getByText('All geofence-confirmed stops completed').first()).toBeVisible();
+  await expect(page.getByText('All Samsara-confirmed stops completed').first()).toBeVisible();
   await expect(page.getByLabel('2 of 2 stops completed')).toBeVisible();
 });

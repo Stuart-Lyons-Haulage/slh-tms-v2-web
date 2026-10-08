@@ -6,14 +6,12 @@ import { App } from './App';
 import { E2eHarness } from './E2eHarness';
 import { DataIntegrityBoundary } from './components/DataIntegrityBoundary';
 import { DispatchCalculatedStartsPortal } from './pages/DispatchCalculatedStartsPortal';
-import { cacheLocationForRoute, isPublicTvLink, isTvRoute } from './tvBootstrap';
 import { installOperationalUiEnhancements } from './operationalUiEnhancements';
 import { installPollingPolicy } from './lib/pollingPolicy';
 import { installPerformanceTelemetry } from './lib/performanceTelemetry';
 import './styles.css';
 import './orders.css';
 import './fuel-top.css';
-import './management.css';
 import './operational-status.css';
 import './navigation-scroll.css';
 import './intelligence.css';
@@ -45,9 +43,7 @@ const clientId = import.meta.env.VITE_ENTRA_CLIENT_ID;
 const tenantId = import.meta.env.VITE_ENTRA_TENANT_ID;
 const e2eAuth = import.meta.env.VITE_E2E_AUTH === 'true';
 const localTestMode = import.meta.env.VITE_LOCAL_TEST_MODE === 'true';
-const isTvRoutePath = isTvRoute(window.location.pathname);
-const publicTvLink = isPublicTvLink(window.location.pathname, window.location.search);
-const msal = new PublicClientApplication({ auth: { clientId: clientId || '00000000-0000-0000-0000-000000000000', authority: `https://login.microsoftonline.com/${tenantId || 'common'}`, redirectUri: window.location.origin }, cache: { cacheLocation: cacheLocationForRoute(window.location.pathname) } });
+const msal = new PublicClientApplication({ auth: { clientId: clientId || '00000000-0000-0000-0000-000000000000', authority: `https://login.microsoftonline.com/${tenantId || 'common'}`, redirectUri: window.location.origin } });
 
 function installLocalTestBanner() {
   if (!localTestMode || document.getElementById('slh-local-test-banner')) return;
@@ -90,16 +86,13 @@ function showStartupFailure(error: unknown) {
   const root = document.getElementById('root');
   if (!root) return;
   const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
-  root.innerHTML = `<main style="font-family:Arial,sans-serif;padding:32px;background:#f7f8fa;min-height:100vh;color:#172033"><section style="max-width:760px;margin:40px auto;background:white;border:1px solid #d7dde5;border-radius:12px;padding:28px"><p style="font-weight:700">SLH OPERATIONS WALLBOARD</p><h1>TV wallboard could not start</h1><p>The display has not lost its planning data. Reload this page once. If the message remains, report the detail below.</p><pre style="white-space:pre-wrap;overflow-wrap:anywhere;background:#f2f4f7;padding:14px;border-radius:8px">${detail.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre></section></main>`;
+  root.innerHTML = `<main style="font-family:Arial,sans-serif;padding:32px;background:#f7f8fa;min-height:100vh;color:#172033"><section style="max-width:760px;margin:40px auto;background:white;border:1px solid #d7dde5;border-radius:12px;padding:28px"><h1>TMS could not start</h1><p>Reload this page once. If the message remains, report the detail below.</p><pre style="white-space:pre-wrap;overflow-wrap:anywhere;background:#f2f4f7;padding:14px;border-radius:8px">${detail.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre></section></main>`;
 }
 
 async function start() {
   try {
     if (localTestMode) { renderApp(); return; }
     if (e2eAuth) { renderApp(); return; }
-    if (isTvRoutePath && (window as Window & { __SLH_TV_COMPATIBILITY__?: boolean }).__SLH_TV_COMPATIBILITY__) return;
-    if (isTvRoutePath) (window as Window & { __SLH_TV_REACT_STARTED__?: boolean }).__SLH_TV_REACT_STARTED__ = true;
-    if (publicTvLink) { renderApp(); void msal.initialize().catch(error => console.warn('MSAL unavailable in keyed TV mode; continuing with TV-key access.', error)); return; }
     await msal.initialize();
     let redirect;
     try { redirect = await msal.handleRedirectPromise(); } catch (error) { console.error('Microsoft sign-in callback failed', error); }

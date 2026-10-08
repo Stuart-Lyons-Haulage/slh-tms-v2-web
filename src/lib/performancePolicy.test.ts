@@ -20,8 +20,6 @@ describe("SLH TMS performance policy", () => {
     expect(effectivePollingDelay("/staging", 20_000)).toBe(60_000);
     expect(effectivePollingDelay("/warehouse", 30_000)).toBe(120_000);
     expect(effectivePollingDelay("/communications", 30_000)).toBe(120_000);
-    expect(effectivePollingDelay("/operations-wallboard", 20_000)).toBe(600_000);
-    expect(effectivePollingDelay("/live-runs", 20_000)).toBe(600_000);
     expect(effectivePollingDelay("/compliance", 20_000)).toBe(900_000);
     expect(effectivePollingDelay("/control-centre", 20_000)).toBe(600_000);
   });

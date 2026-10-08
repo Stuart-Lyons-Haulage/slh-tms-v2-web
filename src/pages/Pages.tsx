@@ -25,7 +25,7 @@ const statusClass = (value: string | number | undefined) => stagingStatus(value)
 const localDateInput = () => { const today = new Date(); return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`; };
 const addDays = (date: string, days: number) => { const value = new Date(`${date}T00:00:00Z`); value.setUTCDate(value.getUTCDate() + days); return value.toISOString().slice(0, 10); };
 const validDateInput = (date: string) => /^\d{4}-\d{2}-\d{2}$/.test(date) && !Number.isNaN(Date.parse(`${date}T00:00:00Z`));
-const masterStagingTypes: readonly string[] = ['vehicle', 'driver', 'trailer', 'site', 'customer', 'customercontact', 'marketcontact', 'fuelprice', 'fuelcard', 'geofence'];
+const masterStagingTypes: readonly string[] = ['vehicle', 'driver', 'trailer', 'site', 'customer', 'customercontact', 'marketcontact', 'fuelprice', 'fuelcard'];
 
 export function Dashboard() {
   const token = useAccessToken(); const [date, setDate] = useState(new Date().toISOString().slice(0, 10)); const staging = useApi(useCallback(async () => api.staging(await token(), ''), [token])); const loads = useApi(useCallback(async () => listRuns(date, await token()), [date, token])); const orders = useApi(useCallback(async () => api.orders(date, date, await token()), [date, token])); const fleet = useApi(useCallback(async () => api.fleetStatus(await token()), [token])); const etaApi = useApi(useCallback(async () => api.deliveryEtas(date, await token()), [date, token])); const assignments = useApi(useCallback(async () => api.driverAssignments(date, date, await token()), [date, token]));
@@ -344,7 +344,6 @@ export function StagingQueue({ ordersOnly = false, masterOnly = false }: { order
   const [requestingOrders, setRequestingOrders] = useState(false);
   const [replaying, setReplaying] = useState(false);
   const [sourceEvidenceId, setSourceEvidenceId] = useState<string>();
-  const [masterImportBusy, setMasterImportBusy] = useState(false);
   const [orderView, setOrderView] = useState<'review' | 'approved'>('review');
 
   async function review(item: StagedImport, approved: boolean) {
@@ -499,21 +498,6 @@ export function StagingQueue({ ordersOnly = false, masterOnly = false }: { order
     }
   }
 
-  async function reloadGeofenceSeed() {
-    if (!window.confirm('Reload the approved SLH Falcon geofence seed? Existing matching geofences will be updated rather than duplicated.')) return;
-    setMasterImportBusy(true);
-    setMessage(undefined);
-    try {
-      const result = await request<{ supplied: number; inserted: number; updated: number; siteMatched: number }>('/api/v1/geofences/import-slh-seed', await token(), { method: 'POST' });
-      setMessage(`${result.supplied} geofences checked · ${result.inserted} inserted · ${result.updated} updated · ${result.siteMatched} linked to Sites.`);
-      await refresh();
-    } catch (exception) {
-      setMessage(exception instanceof Error ? exception.message : 'SLH geofence seed import failed.');
-    } finally {
-      setMasterImportBusy(false);
-    }
-  }
-
   async function approveBulk() {
     const pending = (data || []).filter(item => stagingStatus(item.status) === 'PendingReview' && item.entityType === bulkEntity);
     if (!pending.length) return;
@@ -604,7 +588,7 @@ export function StagingQueue({ ordersOnly = false, masterOnly = false }: { order
         <h1>{ordersOnly ? 'Order Review' : 'Master Data Imports & Staging Queue'}</h1>
         {ordersOnly
           ? <p className="hint">Orders captured from the Info mailbox through Microsoft Graph land here first. Check collection, delivery, pallet quantity and source evidence before approval.</p>
-          : <p className="hint">Add, import and approve governed Master Data here only — sites, vehicles, drivers, trailers, customers, contacts, markets, fuel data and geofences. Transport orders never appear in this queue; they remain exclusively in Order Review.</p>}
+          : <p className="hint">Add, import and approve governed Master Data here only — sites, vehicles, drivers, trailers, customers, contacts, markets and fuel data. Transport orders never appear in this queue; they remain exclusively in Order Review.</p>}
       </div>
       <div className="actions">
         <button onClick={() => void refresh()}>Refresh</button>
@@ -620,7 +604,6 @@ export function StagingQueue({ ordersOnly = false, masterOnly = false }: { order
     {!ordersOnly && <div className="admin-card" style={{ marginBottom: 18 }}>
       <div className="title-row" style={{ marginBottom: 10 }}>
         <div><p className="eyebrow">Master Data import controls</p><h2>Import into staging</h2><p className="hint">All Master Data import actions live here. Imported records remain subject to the staging/review rules below unless the source is an approved system seed.</p></div>
-        <button disabled={masterImportBusy || Boolean(reviewing)} onClick={() => void reloadGeofenceSeed()}>{masterImportBusy ? 'Loading geofences…' : 'Reload approved geofence seed'}</button>
       </div>
       <MasterDataCsvImport onCommitted={() => void refresh()} />
     </div>}

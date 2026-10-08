@@ -83,7 +83,7 @@ export function MasterDataDuplicateReviewPanel({ entityType = 'sites' }: { entit
   }
 
   async function merge(candidate: DuplicateCandidate) {
-    if (!window.confirm(`Merge ${candidate.duplicates.length} duplicate record(s) into ${candidate.canonical.name}?\n\nAddress, map, geofence and routing fields will be preserved and blanks will not overwrite good data.`)) return;
+    if (!window.confirm(`Merge ${candidate.duplicates.length} duplicate record(s) into ${candidate.canonical.name}?\n\nAddress, map and routing fields will be preserved and blanks will not overwrite good data.`)) return;
     setBusy(true); setError(undefined); setNotice(undefined);
     try {
       const result = await request<MergeResult>(`/api/v1/operational-master-data/duplicates/${candidate.entityType}/merge`, await token(), {

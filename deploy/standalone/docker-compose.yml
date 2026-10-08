@@ -80,7 +80,6 @@ services:
       Archive__RootPath: /archive
       Archive__AuditOutboxRetentionDays: "${ARCHIVE_OUTBOX_DAYS:-7}"
       Archive__TelemetryRetentionDays: "${ARCHIVE_TELEMETRY_DAYS:-90}"
-      Archive__GeofenceRetentionDays: "${ARCHIVE_GEOFENCE_DAYS:-180}"
       Archive__EtaRetentionDays: "${ARCHIVE_ETA_DAYS:-90}"
       Archive__SyncReceiptRetentionDays: "${ARCHIVE_SYNC_DAYS:-30}"
       Tracking__Dot__Enabled: "${ROADTECH_ENABLED:-false}"
