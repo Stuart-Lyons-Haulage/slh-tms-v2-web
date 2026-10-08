@@ -1,4 +1,12 @@
-const fallbackApiBaseUrl = '/tms-api';
+const localApiBaseUrl = '/tms-api';
+const hostedApiBaseUrl = 'https://slh-tms-api-prod.azurewebsites.net';
+
+// The local Docker portal is intentionally same-origin through Nginx. The Azure
+// Static Web App has no local Nginx proxy, so its safe default must point at the
+// separately hosted API. Explicit VITE_API_BASE_URL still takes precedence.
+const fallbackApiBaseUrl = typeof window !== 'undefined' && window.location.hostname === 'tms.lyonshaulage.com'
+  ? hostedApiBaseUrl
+  : localApiBaseUrl;
 
 export function normaliseApiBaseUrl(input: string) {
   const value = String(input || '').trim() || fallbackApiBaseUrl;

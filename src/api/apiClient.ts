@@ -1,7 +1,10 @@
 import { z, type ZodType } from 'zod';
 import { trackApiRequest } from '../lib/performanceTelemetry';
 
-const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '/tms-api').replace(/\/$/, '');
+const defaultApiBaseUrl = typeof window !== 'undefined' && window.location.hostname === 'tms.lyonshaulage.com'
+  ? 'https://slh-tms-api-prod.azurewebsites.net'
+  : '/tms-api';
+const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || defaultApiBaseUrl).replace(/\/$/, '');
 
 export class ApiError extends Error {
   constructor(public readonly status: number, message: string, public readonly endpoint?: string) {
