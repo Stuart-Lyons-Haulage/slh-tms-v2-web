@@ -3,7 +3,6 @@ import { useSearchParams } from "react-router-dom";
 import { request } from "../lib/api";
 import { useAccessToken } from "../lib/auth";
 import { SILENT_API_REFRESH_EVENT } from "../lib/useApi";
-import { startVisiblePolling } from "../lib/visiblePolling";
 import { SourceEmailEvidenceDrawer } from "../components/SourceEmailEvidenceDrawer";
 import { JobsOperational } from "./JobsOperational";
 import { OrderReviewBulk } from "./OrderReviewBulk";
@@ -163,8 +162,7 @@ export function ApprovedOrdersList({ date, token }: { date: string; token: Retur
   useEffect(() => {
     let active = true;
     void refresh();
-    const timer = window.setInterval(() => { if (active) void refresh(); }, 30_000);
-    return () => { active = false; window.clearInterval(timer); };
+    return () => { active = false; };
   }, [refresh]);
 
   const runByOrderId = new Map(runs.flatMap(run => run.stops
@@ -172,7 +170,7 @@ export function ApprovedOrdersList({ date, token }: { date: string; token: Retur
     .map(stop => [stop.orderId!, run] as const)));
 
   return <section className="panel" style={{ marginBottom: 18 }}>
-    <div className="title-row"><div><p className="eyebrow">Operational order handover</p><h2>Approved orders through dispatch</h2><p className="hint">Live orders for {date}, linked to their current run until dispatch. Refreshes every 30 seconds.</p></div><div className="title-actions" style={{ alignItems: "center", gap: 8 }}><strong>{orders.length} order{orders.length === 1 ? "" : "s"}</strong><button type="button" onClick={() => void refresh()} disabled={loading}>{loading ? "Refreshing…" : "Refresh"}</button></div></div>
+    <div className="title-row"><div><p className="eyebrow">Operational order handover</p><h2>Approved orders through dispatch</h2><p className="hint">Live orders for {date}, linked to their current run until dispatch. Refresh manually when required.</p></div><div className="title-actions" style={{ alignItems: "center", gap: 8 }}><strong>{orders.length} order{orders.length === 1 ? "" : "s"}</strong><button type="button" onClick={() => void refresh()} disabled={loading}>{loading ? "Refreshing…" : "Refresh"}</button></div></div>
     {error && <p className="review-error">{error}</p>}
     {!loading && !error && orders.length === 0 && <div className="state">No approved live orders are recorded for this date.</div>}
     {orders.length > 0 && <div style={{ overflowX: "auto" }}><table className="master-table"><thead><tr><th>Order status</th><th>Customer</th><th>Reference</th><th>Collection</th><th>Delivery</th><th>Quantity</th><th>Run</th><th>Run status</th></tr></thead><tbody>{orders.map(order => { const run = runByOrderId.get(order.id); return <tr key={order.id}><td><span className={`status ${order.status.toLowerCase().replaceAll(" ", "-")}`}>{order.status}</span></td><td>{order.customerCode}</td><td>{order.reference || order.poNumber || "—"}</td><td>{order.sellerName || order.collectionLocation || "—"}</td><td>{order.marketName || order.deliveryLocation || "—"}</td><td>{order.pallets ?? order.cases ?? order.trays ?? order.trolleys ?? "—"}</td><td>{run?.reference || "Awaiting run"}</td><td>{run ? <span className={`status ${run.status.toLowerCase().replaceAll(" ", "-")}`}>{run.status}</span> : "Not yet planned"}</td></tr>; })}</tbody></table></div>}
@@ -276,6 +274,7 @@ function OrderIntakeCacheRecovery({ date }: { date: string }) {
           throw new Error("Replay continuation cursor was missing.");
         }
         if (batches > 500) throw new Error("Replay exceeded the safe batch limit.");
+        setNotice(`Re-parsing retained evidence… batch ${batches}${hasMore ? "; continuing" : " complete"}.`);
       }
 
       setNotice(`Re-parse complete: ${eligibleOrders} order${eligibleOrders === 1 ? "" : "s"} matched for ${date}; ${pendingAfterReplay} awaiting review; ${archived} legacy mapping exception${archived === 1 ? "" : "s"} archived.`);
@@ -372,8 +371,6 @@ export function OrderControl({ initialTab = "review" }: { initialTab?: OrderCont
     })();
     return () => { active = false; };
   }, [token]);
-
-  useEffect(() => startVisiblePolling(refreshVisibleReviewData, 15_000), []);
 
   function updateDate(nextDate: string) {
     const next = new URLSearchParams(searchParams);
