@@ -347,13 +347,36 @@ export function OrderReviewBulk({ date }: { date: string }) {
     setRequestingOrders(true);
     setNotice(undefined);
     try {
-      const result = await api.pollMailboxNow(await token());
-      setQueuePage(1);
-      setSelectedIds(new Set());
-      await queue.refresh();
-      setNotice(`${result.message} ${result.lastMessagesIngested} new message${result.lastMessagesIngested === 1 ? '' : 's'} staged.`);
+      const authToken = await token();
+      const result = await api.pollMailboxNow(authToken);
+      const queuedAt = Date.parse(result.queuedAtUtc);
+      const deadline = Date.now() + 5 * 60 * 1000;
+      let completed = false;
+
+      while (Date.now() < deadline) {
+        await new Promise((resolve) => window.setTimeout(resolve, 3000));
+        const health = await api.intakeHealth(authToken);
+        const graph = health.graph;
+        if (graph.lastAttemptUtc && Date.parse(graph.lastAttemptUtc) >= queuedAt && !graph.inProgress) {
+          if (graph.lastError) {
+            const stage = graph.lastFailureStage ? ` during ${graph.lastFailureStage}` : "";
+            throw new Error(`Graph mailbox poll failed${stage}: ${graph.lastError}`);
+          }
+          setQueuePage(1);
+          setSelectedIds(new Set());
+          await queue.refresh();
+          setNotice(`${result.message} ${graph.lastMessagesIngested} new message${graph.lastMessagesIngested === 1 ? "" : "s"} staged.`);
+          completed = true;
+          break;
+        }
+      }
+
+      if (!completed) {
+        await queue.refresh();
+        setNotice("The Graph poll is still running. Orders will remain in review; check the queue again shortly.");
+      }
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Graph mailbox poll failed.");
+      setNotice(error instanceof Error ? error.message : "Graph mailbox poll could not be started.");
     } finally {
       setRequestingOrders(false);
     }
