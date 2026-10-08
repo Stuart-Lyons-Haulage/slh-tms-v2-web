@@ -14,8 +14,7 @@ const warmApiCache = new Map<string, unknown>();
 export const SILENT_API_REFRESH_EVENT = 'slh:silent-api-refresh';
 
 function warmCacheKey(load: () => Promise<unknown>) {
-  const source = Function.prototype.toString.call(load);
-  if (source.includes('tv-display/planned-runs') && source.includes('driver-assignments')) return 'operations-wallboard-base';
+  void load;
   return undefined;
 }
 

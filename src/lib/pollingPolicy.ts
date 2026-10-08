@@ -17,7 +17,6 @@ export function effectivePollingDelay(pathname: string, requestedMs: number) {
   const path = pathname.toLowerCase();
   if (manualOnlyRoute(path) && requestedMs >= 10_000) return 0;
   if (path === '/' && requestedMs === 20_000) return 30_000;
-  if ((path.startsWith('/operations-wallboard') || path.startsWith('/live-runs') || path === '/tv') && requestedMs === 20_000) return 600_000;
   if (path.startsWith('/tracking') && requestedMs >= 10_000) return 300_000;
   if (path.startsWith('/warehouse') && requestedMs >= 10_000) return 120_000;
   if (path.startsWith('/communications') && requestedMs >= 10_000) return 120_000;

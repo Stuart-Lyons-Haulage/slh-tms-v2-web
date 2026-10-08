@@ -382,13 +382,6 @@ function RunAllocationCard({ load, vehicles, drivers, trailers, sites, onSaved }
 
       const minutes = Math.max(1, Math.round((summary.travelTimeInSeconds || 0) / 60));
       const readiness = await checkDispatchReadiness(load.id, minutes, access);
-      const dispatchMinutes = minutes + Math.max(0, readiness.breakMinutesIncluded || 0);
-      const firstPlanned = routeStops.find(stop => stop.plannedArrivalUtc)?.plannedArrivalUtc;
-      const firstTime = firstPlanned ? new Date(firstPlanned).getTime() : Number.NaN;
-      const baseTime = Number.isFinite(firstTime) && firstTime > Date.now() ? firstTime : Date.now();
-      const finalEta = new Date(baseTime + dispatchMinutes * 60_000).toISOString();
-      const withEta = routeStops.map((stop, index) => index === routeStops.length - 1 ? { ...stop, plannedArrivalUtc: finalEta } : stop);
-      await updateRunStops(load.id, stopPayload(withEta), access);
       const driverText = buildDriverText(load, await getRunDispatch(load.id, access));
       const response = await fetch(`/tms-api/api/v1/loads/${encodeURIComponent(load.id)}/driver-message/sms`, {
         method: "POST",
@@ -403,9 +396,9 @@ function RunAllocationCard({ load, vehicles, drivers, trailers, sites, onSaved }
       }
       const receipt = await response.json() as { provider?: string; mobileSuffix?: string; status?: string };
 
-      setStops(withEta); await onSaved(); signalPlanningChange();
+      setStops(routeStops); await onSaved(); signalPlanningChange();
       const structuralNote = readiness.acknowledgedUnverified ? " Structural warnings were explicitly acknowledged before the live TachoMaster check." : "";
-      setMessage(`Dispatched and driver text sent${receipt.mobileSuffix ? ` to mobile ending ${receipt.mobileSuffix}` : ""}. ${readiness.explanation}${structuralNote} ETA calculated${result.approximate ? " using the resilient road estimate" : ""}.${updatedSites.length ? ` Saved postcode to Site Master for ${updatedSites.join(", ")}.` : ""}`);
+      setMessage(`Dispatched and driver text sent${receipt.mobileSuffix ? ` to mobile ending ${receipt.mobileSuffix}` : ""}. ${readiness.explanation}${structuralNote}${updatedSites.length ? ` Saved postcode to Site Master for ${updatedSites.join(", ")}.` : ""}`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "The run could not be dispatched.");
     } finally { setSaving(false); }

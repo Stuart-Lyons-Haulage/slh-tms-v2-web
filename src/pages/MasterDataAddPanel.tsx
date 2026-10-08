@@ -9,7 +9,6 @@ export type AddableMasterSection =
   | 'fuel-cards'
   | 'customers'
   | 'sites'
-  | 'geofences'
   | 'markets'
   | 'fuel-prices';
 
@@ -25,7 +24,6 @@ const labels: Record<AddableMasterSection, string> = {
   'fuel-cards': 'fuel card / PIN record',
   customers: 'customer',
   sites: 'site',
-  geofences: 'approved geofences',
   markets: 'market contact',
   'fuel-prices': 'fuel price',
 };
@@ -40,7 +38,6 @@ function initial(section: AddableMasterSection): FormState {
     case 'sites': return { externalCode: '', customerCode: '', name: '', driverTextName: '', aliases: '', collectionAddress: '', collectionInstructions: '', mapLink: '', defaultTemperatureC: '', region: 'Other', active: true };
     case 'markets': return { market: '', name: '', standOrLocation: '', salesman: '', sender: '', active: true };
     case 'fuel-prices': return { weekCommencing: new Date().toISOString().slice(0, 10), provider: '', pricePencePerLitre: '', isPricingMaximum: false, source: 'Manual TMS entry', notes: '' };
-    case 'geofences': return {};
   }
 }
 
@@ -97,12 +94,6 @@ export function MasterDataAddPanel({ section, onAdded }: { section: AddableMaste
   async function save() {
     setSaving(true); setError(undefined); setMessage(undefined);
     try {
-      if (section === 'geofences') {
-        const result = await request<{ supplied: number; inserted: number; updated: number; siteMatched: number }>('/api/v1/geofences/import-slh-seed', await token(), { method: 'POST' });
-        setMessage(`${result.supplied} approved SLH geofences checked. ${result.updated} refreshed and ${result.siteMatched} linked to Sites.`);
-        onAdded();
-        return;
-      }
 
       if (section === 'drivers') {
         if (!text(form.employeeNumber).trim() || !text(form.displayName).trim()) throw new Error('Employee number and driver name are required.');
@@ -178,10 +169,10 @@ export function MasterDataAddPanel({ section, onAdded }: { section: AddableMaste
     <div className="title-row">
       <div>
         <p className="eyebrow">Add to master data</p>
-        <h2>{section === 'geofences' ? 'Add / refresh approved geofences' : `Add new ${labels[section]}`}</h2>
-        <p className="hint">{section === 'geofences' ? 'Live Runs uses the approved Falcon/SLH geofence set. Refreshing here brings that approved set back into the geofence view and repairs Site matching.' : `Create a new ${labels[section]} directly in this section. It will become available to the rest of the TMS after save.`}</p>
+        <h2>{`Add new ${labels[section]}`}</h2>
+        <p className="hint">{`Create a new ${labels[section]} directly in this section. It will become available to the rest of the TMS after save.`}</p>
       </div>
-      <button className={open ? '' : 'primary'} onClick={() => { setOpen(value => !value); setError(undefined); setMessage(undefined); }}>{open ? 'Close add form' : section === 'geofences' ? 'Open geofence controls' : `Add ${labels[section]}`}</button>
+      <button className={open ? '' : 'primary'} onClick={() => { setOpen(value => !value); setError(undefined); setMessage(undefined); }}>{open ? 'Close add form' : `Add ${labels[section]}`}</button>
     </div>
 
     {message && <p className="notice inline-notice">{message}</p>}
@@ -268,11 +259,10 @@ export function MasterDataAddPanel({ section, onAdded }: { section: AddableMaste
         <label className="wide">Notes<textarea rows={2} value={text(form.notes)} onChange={e => set('notes', e.target.value)} /></label>
       </div>}
 
-      {section === 'geofences' && <p className="notice">New operational geofences must remain part of the approved Falcon/SLH geofence set because Live Runs calculates entries and exits from that approved geometry. Use the button below to refresh that approved set and its Site links.</p>}
 
       <div className="actions" style={{ marginTop: 14 }}>
-        <button className="primary" disabled={saving} onClick={() => void save()}>{saving ? 'Saving…' : section === 'geofences' ? 'Refresh approved geofences' : `Save new ${labels[section]}`}</button>
-        {section !== 'geofences' && <button disabled={saving} onClick={() => setForm(initial(section))}>Clear form</button>}
+        <button className="primary" disabled={saving} onClick={() => void save()}>{saving ? 'Saving…' : `Save new ${labels[section]}`}</button>
+        <button disabled={saving} onClick={() => setForm(initial(section))}>Clear form</button>
       </div>
     </div>}
   </div>;

@@ -19,7 +19,6 @@ type SiteCutoffTiming = {
   depotDeadline?: string;
   latestCollectionTime?: string;
   wallBoardDeadline?: string;
-  firstGeofenceResetsLiveEtos?: boolean;
   source?: string;
   reviewedAtUtc?: string;
 };
@@ -35,7 +34,6 @@ type SiteRouteTiming = {
   collectTo?: string;
   depotDeadline?: string;
   latestCollectionTime?: string;
-  firstGeofenceResetsLiveEtos?: boolean;
   source?: string;
   reviewedAtUtc?: string;
 };
@@ -47,7 +45,6 @@ type SiteTimingProfile = {
   aliases?: string;
   latestCollectionTime?: string;
   wallBoardDeadline?: string;
-  firstGeofenceResetsLiveEtos: boolean;
   cutoffs: SiteCutoffTiming[];
   routeTimings: SiteRouteTiming[];
 };
@@ -92,7 +89,7 @@ export function SiteTimingProfilePanel({ siteId }: { siteId: string }) {
     <div className="title-row">
       <div>
         <h3>Site timings & dispatch rules</h3>
-        <p className="hint">Single source for cut-offs, latest collection, route timings and wall-board risk before live geofence ETO takes over.</p>
+        <p className="hint">Site cut-offs, latest collection times and route timings used during planning and dispatch.</p>
       </div>
       <button type="button" onClick={() => void load()} disabled={loading}>{loading ? 'Refreshing…' : 'Refresh timings'}</button>
     </div>
@@ -104,10 +101,9 @@ export function SiteTimingProfilePanel({ siteId }: { siteId: string }) {
       <div className="crm-form-grid">
         <p><strong>Latest collection:</strong><br />{fmtTime(profile.latestCollectionTime)}</p>
         <p><strong>Wall-board deadline:</strong><br />{fmtTime(profile.wallBoardDeadline)}</p>
-        <p><strong>Live ETO trigger:</strong><br />{profile.firstGeofenceResetsLiveEtos ? 'First geofence hit' : 'Manual / not set'}</p>
       </div>
 
-      <p className="hint">Dispatch may set an earlier planned start. Until the first geofence event is received, the wall board should use latest collection time as the at-risk point.</p>
+      <p className="hint">Samsara reports arrival and departure against each planned stop after the route is sent.</p>
 
       {hasCutoffs ? <div style={{ overflowX: 'auto' }}>
         <h4>Cut-offs</h4>

@@ -1,6 +1,4 @@
 import { useCallback, useMemo, useState } from "react";
-import { GeofenceStatusBadge, SiteCoverageWarningPanel, useSiteGeofenceCoverage } from "../components/GeofenceCoverageWarnings";
-import type { SiteCoverage } from "../components/siteGeofenceCoverageLogic";
 import { api, request, type TransportOrder } from "../lib/api";
 import { orderMaintenance, type OrderUpdatePayload } from "../lib/orderMaintenance";
 import { useAccessToken } from "../lib/auth";
@@ -52,10 +50,6 @@ function editable(order: TransportOrder): OrderUpdatePayload {
   };
 }
 
-function aliases(value?: string) {
-  return String(value || "").split(/[,;|\n\r]+/).map(item => item.trim()).filter(Boolean);
-}
-
 export function JobsOperational({ date }: { date: string }) {
   const token = useAccessToken();
   const [query, setQuery] = useState("");
@@ -63,7 +57,6 @@ export function JobsOperational({ date }: { date: string }) {
   const [form, setForm] = useState<OrderUpdatePayload>();
   const [message, setMessage] = useState<string>();
   const [saving, setSaving] = useState(false);
-  const [aliasBusy, setAliasBusy] = useState(false);
   const orders = useApi(useCallback(async () => api.orders(date, date, await token()), [date, token]));
 
   const rows = useMemo(() => (orders.data || []).filter((order) => {
@@ -73,15 +66,6 @@ export function JobsOperational({ date }: { date: string }) {
     return [order.reference, order.customerCode, order.sellerName, order.marketName, order.stallNumber, order.driverInstructions]
       .some((value) => String(value || "").toLowerCase().includes(q));
   }), [orders.data, query]);
-
-  // Only physical collection/delivery Sites participate in geofence coverage. For normal work
-  // the Depot is the same canonical Site as Destination. For market work only the physical
-  // Market Site owns the geofence; trader names, stands, stalls, units and arches are detail.
-  const siteLabels = useMemo(() => Array.from(new Set(rows.flatMap(order => [
-    order.sellerName,
-    approvedOrderPhysicalDestination(order),
-  ]).map(value => String(value || "").trim()).filter(Boolean))), [rows]);
-  const geofenceCoverage = useSiteGeofenceCoverage(siteLabels);
 
   function begin(order: TransportOrder) {
     setEditingId(order.id);
@@ -98,7 +82,6 @@ export function JobsOperational({ date }: { date: string }) {
       setEditingId(undefined);
       setForm(undefined);
       await orders.refresh();
-      await geofenceCoverage.refresh();
       setMessage(result.siteMasterMessage
         ? `Job amended successfully. ${result.siteMasterMessage} Planner data has been refreshed from the saved order.`
         : "Job amended successfully. Planner data has been refreshed from the saved order.");
@@ -106,45 +89,6 @@ export function JobsOperational({ date }: { date: string }) {
       setMessage(error instanceof Error ? error.message : "The job could not be amended.");
     } finally {
       setSaving(false);
-    }
-  }
-
-  async function applySuggestedAliases(items: SiteCoverage[]) {
-    const applicable = items.filter(item => item.state === "unresolved" && item.suggestedSiteId);
-    if (!applicable.length || aliasBusy) return;
-    setAliasBusy(true);
-    setMessage(undefined);
-    try {
-      const access = await token();
-      const grouped = new Map<string, { existing: string[]; labels: string[]; siteName: string }>();
-      for (const item of applicable) {
-        const siteId = item.suggestedSiteId!;
-        const current = grouped.get(siteId) || {
-          existing: aliases(item.suggestedSiteAliases),
-          labels: [],
-          siteName: item.suggestedSiteName || item.suggestedSiteCode || "Site",
-        };
-        current.labels.push(item.sourceLabel);
-        grouped.set(siteId, current);
-      }
-
-      let added = 0;
-      for (const [siteId, group] of grouped) {
-        const combined = Array.from(new Set([...group.existing, ...group.labels].map(value => value.trim()).filter(Boolean)));
-        await request(`/api/v1/sites/${encodeURIComponent(siteId)}/aliases`, access, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ aliases: combined.join("; ") }),
-        });
-        added += group.labels.length;
-      }
-
-      await geofenceCoverage.refresh();
-      setMessage(`${added} Site alias${added === 1 ? "" : "es"} saved to Site Master. Matching orders now reuse the canonical Site/geofence instead of creating another daily warning.`);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "The suggested Site alias could not be saved.");
-    } finally {
-      setAliasBusy(false);
     }
   }
 
@@ -187,37 +131,28 @@ export function JobsOperational({ date }: { date: string }) {
     <div className="planner-toolbar">
       <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search customer, order, market, stall, address…" />
       <span>{rows.length} active job{rows.length === 1 ? "" : "s"} for {date}</span>
-      <button onClick={() => void Promise.all([orders.refresh(), geofenceCoverage.refresh()])} disabled={orders.loading || saving || aliasBusy}>Refresh jobs</button>
-      <button onClick={() => void clearAllOpenJobs()} disabled={saving || aliasBusy}>Clear all open jobs</button>
+      <button onClick={() => void orders.refresh()} disabled={orders.loading || saving}>Refresh jobs</button>
+      <button onClick={() => void clearAllOpenJobs()} disabled={saving}>Clear all open jobs</button>
     </div>
     {message && <p className="notice inline-notice">{message}</p>}
     {orders.error && <p className="notice inline-notice">{orders.error}</p>}
-    {geofenceCoverage.error && <p className="notice inline-notice" style={{ borderColor: "#b42318" }}>⚠ Site/geofence coverage could not be checked. Orders remain available, but location linkage is unconfirmed.</p>}
-    <SiteCoverageWarningPanel
-      issues={geofenceCoverage.issues}
-      title="ORDER SITE / GEOFENCE COVERAGE"
-      aliasBusy={aliasBusy}
-      onApplySuggestedAlias={(issue) => void applySuggestedAliases([issue])}
-      onApplyAllSuggestedAliases={() => void applySuggestedAliases(geofenceCoverage.issues)}
-    />
     <div className="master-table-wrap" style={{ overflowX: "auto" }}>
       <table className="master-table" style={{ minWidth: 1320 }}>
         <thead><tr><th>Order</th><th>Customer</th><th>Collection</th><th>Market / Depot</th><th>Destination / Market detail</th><th>Delivery address</th><th>Quantity</th><th>Unit</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody>{rows.map((order) => {
           const detail = approvedOrderMarketDetail(order);
           const physicalDestination = approvedOrderPhysicalDestination(order);
-          const destinationCoverage = geofenceCoverage.resultFor(physicalDestination);
           return <tr key={order.id}>
             <td><strong>{order.reference}</strong></td>
             <td>{order.customerCode}</td>
-            <td>{order.sellerName || "—"}<GeofenceStatusBadge result={geofenceCoverage.resultFor(order.sellerName)} /></td>
-            <td>{physicalDestination || "—"}<GeofenceStatusBadge result={destinationCoverage} /></td>
+            <td>{order.sellerName || "—"}</td>
+            <td>{physicalDestination || "—"}</td>
             <td>{detail.isMarket
               ? <><strong>{detail.customer || "Market customer"}</strong>{detail.stand && <small style={{ display: "block", marginTop: 3 }}>Stand / stall: {detail.stand}</small>}{detail.salesman && <small style={{ display: "block", marginTop: 2 }}>Salesman: {detail.salesman}</small>}</>
               : <>{physicalDestination || "—"}</>}</td>
             <td>{tagged(order.driverInstructions, "Delivery address") || "—"}</td>
             <td>{order.pallets ?? "—"}</td><td>{tagged(order.driverInstructions, "Unit type") || "Pallets"}</td><td>{order.status}</td>
-            <td><div style={{ display: "flex", gap: 8 }}><button onClick={() => begin(order)}>Edit</button><button onClick={() => void cancel(order)} disabled={saving || aliasBusy}>Delete</button></div></td>
+            <td><div style={{ display: "flex", gap: 8 }}><button onClick={() => begin(order)}>Edit</button><button onClick={() => void cancel(order)} disabled={saving}>Delete</button></div></td>
           </tr>;
         })}</tbody>
       </table>
