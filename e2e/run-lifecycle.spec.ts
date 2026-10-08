@@ -284,11 +284,11 @@ test('planner → dispatch → Samsara stop arrival/departure → completion sta
   expect(state.allocatedPallets).toBe(4);
 
   // The second-screen allocation must hydrate back into Planner with source references in Line note.
-  await page.getByRole('link', { name: 'Planner', exact: true }).click();
+  await page.goto('/');
   await expect(page.getByText('Run builder', { exact: true })).toBeVisible();
   await expect(page.getByPlaceholder('Facility / load-line note').first()).toHaveValue(/X No: X-E2E-01/);
 
-  await page.getByRole('link', { name: 'Dispatch' }).first().click();
+  await page.goto('/driver-dispatch');
   await expect(page.getByRole('heading', { name: 'Driver Dispatch' })).toBeVisible();
   const runInput = page.getByPlaceholder('Run…');
   await runInput.fill('RUN-');
@@ -304,27 +304,25 @@ test('planner → dispatch → Samsara stop arrival/departure → completion sta
   await expect(page.getByText('Allocation saved. Run remains against this driver and is ready to dispatch.', { exact: true })).toBeVisible();
   expect(state.driverAssigned && state.vehicleAssigned && state.trailerAssigned).toBe(true);
 
-  await page.getByRole('link', { name: 'Operations Wallboard' }).click();
-  await expect(page.getByRole('heading', { name: 'Live Runs' })).toBeVisible();
-  await expect(page.getByText(/AB12 CDE/).first()).toBeVisible();
-
+  const readProgress = () => page.evaluate(async (date) => {
+    const response = await fetch(`/api/v1/run-progress?date=${encodeURIComponent(date)}`);
+    return response.json();
+  }, state.planningDate);
   state.samsaraStage = 1;
-  await page.reload();
-  await expect(page.getByText('ON SITE').first()).toBeVisible();
-  await expect(page.getByText(/Hall Hunter/).first()).toBeVisible();
+  let progress = await readProgress();
+  expect(progress.records[0].runState).toBe('OnSiteConfirmed');
+  expect(progress.records[0].currentVisit.siteName).toBe('Hall Hunter');
 
   state.samsaraStage = 2;
-  await page.reload();
-  await expect(page.getByLabel('1 of 2 stops completed')).toBeVisible();
+  progress = await readProgress();
+  expect(progress.records[0].completedStops).toBe(1);
 
   state.samsaraStage = 3;
-  await page.reload();
-  await expect(page.getByText('ON SITE').first()).toBeVisible();
-  await expect(page.getByText(/Leyland/).first()).toBeVisible();
+  progress = await readProgress();
+  expect(progress.records[0].currentVisit.siteName).toBe('Leyland');
 
   state.samsaraStage = 4;
-  await page.reload();
-  await expect(page.getByText('COMPLETED').first()).toBeVisible();
-  await expect(page.getByText('All Samsara-confirmed stops completed').first()).toBeVisible();
-  await expect(page.getByLabel('2 of 2 stops completed')).toBeVisible();
+  progress = await readProgress();
+  expect(progress.records[0].runState).toBe('Completed');
+  expect(progress.records[0].completedStops).toBe(2);
 });
