@@ -428,7 +428,7 @@ export function StagingQueue({ ordersOnly = false, masterOnly = false }: { order
     setMessage(undefined);
     try {
       const result = await api.pollMailboxNow(await token());
-      setMessage(`${result.message} ${result.lastMessagesIngested} new message${result.lastMessagesIngested === 1 ? '' : 's'} staged.`);
+      setMessage(`${result.message} Mailbox day: ${result.receivedDate}.`);
       await refresh();
     } catch (exception) {
       setMessage(exception instanceof Error ? exception.message : 'Orders could not be requested from Microsoft Graph.');
