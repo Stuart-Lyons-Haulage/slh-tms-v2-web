@@ -150,7 +150,7 @@
   /* The planner's primary decision is driver-to-run allocation. Keep the
      driver table in the left working area and the complete timed run board
      visible alongside it. */
-  grid-template-columns: minmax(560px, 1.08fr) minmax(360px, .92fr);
+  grid-template-columns: minmax(360px, 390px) minmax(0, 1fr);
   gap: 10px;
   align-items: start;
   padding: 0 12px 12px;
@@ -216,7 +216,7 @@
   .dispatch-driver-pool .smart-dispatch-table thead { display: none; }
   .dispatch-driver-pool .smart-dispatch-table tbody {
     display: grid;
-    grid-template-columns: repeat(3, minmax(210px, 1fr));
+    grid-template-columns: 1fr;
     gap: 10px;
     padding: 10px;
   }
@@ -251,6 +251,12 @@
   .dispatch-driver-pool .smart-dispatch-table tbody tr td:nth-child(8) { border-top: 1px solid #e1e8ee; }
   .dispatch-driver-pool .smart-dispatch-table tbody tr td:nth-child(9) { padding-top: 2px; }
   .dispatch-driver-pool .smart-dispatch-table tbody tr td:nth-child(10) { padding-bottom: 10px; }
+  /* Allocation belongs to the route board. Driver cards remain the workforce
+     view, while allocated routes stay editable on the right. */
+  .dispatch-driver-pool .smart-dispatch-table tbody tr td:nth-child(5),
+  .dispatch-driver-pool .smart-dispatch-table tbody tr td:nth-child(6),
+  .dispatch-driver-pool .smart-dispatch-table tbody tr td:nth-child(7),
+  .dispatch-driver-pool .smart-dispatch-table tbody tr td:nth-child(10) { display: none; }
   .dispatch-driver-pool .smart-dispatch-table tbody tr.dispatch-group { display: none; }
 }
 
@@ -366,6 +372,20 @@
 .smart-run-card .smart-run-fit { color: #17633b; font-weight: 750; }
 .smart-run-card .smart-run-warning { color: #8a5c00; font-weight: 750; }
 
+.smart-run-allocation-grid {
+  display: grid;
+  grid-template-columns: minmax(150px, 1.4fr) repeat(2, minmax(120px, 1fr)) minmax(90px, .7fr);
+  gap: 6px;
+  margin-top: 10px;
+}
+.smart-run-allocation-grid label,
+.smart-run-allocation-status { display: grid; gap: 3px; color: #637987; font-size: .68rem; font-weight: 800; }
+.smart-run-allocation-grid select { width: 100%; min-height: 32px; padding: 4px 6px; border: 1px solid #b9cad6; border-radius: 5px; background: #fff; color: #234154; }
+.smart-run-allocation-status { align-content: center; }
+.smart-run-allocation-status strong { color: #17633b; font-size: .82rem; }
+.smart-run-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.smart-run-actions .smart-action { min-height: 30px; padding: 5px 9px; font-size: .72rem; }
+
 @media (min-width: 901px) {
   .top-navigation-shell main > .driver-dispatch-operational-page {
     margin-top: -54px;
@@ -378,4 +398,5 @@
   .smart-run-sidebar { grid-column: 1; grid-row: auto; }
   .smart-run-sidebar { position: static; max-height: none; }
   .smart-run-card-list { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+  .smart-run-allocation-grid { grid-template-columns: 1fr 1fr; }
 }
