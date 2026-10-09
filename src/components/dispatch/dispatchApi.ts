@@ -211,7 +211,7 @@ export async function getSmartDispatch(
   const dispatchable = (items: DispatchDriverDto[]) => items.filter(driver => {
     const shared = availabilityByDriver.get(driver.driverId);
     const legal = availableTimeByDriver.get(driver.driverId);
-    return !driver.isBlocked && shared?.dispatchable === true && !legal?.breachDetail;
+    return !driver.isBlocked && shared?.dispatchable !== false && !legal?.breachDetail;
   });
 
   void optionalEnrichmentPromise.then(([history, samsaraStatus]) => {
