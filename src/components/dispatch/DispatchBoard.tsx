@@ -153,7 +153,6 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
   const samsaraExportCandidates = useMemo(() => {
     if (!snapshot) return [];
     return snapshot.equipment.loads.filter(load =>
-      Boolean(load.driverId) &&
       Boolean(load.vehicleId) &&
       (load.stops?.length || 0) >= 2 &&
       !snapshot.samsaraDispatch[load.id] &&
