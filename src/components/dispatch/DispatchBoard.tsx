@@ -46,9 +46,10 @@ function runTime(value?: string): string {
   return Number.isNaN(date.getTime()) ? "Time not set" : date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 }
 
-function RouteSidebar({ runs, owners, drivers, vehicles, trailers, selections, statuses, failures, busyDriverId, onSelectionChange, onDispatch, onSamsaraAndDispatch, onDownloadSamsaraCsv }: {
+function RouteSidebar({ runs, owners, allocatedRunIds, drivers, vehicles, trailers, selections, statuses, failures, busyDriverId, onSelectionChange, onDispatch, onSamsaraAndDispatch, onDownloadSamsaraCsv }: {
   runs: DispatchRunDto[];
   owners: Record<string, string | undefined>;
+  allocatedRunIds: Set<string>;
   drivers: DispatchDriverDto[];
   vehicles: SmartDispatchSnapshot["equipment"]["vehicles"];
   trailers: SmartDispatchSnapshot["equipment"]["trailers"];
@@ -80,10 +81,11 @@ function RouteSidebar({ runs, owners, drivers, vehicles, trailers, selections, s
         const rowFailures = failures.filter(failure => failure.runId === run.runId);
         const selectableDrivers = drivers.filter(driver => !driver.isBlocked || driver.driverId === ownerId);
         const canExport = Boolean(ownerId && selected.runId && selected.vehicleId);
-        return <article className={`smart-run-card ${owner ? "allocated" : "available"}`} key={run.runId}>
+        const allocated = allocatedRunIds.has(run.runId);
+        return <article className={`smart-run-card ${allocated ? "allocated" : "available"}`} key={run.runId}>
           <div className="smart-run-card-title">
             <strong>{run.reference}</strong>
-            <span>{owner ? "Selected" : run.isBackload ? "Backload" : "Available"}</span>
+            <span>{allocated ? "Dispatched" : owner ? "Selected" : run.isBackload ? "Backload" : "Available"}</span>
           </div>
           <div className="smart-run-time">{runTime(run.firstCollectionTimeUtc)}</div>
           <div className="smart-run-route">
@@ -107,7 +109,7 @@ function RouteSidebar({ runs, owners, drivers, vehicles, trailers, selections, s
               <option value="">Select trailer…</option>
               {trailers.filter(trailer => trailer.active !== false).map(trailer => <option key={trailer.id} value={trailer.id}>{trailer.trailerNumber}{trailer.type ? ` · ${trailer.type}` : ""}</option>)}
             </select></label>
-            <div className="smart-run-allocation-status"><small>Status</small><strong>{owner ? (status?.operationalStatus || "Dispatched") : "Available"}</strong></div>
+            <div className="smart-run-allocation-status"><small>Status</small><strong>{allocated ? (status?.operationalStatus || "Dispatched") : "Available"}</strong></div>
           </div>
           {rowFailures.map((failure, index) => <small className="smart-run-warning" key={`${failure.reason}-${index}`}>{failure.reason}</small>)}
           {owner && <div className="smart-run-actions">
@@ -554,6 +556,7 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
       <RouteSidebar
         runs={snapshot.runs}
         owners={runOwnerById}
+        allocatedRunIds={new Set(snapshot.equipment.loads.filter(load => Boolean(load.driverId)).map(load => load.id))}
         drivers={snapshot.drivers}
         vehicles={snapshot.equipment.vehicles}
         trailers={snapshot.equipment.trailers}
