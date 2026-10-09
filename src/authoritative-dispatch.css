@@ -163,6 +163,97 @@
   min-width: 0;
 }
 
+/* Local Dispatch reference layout: a workforce card pool on the left and
+   the route board alongside it. Keep the existing controls in each card so
+   allocation, compliance and lock behaviour remain unchanged. */
+.dispatch-driver-pool {
+  overflow: hidden;
+  border: 1px solid #cbd9e3;
+  border-radius: 11px;
+  background: #fff;
+}
+
+.dispatch-driver-pool-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  background: #143f63;
+  color: #fff;
+}
+
+.dispatch-driver-pool-heading div { display: grid; gap: 2px; }
+.dispatch-driver-pool-heading span {
+  color: #a6e3c2;
+  font-size: .68rem;
+  font-weight: 900;
+  letter-spacing: .14em;
+}
+.dispatch-driver-pool-heading strong { font-size: 1.1rem; }
+.dispatch-driver-pool-heading b {
+  min-width: 27px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.2);
+  text-align: center;
+}
+.dispatch-driver-pool-help {
+  margin: 0;
+  padding: 10px 14px;
+  border-bottom: 1px solid #e1e8ee;
+  color: #607688;
+  font-size: .76rem;
+  line-height: 1.35;
+}
+
+/* On the wide Dispatch workbench, render each driver row as the same compact
+   card grid used by the local planner. The table semantics remain available
+   for accessibility and the allocation handlers are untouched. */
+@media (min-width: 1151px) {
+  .dispatch-driver-pool .smart-dispatch-table-wrap { overflow: visible; }
+  .dispatch-driver-pool .smart-dispatch-table { min-width: 0; display: block; }
+  .dispatch-driver-pool .smart-dispatch-table thead { display: none; }
+  .dispatch-driver-pool .smart-dispatch-table tbody {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(210px, 1fr));
+    gap: 10px;
+    padding: 10px;
+  }
+  .dispatch-driver-pool .smart-dispatch-table tbody tr {
+    display: grid;
+    grid-template-columns: 1fr;
+    align-content: start;
+    min-width: 0;
+    border: 1px solid #cbd9e3;
+    border-left: 5px solid #229268;
+    border-radius: 10px;
+    background: #f8fbfd;
+    overflow: visible;
+  }
+  .dispatch-driver-pool .smart-dispatch-table tbody tr.on-leave { border-left-color: #c08a1a; }
+  .dispatch-driver-pool .smart-dispatch-table tbody tr.blocked { border-left-color: #b42318; }
+  .dispatch-driver-pool .smart-dispatch-table tbody tr td {
+    display: block;
+    min-width: 0!important;
+    width: auto!important;
+    border-top: 0;
+    padding: 6px 9px;
+  }
+  .dispatch-driver-pool .smart-dispatch-table tbody tr td:first-child {
+    padding-top: 10px;
+    border-bottom: 1px solid #dfe8ee;
+  }
+  .dispatch-driver-pool .smart-dispatch-table tbody tr td:nth-child(2),
+  .dispatch-driver-pool .smart-dispatch-table tbody tr td:nth-child(3),
+  .dispatch-driver-pool .smart-dispatch-table tbody tr td:nth-child(4) { background: #fff; }
+  .dispatch-driver-pool .smart-dispatch-table tbody tr td:nth-child(5) { margin-top: 3px; }
+  .dispatch-driver-pool .smart-dispatch-table tbody tr td:nth-child(8) { border-top: 1px solid #e1e8ee; }
+  .dispatch-driver-pool .smart-dispatch-table tbody tr td:nth-child(9) { padding-top: 2px; }
+  .dispatch-driver-pool .smart-dispatch-table tbody tr td:nth-child(10) { padding-bottom: 10px; }
+  .dispatch-driver-pool .smart-dispatch-table tbody tr.dispatch-group { display: none; }
+}
+
 .smart-run-sidebar {
   grid-column: 2;
   grid-row: 1;

@@ -153,7 +153,6 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
   const samsaraExportCandidates = useMemo(() => {
     if (!snapshot) return [];
     return snapshot.equipment.loads.filter(load =>
-      Boolean(load.driverId) &&
       Boolean(load.vehicleId) &&
       (load.stops?.length || 0) >= 2 &&
       !snapshot.samsaraDispatch[load.id] &&
@@ -472,9 +471,13 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
       onDriverSearchChange={setDriverSearch}
     />
 
-    <div className="smart-dispatch-workspace">
-      <RouteSidebar runs={snapshot.runs} owners={runOwnerById} drivers={snapshot.drivers} />
-      <div className="smart-dispatch-table-wrap">
+    <div className="smart-dispatch-workspace dispatch-run-workspace">
+      <div className="smart-dispatch-table-wrap dispatch-driver-pool" aria-label="Available drivers">
+        <div className="dispatch-driver-pool-heading">
+          <div><span>PLAN FROM THE WORKFORCE</span><strong>Available drivers</strong></div>
+          <b>{visibleDrivers.length}</b>
+        </div>
+        <p className="dispatch-driver-pool-help">Employed drivers are listed first. Legal start, Sage availability and working-pattern position are shown before allocating a run.</p>
         <table className="smart-dispatch-table authoritative">
           <thead>
             <tr>
@@ -508,6 +511,7 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
         </table>
         {visibleDrivers.length === 0 && <div className="smart-dispatch-empty">No drivers match this filter.</div>}
       </div>
+      <RouteSidebar runs={snapshot.runs} owners={runOwnerById} drivers={snapshot.drivers} />
     </div>
 
   </section>;
