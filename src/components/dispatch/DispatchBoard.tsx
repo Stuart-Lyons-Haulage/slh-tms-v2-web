@@ -5,7 +5,7 @@ import "../../smart-dispatch.css";
 import { DispatchDriverRow } from "./DispatchDriverRow";
 import { DispatchFilters } from "./DispatchFilters";
 import { rankDriversForRun } from "./dispatchRunRanking";
-import { allocateDispatchRun, downloadSamsaraCsv, getAvailableTimes, getSmartDispatch, sendRunToSamsara, syncDispatchDrivers, syncSamsaraMappings, unassignDispatchRun } from "./dispatchApi";
+import { allocateDispatchRun, downloadSamsaraCsv, getAvailableTimes, getSmartDispatch, sendRunToSamsara, syncDispatchDrivers, syncSamsaraMappings, unassignDispatchRun, type SmartDispatchOptionalEnrichment } from "./dispatchApi";
 import {
   applyAvailableTimes,
   applyAvailableTime,
@@ -108,10 +108,15 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
     setError(undefined);
     try {
       const access = await token();
-      const data = await getSmartDispatch(planningDate, access);
-      const initialSelections = buildInitialSelections(data.drivers, data.runs, data.equipment);
-      const rows = data.availableTimes;
-      setSnapshot(data);
+      let optionalEnrichment: SmartDispatchOptionalEnrichment | undefined;
+      const data = await getSmartDispatch(planningDate, access, enrichment => {
+        optionalEnrichment = enrichment;
+        setSnapshot(current => current ? { ...current, ...enrichment } : current);
+      });
+      const initialSnapshot = { ...data, ...optionalEnrichment };
+      const initialSelections = buildInitialSelections(initialSnapshot.drivers, initialSnapshot.runs, initialSnapshot.equipment);
+      const rows = initialSnapshot.availableTimes;
+      setSnapshot(initialSnapshot);
       setSelections(applyAvailableTimes(initialSelections, rows));
       setAvailableTimes(availableTimesByDriver(rows));
       setFailures([]);
@@ -214,10 +219,15 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
     try {
       const access = await token();
       await syncDispatchDrivers(access);
-      const nextSnapshot = await getSmartDispatch(planningDate, access);
-      const nextSelections = buildInitialSelections(nextSnapshot.drivers, nextSnapshot.runs, nextSnapshot.equipment);
-      const rows = nextSnapshot.availableTimes;
-      setSnapshot(nextSnapshot);
+      let optionalEnrichment: SmartDispatchOptionalEnrichment | undefined;
+      const nextSnapshot = await getSmartDispatch(planningDate, access, enrichment => {
+        optionalEnrichment = enrichment;
+        setSnapshot(current => current ? { ...current, ...enrichment } : current);
+      });
+      const refreshedSnapshot = { ...nextSnapshot, ...optionalEnrichment };
+      const nextSelections = buildInitialSelections(refreshedSnapshot.drivers, refreshedSnapshot.runs, refreshedSnapshot.equipment);
+      const rows = refreshedSnapshot.availableTimes;
+      setSnapshot(refreshedSnapshot);
       setSelections(applyAvailableTimes(nextSelections, rows));
       setAvailableTimes(availableTimesByDriver(rows));
       const warnings = rows.filter(row => Boolean(row.breachDetail)).length;
