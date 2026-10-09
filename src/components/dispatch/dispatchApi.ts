@@ -122,10 +122,21 @@ export async function getSmartDispatch(
   samsaraDispatch: Record<string, SamsaraDispatchState>;
 }> {
   const encoded = encodeURIComponent(planningDate);
-  const [drivers, runs, driverAuthority, statusResponse, visibility, availability, history, samsaraStatus] = await Promise.all([
+  // The legal-start calculation is the slowest Dispatch dependency because it
+  // fans out to TachoMaster. Start it as soon as the authoritative workbench
+  // gives us the driver IDs instead of waiting for the optional enrichment
+  // requests (visibility, history and Samsara) to finish first.
+  const [drivers, runs, driverAuthority] = await Promise.all([
     request<DispatchDriverDto[]>(`/api/dispatch/drivers?date=${encoded}`, token),
     request<DispatchRunDto[]>(`/api/dispatch/runs?date=${encoded}`, token),
-    request<DriverDispatchAuthority>(`/api/v1/driver-dispatch?date=${encoded}`, token),
+    request<DriverDispatchAuthority>(`/api/v1/driver-dispatch?date=${encoded}`, token)
+  ]);
+  const availableTimesPromise = getAvailableTimes(
+    planningDate,
+    driverAuthority.drivers.map(driver => driver.driverId),
+    token
+  );
+  const [statusResponse, visibility, availability, history, samsaraStatus] = await Promise.all([
     request<{ drivers: DispatchDriverStatusDto[] }>(`/api/v1/driver-dispatch-status?date=${encoded}`, token),
     getDispatchVisibility(planningDate, token),
     getDriverAvailability(planningDate, token),
@@ -201,7 +212,7 @@ export async function getSmartDispatch(
   // Keep only drivers who pass the shared availability decision and the latest
   // TachoMaster legal-hours calculation; Sage HR leave/contract blocks are already
   // reflected in driver.isBlocked by the API authority response.
-  const availableTimeByDriver = new Map((await getAvailableTimes(planningDate, enrichedDrivers.map(driver => driver.driverId), token)).map(item => [item.driverId, item]));
+  const availableTimeByDriver = new Map((await availableTimesPromise).map(item => [item.driverId, item]));
   const dispatchableDrivers = enrichedDrivers.filter(driver => {
     const shared = availabilityByDriver.get(driver.driverId);
     const legal = availableTimeByDriver.get(driver.driverId);
