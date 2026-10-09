@@ -60,6 +60,14 @@ type SamsaraDispatchStatusResponse = {
   runs: SamsaraDispatchState[];
 };
 
+export type SmartDispatchOptionalEnrichment = {
+  drivers: DispatchDriverDto[];
+  samsaraConfigured: boolean;
+  samsaraConnectionMessage?: string;
+  samsaraStaleRouteCount: number;
+  samsaraDispatch: Record<string, SamsaraDispatchState>;
+};
+
 export async function getDispatchVisibility(planningDate: string, token: string): Promise<DispatchVisibilitySnapshot> {
   return request<DispatchVisibilitySnapshot>(
     `/api/dispatch/driver-visibility?date=${encodeURIComponent(planningDate)}`,
@@ -107,7 +115,8 @@ function runDetail(run: DispatchRunDto, equipment: DispatchEquipmentWorkbench): 
 
 export async function getSmartDispatch(
   planningDate: string,
-  token: string
+  token: string,
+  onOptionalEnrichment?: (enrichment: SmartDispatchOptionalEnrichment) => void
 ): Promise<{
   drivers: DispatchDriverDto[];
   runs: DispatchRunDto[];
@@ -136,10 +145,10 @@ export async function getSmartDispatch(
     driverAuthority.drivers.map(driver => driver.driverId),
     token
   );
-  const [statusResponse, visibility, availability, history, samsaraStatus] = await Promise.all([
-    request<{ drivers: DispatchDriverStatusDto[] }>(`/api/v1/driver-dispatch-status?date=${encoded}`, token),
-    getDispatchVisibility(planningDate, token),
-    getDriverAvailability(planningDate, token),
+  // History and Samsara improve the board but are not needed to allocate safely.
+  // Start both in parallel with the core requests and apply them when they finish;
+  // a slow optional integration must not delay the Dispatch table.
+  const optionalEnrichmentPromise = Promise.all([
     getDispatchHistory(planningDate, token).catch(() => [] as DispatchHistoryItem[]),
     request<SamsaraDispatchStatusResponse>(`/api/v1/integrations/samsara/dispatch/status?date=${encoded}`, token)
       .catch(() => ({
@@ -150,20 +159,19 @@ export async function getSmartDispatch(
         runs: []
       } as SamsaraDispatchStatusResponse))
   ]);
+  const [statusResponse, visibility, availability] = await Promise.all([
+    request<{ drivers: DispatchDriverStatusDto[] }>(`/api/v1/driver-dispatch-status?date=${encoded}`, token),
+    getDispatchVisibility(planningDate, token),
+    getDriverAvailability(planningDate, token)
+  ]);
   const visibilityByDriver = new Map(visibility.drivers.map(item => [item.driverId, item]));
   const availabilityByDriver = new Map(availability.drivers.map(item => [item.driverId, item]));
   const authorityByDriver = new Map(driverAuthority.drivers.map(item => [item.driverId, item]));
   const equipment: DispatchEquipmentWorkbench = driverAuthority;
-  const historyByDriver = new Map(history.map(item => [item.driverId, item]));
   const enrichedDrivers = drivers.filter(driver => authorityByDriver.has(driver.driverId)).map(driver => {
     const authority = authorityByDriver.get(driver.driverId);
     const visibilityDriver = visibilityByDriver.get(driver.driverId);
-    const historical = historyByDriver.get(driver.driverId);
     const sharedAvailability = availabilityByDriver.get(driver.driverId);
-    const hasAuthoritativePosition = Boolean(driver.trackingData.lastKnownPosition);
-    const fallbackPosition = historical?.previousFinalLatitude != null && historical?.previousFinalLongitude != null
-      ? { latitude: historical.previousFinalLatitude, longitude: historical.previousFinalLongitude }
-      : undefined;
     return {
       ...driver,
       dayNumber: authority?.dayNumber ?? driver.tachoData.currentDutyDay,
@@ -190,22 +198,9 @@ export async function getSmartDispatch(
       placementEndDate: sharedAvailability?.placementEndDate,
       classificationMismatch: sharedAvailability?.classificationMismatch,
       driverCode: visibilityDriver?.coding?.trim() || driver.driverCode,
-      trackingData: {
-        ...driver.trackingData,
-        lastKnownPosition: driver.trackingData.lastKnownPosition || fallbackPosition,
-        lastStopName: driver.trackingData.lastStopName || historical?.previousFinalStopName,
-        lastPositionAtUtc: driver.trackingData.lastPositionAtUtc
-      },
-      previousRunReference: historical?.previousRunReference,
-      previousPlanningDate: historical?.previousPlanningDate,
-      previousTrailerId: historical?.previousTrailerId,
-      previousTrailerNumber: historical?.previousTrailerNumber,
-      previousTrailerPlanningDate: historical?.previousTrailerPlanningDate,
       suggestion: authority?.onLeave
         ? `Unavailable · Sage HR ${authority.leaveType || "leave"}${authority.partDayLeave ? " (part day)" : ""}.`
-        : driver.suggestion || (!hasAuthoritativePosition && historical?.previousFinalStopName
-          ? `Last known operational stop · ${historical.previousFinalStopName}`
-          : undefined)
+        : driver.suggestion
     };
   });
   // Dispatch is an availability workbench, not a complete Driver Master list.
@@ -213,23 +208,59 @@ export async function getSmartDispatch(
   // TachoMaster legal-hours calculation; Sage HR leave/contract blocks are already
   // reflected in driver.isBlocked by the API authority response.
   const availableTimeByDriver = new Map((await availableTimesPromise).map(item => [item.driverId, item]));
-  const dispatchableDrivers = enrichedDrivers.filter(driver => {
+  const dispatchable = (items: DispatchDriverDto[]) => items.filter(driver => {
     const shared = availabilityByDriver.get(driver.driverId);
     const legal = availableTimeByDriver.get(driver.driverId);
     return !driver.isBlocked && shared?.dispatchable === true && !legal?.breachDetail;
   });
+
+  void optionalEnrichmentPromise.then(([history, samsaraStatus]) => {
+    const historyByDriver = new Map(history.map(item => [item.driverId, item]));
+    const driversWithHistory = enrichedDrivers.map(driver => {
+      const historical = historyByDriver.get(driver.driverId);
+      const hasAuthoritativePosition = Boolean(driver.trackingData.lastKnownPosition);
+      const fallbackPosition = historical?.previousFinalLatitude != null && historical?.previousFinalLongitude != null
+        ? { latitude: historical.previousFinalLatitude, longitude: historical.previousFinalLongitude }
+        : undefined;
+      return {
+        ...driver,
+        trackingData: {
+          ...driver.trackingData,
+          lastKnownPosition: driver.trackingData.lastKnownPosition || fallbackPosition,
+          lastStopName: driver.trackingData.lastStopName || historical?.previousFinalStopName,
+          lastPositionAtUtc: driver.trackingData.lastPositionAtUtc
+        },
+        previousRunReference: historical?.previousRunReference,
+        previousPlanningDate: historical?.previousPlanningDate,
+        previousTrailerId: historical?.previousTrailerId,
+        previousTrailerNumber: historical?.previousTrailerNumber,
+        previousTrailerPlanningDate: historical?.previousTrailerPlanningDate,
+        suggestion: driver.suggestion || (!hasAuthoritativePosition && historical?.previousFinalStopName
+          ? `Last known operational stop · ${historical.previousFinalStopName}`
+          : undefined)
+      };
+    });
+    onOptionalEnrichment?.({
+      drivers: dispatchable(driversWithHistory),
+      samsaraConfigured: samsaraStatus.configured && samsaraStatus.connected,
+      samsaraConnectionMessage: samsaraStatus.connectionMessage,
+      samsaraStaleRouteCount: samsaraStatus.staleRouteCount || 0,
+      samsaraDispatch: Object.fromEntries(samsaraStatus.runs.map(item => [item.runId, item]))
+    });
+  }).catch(() => undefined);
+
   return {
-    drivers: dispatchableDrivers,
+    drivers: dispatchable(enrichedDrivers),
     runs: runs.map(run => runDetail(run, equipment)),
     equipment,
     availableTimes: [...availableTimeByDriver.values()],
     statuses: Object.fromEntries(statusResponse.drivers.map(status => [status.driverId, status])),
     visibility,
     availability,
-    samsaraConfigured: samsaraStatus.configured && samsaraStatus.connected,
-    samsaraConnectionMessage: samsaraStatus.connectionMessage,
-    samsaraStaleRouteCount: samsaraStatus.staleRouteCount || 0,
-    samsaraDispatch: Object.fromEntries(samsaraStatus.runs.map(item => [item.runId, item]))
+    samsaraConfigured: false,
+    samsaraConnectionMessage: "Samsara status is loading.",
+    samsaraStaleRouteCount: 0,
+    samsaraDispatch: {}
   };
 }
 
