@@ -5,7 +5,7 @@ import "../../smart-dispatch.css";
 import { DispatchDriverRow } from "./DispatchDriverRow";
 import { DispatchFilters } from "./DispatchFilters";
 import { rankDriversForRun } from "./dispatchRunRanking";
-import { allocateDispatchRun, downloadSamsaraCsv, getAvailableTimes, getSmartDispatch, sendRunToSamsara, syncDispatchDrivers, syncSamsaraMappings, unassignDispatchRun, type SmartDispatchOptionalEnrichment } from "./dispatchApi";
+import { allocateDispatchRun, downloadSamsaraCsv, getAvailableTimes, getSmartDispatch, sendRunToSamsara, syncDispatchDrivers, syncSamsaraMappings, unassignDispatchRun } from "./dispatchApi";
 import {
   applyAvailableTimes,
   applyAvailableTime,
@@ -46,10 +46,20 @@ function runTime(value?: string): string {
   return Number.isNaN(date.getTime()) ? "Time not set" : date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 }
 
-function RouteSidebar({ runs, owners, drivers }: {
+function RouteSidebar({ runs, owners, drivers, vehicles, trailers, selections, statuses, failures, busyDriverId, onSelectionChange, onDispatch, onSamsaraAndDispatch, onDownloadSamsaraCsv }: {
   runs: DispatchRunDto[];
   owners: Record<string, string | undefined>;
   drivers: DispatchDriverDto[];
+  vehicles: SmartDispatchSnapshot["equipment"]["vehicles"];
+  trailers: SmartDispatchSnapshot["equipment"]["trailers"];
+  selections: DispatchSelectionMap;
+  statuses: SmartDispatchSnapshot["statuses"];
+  failures: DispatchLockFailure[];
+  busyDriverId?: string;
+  onSelectionChange: (driverId: string, patch: Partial<DispatchSelectionMap[string]>) => void;
+  onDispatch: (driver: DispatchDriverDto, selection: DispatchSelectionMap[string]) => void;
+  onSamsaraAndDispatch: (driver: DispatchDriverDto, selection: DispatchSelectionMap[string]) => void;
+  onDownloadSamsaraCsv: (driver: DispatchDriverDto, selection: DispatchSelectionMap[string]) => void;
 }) {
   return <aside className="smart-run-sidebar" aria-label="Routes ready for driver allocation">
     <div className="smart-run-sidebar-head">
@@ -64,6 +74,12 @@ function RouteSidebar({ runs, owners, drivers }: {
         const suggestedDrivers = drivers.filter(driver => driver.suggestedRunId === run.runId);
         const rankedDrivers = rankDriversForRun(run, drivers, owners)
           .sort((left, right) => Number(suggestedDrivers.includes(right.driver)) - Number(suggestedDrivers.includes(left.driver)) || right.score - left.score);
+        const selectedDriver = ownerId ? drivers.find(driver => driver.driverId === ownerId) : undefined;
+        const selected = ownerId ? selections[ownerId] || emptyDispatchSelection() : emptyDispatchSelection();
+        const status = ownerId ? statuses[ownerId] : undefined;
+        const rowFailures = failures.filter(failure => failure.runId === run.runId);
+        const selectableDrivers = drivers.filter(driver => !driver.isBlocked || driver.driverId === ownerId);
+        const canExport = Boolean(ownerId && selected.runId && selected.vehicleId);
         return <article className={`smart-run-card ${owner ? "allocated" : "available"}`} key={run.runId}>
           <div className="smart-run-card-title">
             <strong>{run.reference}</strong>
@@ -74,7 +90,31 @@ function RouteSidebar({ runs, owners, drivers }: {
             <span><b>Collect</b>{run.collectionPoint.name}</span>
             <span><b>Deliver</b>{run.finalDeliveryPoint?.name || "Final stop not set"}</span>
           </div>
-          {owner && <small>Allocated/selected · {owner.name}</small>}
+          <div className="smart-run-allocation-grid">
+            <label>Driver<select aria-label={`Driver for ${run.reference}`} value={ownerId || ""} onChange={event => {
+              const driverId = event.target.value;
+              if (!driverId) return;
+              onSelectionChange(driverId, { runId: run.runId });
+            }}>
+              <option value="">Select driver…</option>
+              {selectableDrivers.map(driver => <option key={driver.driverId} value={driver.driverId}>{driver.name} · {driver.driverCode}</option>)}
+            </select></label>
+            <label>Vehicle<select aria-label={`Vehicle for ${run.reference}`} value={selected.vehicleId} disabled={!ownerId} onChange={event => ownerId && onSelectionChange(ownerId, { vehicleId: event.target.value })}>
+              <option value="">Select vehicle…</option>
+              {vehicles.filter(vehicle => vehicle.active !== false).map(vehicle => <option key={vehicle.id} value={vehicle.id}>{vehicle.registration}{vehicle.fleetNumber ? ` · ${vehicle.fleetNumber}` : ""}</option>)}
+            </select></label>
+            <label>Trailer<select aria-label={`Trailer for ${run.reference}`} value={selected.trailerId} disabled={!ownerId} onChange={event => ownerId && onSelectionChange(ownerId, { trailerId: event.target.value })}>
+              <option value="">Select trailer…</option>
+              {trailers.filter(trailer => trailer.active !== false).map(trailer => <option key={trailer.id} value={trailer.id}>{trailer.trailerNumber}{trailer.type ? ` · ${trailer.type}` : ""}</option>)}
+            </select></label>
+            <div className="smart-run-allocation-status"><small>Status</small><strong>{owner ? (status?.operationalStatus || "Dispatched") : "Available"}</strong></div>
+          </div>
+          {rowFailures.map((failure, index) => <small className="smart-run-warning" key={`${failure.reason}-${index}`}>{failure.reason}</small>)}
+          {owner && <div className="smart-run-actions">
+            <button type="button" className="smart-action primary" disabled={!canExport || busyDriverId === owner.driverId} onClick={() => selectedDriver && onDispatch(selectedDriver, selected)}>{busyDriverId === owner.driverId ? "Preparing…" : owner ? "Dispatch / amend" : "Dispatch"}</button>
+            <button type="button" className="smart-action ghost dark" disabled={!canExport || busyDriverId === owner.driverId} onClick={() => selectedDriver && onSamsaraAndDispatch(selectedDriver, selected)}>{busyDriverId === owner.driverId ? "Working…" : "Export to Samsara"}</button>
+            <button type="button" className="smart-action ghost" disabled={busyDriverId === owner.driverId} onClick={() => selectedDriver && onDownloadSamsaraCsv(selectedDriver, selected)}>CSV</button>
+          </div>}
           {!owner && rankedDrivers.length > 0 && <details className="smart-run-fit">
             <summary>Best driver matches</summary>
             <ol>{rankedDrivers.slice(0, 3).map(match => <li key={match.driver.driverId}><strong>{match.driver.name} · {match.score}/100</strong><small>{match.reasons.join(" · ")}</small></li>)}</ol>
@@ -108,15 +148,10 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
     setError(undefined);
     try {
       const access = await token();
-      let optionalEnrichment: SmartDispatchOptionalEnrichment | undefined;
-      const data = await getSmartDispatch(planningDate, access, enrichment => {
-        optionalEnrichment = enrichment;
-        setSnapshot(current => current ? { ...current, ...enrichment } : current);
-      });
-      const initialSnapshot = { ...data, ...optionalEnrichment };
-      const initialSelections = buildInitialSelections(initialSnapshot.drivers, initialSnapshot.runs, initialSnapshot.equipment);
-      const rows = initialSnapshot.availableTimes;
-      setSnapshot(initialSnapshot);
+      const data = await getSmartDispatch(planningDate, access);
+      const initialSelections = buildInitialSelections(data.drivers, data.runs, data.equipment);
+      const rows = data.availableTimes;
+      setSnapshot(data);
       setSelections(applyAvailableTimes(initialSelections, rows));
       setAvailableTimes(availableTimesByDriver(rows));
       setFailures([]);
@@ -219,15 +254,10 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
     try {
       const access = await token();
       await syncDispatchDrivers(access);
-      let optionalEnrichment: SmartDispatchOptionalEnrichment | undefined;
-      const nextSnapshot = await getSmartDispatch(planningDate, access, enrichment => {
-        optionalEnrichment = enrichment;
-        setSnapshot(current => current ? { ...current, ...enrichment } : current);
-      });
-      const refreshedSnapshot = { ...nextSnapshot, ...optionalEnrichment };
-      const nextSelections = buildInitialSelections(refreshedSnapshot.drivers, refreshedSnapshot.runs, refreshedSnapshot.equipment);
-      const rows = refreshedSnapshot.availableTimes;
-      setSnapshot(refreshedSnapshot);
+      const nextSnapshot = await getSmartDispatch(planningDate, access);
+      const nextSelections = buildInitialSelections(nextSnapshot.drivers, nextSnapshot.runs, nextSnapshot.equipment);
+      const rows = nextSnapshot.availableTimes;
+      setSnapshot(nextSnapshot);
       setSelections(applyAvailableTimes(nextSelections, rows));
       setAvailableTimes(availableTimesByDriver(rows));
       const warnings = rows.filter(row => Boolean(row.breachDetail)).length;
@@ -521,7 +551,21 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
         </table>
         {visibleDrivers.length === 0 && <div className="smart-dispatch-empty">No drivers match this filter.</div>}
       </div>
-      <RouteSidebar runs={snapshot.runs} owners={runOwnerById} drivers={snapshot.drivers} />
+      <RouteSidebar
+        runs={snapshot.runs}
+        owners={runOwnerById}
+        drivers={snapshot.drivers}
+        vehicles={snapshot.equipment.vehicles}
+        trailers={snapshot.equipment.trailers}
+        selections={selections}
+        statuses={snapshot.statuses}
+        failures={failures}
+        busyDriverId={busyDriverId}
+        onSelectionChange={changeSelection}
+        onDispatch={(driver, selection) => void prepareDispatch(driver, selection)}
+        onSamsaraAndDispatch={(driver, selection) => void handleSamsaraSingle(driver, selection)}
+        onDownloadSamsaraCsv={(driver, selection) => void handleSamsaraCsv(driver, selection)}
+      />
     </div>
 
   </section>;
