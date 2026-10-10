@@ -77,6 +77,7 @@ export interface DispatchDriverDto {
   homeDepot?: string;
   tachoData: DispatchTachoDataDto;
   dayNumber?: number;
+  availabilityDayCount?: number;
   onLeave?: boolean;
   leaveType?: string;
   leaveDetails?: string;
