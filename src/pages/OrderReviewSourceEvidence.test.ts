@@ -33,6 +33,14 @@ describe("Order Review source email evidence", () => {
     expect(controlSource).toContain("SourceEmailEvidenceDrawer");
   });
 
+  it("replays older received evidence for a selected planning date without reusing an incompatible checkpoint", () => {
+    expect(controlSource).toContain('aria-label="Replay received from"');
+    expect(controlSource).toContain("const receivedFromUtc = `${receivedFromDate}T00:00:00Z`;");
+    expect(controlSource).toContain("maximumPlanningDate: date");
+    expect(controlSource).toContain("checkpointReceivedFrom !== receivedFromUtc");
+    expect(controlSource).toContain("receivedFromUtc,");
+  });
+
   it("lets a planner approve one selectable order and shows the backend failure reason", () => {
     expect(reviewSource).toContain("approveRow(row)");
     expect(reviewSource).toContain('ids: [row.item.id]');
