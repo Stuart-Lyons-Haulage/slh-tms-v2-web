@@ -11,6 +11,7 @@ import type {
   DispatchRunDto,
   DispatchVisibilitySnapshot
 } from "./types";
+import { availabilityDayCount } from "./availabilityDayCount";
 
 export type SamsaraDispatchResult = {
   success: boolean;
@@ -194,6 +195,7 @@ export async function getSmartDispatch(
       availableFrom: sharedAvailability?.availableFromUtc ?? driver.availableFrom,
       availabilityUntil: sharedAvailability?.availableUntilUtc,
       availabilityConfirmed: sharedAvailability?.availabilityConfirmed,
+      availabilityDayCount: availabilityDayCount(sharedAvailability, planningDate),
       agencyName: sharedAvailability?.agencyName,
       placementEndDate: sharedAvailability?.placementEndDate,
       classificationMismatch: sharedAvailability?.classificationMismatch,

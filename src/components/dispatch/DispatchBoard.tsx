@@ -3,6 +3,7 @@ import { useAccessToken } from "../../lib/auth";
 import { updateRunRelay } from "../../api/runs";
 import "../../smart-dispatch.css";
 import { DispatchDriverRow } from "./DispatchDriverRow";
+import { DispatchSnapshotCache } from "./dispatchSnapshotCache";
 import { DispatchFilters } from "./DispatchFilters";
 import { rankDriversForRun } from "./dispatchRunRanking";
 import { allocateDispatchRun, downloadSamsaraCsv, getAvailableTimes, getSmartDispatch, sendRunToSamsara, syncDispatchDrivers, syncSamsaraMappings, unassignDispatchRun } from "./dispatchApi";
@@ -32,6 +33,16 @@ type Props = {
 
 type SmartDispatchSnapshot = Awaited<ReturnType<typeof getSmartDispatch>>;
 type ActionState = "refresh" | "samsara" | undefined;
+const DISPATCH_SNAPSHOT_CACHE_MS = 5 * 60 * 1000;
+const dispatchSnapshotCache = new DispatchSnapshotCache<SmartDispatchSnapshot>(DISPATCH_SNAPSHOT_CACHE_MS);
+function dispatchCacheKey(accessToken: string, planningDate: string): string {
+  try {
+    const payload = JSON.parse(atob(accessToken.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))) as { tid?: string; oid?: string; sub?: string };
+    return `${payload.tid || "tenant"}:${payload.oid || payload.sub || "session"}:${planningDate}`;
+  } catch {
+    return `session:${planningDate}`;
+  }
+}
 const filterValues: DispatchFilter[] = ["all", "unallocated", "backloads", "warnings", "skills-mismatch"];
 const employmentFilterValues: DispatchEmploymentFilter[] = ["all", "employed", "agency", "casual", "subcontractor", "unmatched"];
 
@@ -145,14 +156,27 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
   const [notice, setNotice] = useState<string>();
   const [relayBusyId, setRelayBusyId] = useState<string>();
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (force = false) => {
     setAction(current => current || "refresh");
     setError(undefined);
     try {
       const access = await token();
-      const data = await getSmartDispatch(planningDate, access);
+      const cacheKey = dispatchCacheKey(access, planningDate);
+      const cached = !force ? dispatchSnapshotCache.get(cacheKey) : undefined;
+      if (cached) {
+        const initialSelections = buildInitialSelections(cached.drivers, cached.runs, cached.equipment);
+        setSnapshot(cached);
+        setSelections(applyAvailableTimes(initialSelections, cached.availableTimes));
+        setAvailableTimes(availableTimesByDriver(cached.availableTimes));
+        setFailures([]);
+        return;
+      }
+      const data = force
+        ? await getSmartDispatch(planningDate, access)
+        : await dispatchSnapshotCache.getOrLoad(cacheKey, () => getSmartDispatch(planningDate, access));
       const initialSelections = buildInitialSelections(data.drivers, data.runs, data.equipment);
       const rows = data.availableTimes;
+      dispatchSnapshotCache.set(cacheKey, data);
       setSnapshot(data);
       setSelections(applyAvailableTimes(initialSelections, rows));
       setAvailableTimes(availableTimesByDriver(rows));
@@ -259,6 +283,7 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
       const nextSnapshot = await getSmartDispatch(planningDate, access);
       const nextSelections = buildInitialSelections(nextSnapshot.drivers, nextSnapshot.runs, nextSnapshot.equipment);
       const rows = nextSnapshot.availableTimes;
+      dispatchSnapshotCache.set(dispatchCacheKey(access, planningDate), nextSnapshot);
       setSnapshot(nextSnapshot);
       setSelections(applyAvailableTimes(nextSelections, rows));
       setAvailableTimes(availableTimesByDriver(rows));
@@ -289,7 +314,7 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
         deliveryVehicleId: patch.deliveryVehicleId ?? run.relay.deliveryVehicleId,
         deliveryTrailerId: patch.deliveryTrailerId ?? run.relay.deliveryTrailerId,
       }, await token());
-      await refresh();
+      await refresh(true);
       setNotice(`${run.reference} relay allocation saved. Check both legs before exporting to Samsara.`);
     } catch (exception) {
       setNotice(exception instanceof Error ? exception.message : "Relay allocation could not be saved.");
@@ -331,7 +356,7 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
         onLocked?.();
       }
 
-      await refresh();
+      await refresh(true);
       setNotice(`${snapshot.runs.find(run => run.runId === effectiveSelection.runId)?.reference || "Route"} allocation secured for ${driver.name}. Use Export to Samsara when the route is ready to send.`);
     } catch (exception) {
       const reason = exception instanceof Error ? exception.message : "Dispatch could not be prepared.";
@@ -371,7 +396,7 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
         }
       }
 
-      await refresh();
+      await refresh(true);
       setFailures(batchFailures);
       if (exported > 0)
         setNotice(`${exported} route${exported === 1 ? "" : "s"} exported to Samsara${batchFailures.length ? `; ${batchFailures.length} need attention` : "."}`);
@@ -392,7 +417,7 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
       const access = await token();
       await syncSamsaraMappings(planningDate, access);
       const result = await sendRunToSamsara(selection.runId, access);
-      await refresh();
+      await refresh(true);
       setNotice(result.message);
     } catch (exception) {
        const reason = exception instanceof Error ? exception.message : "The route could not be sent to Samsara.";
@@ -435,7 +460,7 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
     setNotice(undefined);
     try {
       await unassignDispatchRun(selection.runId, await token());
-      await refresh();
+      await refresh(true);
       setNotice(`${reference} unassigned. Driver, vehicle and trailer are free to reallocate.`);
     } catch (exception) {
       setFailures(current => [...current.filter(failure => failure.driverId !== driver.driverId), {
@@ -480,7 +505,7 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
         >
           {action === "samsara" ? "Exporting to Samsara…" : `Export to Samsara${samsaraExportCandidates.length ? ` (${samsaraExportCandidates.length})` : ""}`}
         </button>
-        <button className="smart-action secondary" type="button" disabled={Boolean(action)} onClick={() => void handleRefreshStaff()}>{action === "refresh" ? "Refreshing staff…" : "Refresh Staff & Get Times"}</button>
+        <button className="smart-action secondary" type="button" disabled={Boolean(action)} onClick={() => void handleRefreshStaff()}>{action === "refresh" ? "Refreshing data…" : "Refresh data"}</button>
       </div>
     </header>
 

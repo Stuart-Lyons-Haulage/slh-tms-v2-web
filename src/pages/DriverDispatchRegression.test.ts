@@ -98,7 +98,9 @@ describe("Driver Dispatch UI contract", () => {
   it("keeps driver search, sync and customer exports on the routed Driver Dispatch surface", () => {
     expect(operationalSource).not.toContain("CustomerLoadPlanActions");
     expect(filterSource).toContain('aria-label="Search drivers"');
-    expect(authoritativeSource).toContain("Refresh Staff & Get Times");
+    expect(authoritativeSource).toContain('"Refresh data"');
+    expect(authoritativeSource).toContain("DispatchSnapshotCache");
+    expect(authoritativeSource).toContain("refresh(true)");
     expect(authoritativeSource).toContain("syncDispatchDrivers");
     expect(authoritativeSource).toContain("filterDriversByDriverSearch");
   });
@@ -122,7 +124,7 @@ describe("Driver Dispatch UI contract", () => {
   it("keeps the authoritative Smart Dispatch toolbar visibly rendered in production", () => {
     expect(authoritativeSource).toContain('className="smart-dispatch-header"');
     expect(authoritativeSource).toContain("Planning date");
-    expect(authoritativeSource).toContain("Refresh Staff & Get Times");
+    expect(authoritativeSource).toContain('"Refresh data"');
     expect(authoritativeSource).not.toContain('>Refresh<');
     expect(authoritativeSource).not.toContain('>Get Times<');
     expect(authoritativeSource).toContain("Dispatch");

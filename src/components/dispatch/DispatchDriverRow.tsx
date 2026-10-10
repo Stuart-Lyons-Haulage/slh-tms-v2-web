@@ -208,7 +208,7 @@ export function DispatchDriverRow({
     </td>
 
     <td>
-      <span className={`smart-day ${dayTone(driver)}`}>Day {status?.projectedDayNumber || driver.dayNumber || driver.tachoData.currentDutyDay}{driver.contractedDays.length > 0 ? ` / ${driver.contractedDays.length}` : ""}</span>
+      <span className={`smart-day ${dayTone(driver)}`} title={driver.availabilityDayCount ? "Tacho duty day / confirmed staffing availability days this week" : "Tacho duty day / Sage and Driver Master contracted working days"}>Day {status?.projectedDayNumber || driver.dayNumber || driver.tachoData.currentDutyDay}{(driver.availabilityDayCount || driver.contractedDays.length) > 0 ? ` of ${driver.availabilityDayCount || driver.contractedDays.length}` : ""}</span>
       {driver.onLeave && <small className="smart-inline-error">{driver.leaveType || "Sage HR leave"}{driver.partDayLeave ? " · part day" : ""}</small>}
       {!driver.onLeave && driver.needsReturn && <small className="smart-inline-warning">{(driver.dayNumber || driver.tachoData.currentDutyDay) >= 5 ? "Return priority" : "Return soon"}</small>}
     </td>
