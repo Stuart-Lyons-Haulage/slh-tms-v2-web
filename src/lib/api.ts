@@ -233,18 +233,41 @@ function errorMessage(payload: unknown): string | undefined {
   return typeof record.detail === 'string' ? record.detail : typeof record.message === 'string' ? record.message : typeof record.error === 'string' ? record.error : undefined;
 }
 
-export async function request<T = unknown>(path: string, token?: string, init?: RequestInit, ..._legacyArgs: unknown[]): Promise<T> {
-  void _legacyArgs;
+export async function request<T = unknown>(path: string, token?: string, init?: RequestInit, ...legacyArgs: unknown[]): Promise<T> {
   const baseUrl = requireApiBaseUrl();
-  const response = await fetch(`${baseUrl}${path}`, { ...init, headers: { Accept: 'application/json', ...(init?.body ? { 'Content-Type': 'application/json' } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}), ...init?.headers } });
-  if (!response.ok) {
-    const errorPayload: unknown = await response.json().catch(() => null);
-    const message = response.status === 403 ? 'Your account does not have permission to perform this TMS action.' : errorMessage(errorPayload) || `Request failed (${response.status}).`;
-    throw new ApiError(response.status, message);
+  const timeoutMs = legacyArgs.find((value): value is number => typeof value === "number" && Number.isFinite(value) && value > 0);
+  const controller = timeoutMs ? new AbortController() : undefined;
+  const relayAbort = () => controller?.abort(init?.signal?.reason);
+  if (controller && init?.signal) {
+    if (init.signal.aborted) relayAbort();
+    else init.signal.addEventListener("abort", relayAbort, { once: true });
   }
-  if (response.status === 204) return undefined as T;
-  const payload: unknown = await response.json();
-  return payload as T;
+  const timeout = controller && timeoutMs
+    ? globalThis.setTimeout(() => controller.abort(new Error(`Request timed out after ${timeoutMs} ms.`)), timeoutMs)
+    : undefined;
+
+  try {
+    const response = await fetch(`${baseUrl}${path}`, {
+      ...init,
+      ...(controller ? { signal: controller.signal } : {}),
+      headers: { Accept: 'application/json', ...(init?.body ? { 'Content-Type': 'application/json' } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}), ...init?.headers }
+    });
+    if (!response.ok) {
+      const errorPayload: unknown = await response.json().catch(() => null);
+      const message = response.status === 403 ? 'Your account does not have permission to perform this TMS action.' : errorMessage(errorPayload) || `Request failed (${response.status}).`;
+      throw new ApiError(response.status, message);
+    }
+    if (response.status === 204) return undefined as T;
+    const payload: unknown = await response.json();
+    return payload as T;
+  } catch (exception) {
+    if (controller?.signal.aborted && timeoutMs && !init?.signal?.aborted)
+      throw new Error(`Request timed out after ${Math.ceil(timeoutMs / 1000)} seconds.`);
+    throw exception;
+  } finally {
+    if (timeout !== undefined) globalThis.clearTimeout(timeout);
+    if (controller && init?.signal) init.signal.removeEventListener("abort", relayAbort);
+  }
 }
 
 export interface TmsApi {
