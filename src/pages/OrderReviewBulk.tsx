@@ -489,7 +489,18 @@ export function OrderReviewBulk({ date }: { date: string }) {
       );
 
       if (comparison.classification === "Exact duplicate") {
-        setNotice(`${displayReference(row.payload)} is already live with no changes to apply.`);
+        if (!window.confirm(`Permanently delete the duplicate staging entry for ${displayReference(row.payload)} and its review history? The live order will remain unchanged.`)) {
+          setNotice("Duplicate deletion cancelled. The live order and review entry were not changed.");
+          return;
+        }
+        await request(`/api/v1/order-intake/duplicate-check/staging/${encodeURIComponent(row.item.id)}`, await token(), { method: "DELETE" });
+        setSelectedIds((current) => {
+          const next = new Set(current);
+          next.delete(row.item.id);
+          return next;
+        });
+        await queue.refresh();
+        setNotice(`${displayReference(row.payload)} was an exact duplicate. Its staging entry and review history were deleted; the live order was left unchanged.`);
         return;
       }
 
@@ -555,6 +566,20 @@ export function OrderReviewBulk({ date }: { date: string }) {
       const amendments = approvalChecks.filter(({ comparison }) => comparison.classification === "Amendment/update");
       const approvable = approvalChecks.filter(({ comparison }) => comparison.classification !== "Exact duplicate");
 
+      if (duplicates.length > 0 && !window.confirm(
+        `Permanently delete ${duplicates.length} exact duplicate staging entr${duplicates.length === 1 ? "y" : "ies"} and their review history? The live orders will remain unchanged.`,
+      )) {
+        if (approvable.length === 0) setNotice("Duplicate deletion cancelled. The live orders and review entries were not changed.");
+        return;
+      }
+      for (const { row } of duplicates) {
+        await request(
+          `/api/v1/order-intake/duplicate-check/staging/${encodeURIComponent(row.item.id)}`,
+          await token(),
+          { method: "DELETE" },
+        );
+      }
+
       if (amendments.length > 0 && !window.confirm(amendmentPrompt(amendments))) {
         setNotice("Amendment approval cancelled. The existing live order has not been changed. You can review the source email before deciding.");
         return;
@@ -562,7 +587,8 @@ export function OrderReviewBulk({ date }: { date: string }) {
 
       if (approvable.length === 0) {
         setSelectedIds(new Set());
-        setNotice(`${duplicates.length} selected order${duplicates.length === 1 ? " is" : "s are"} already received with no changes to apply.`);
+        await queue.refresh();
+        setNotice(`${duplicates.length} exact duplicate staging entr${duplicates.length === 1 ? "y" : "ies"} deleted. The live orders were left unchanged.`);
         return;
       }
 
@@ -599,7 +625,7 @@ export function OrderReviewBulk({ date }: { date: string }) {
         }
       }
       const duplicateNote = duplicates.length > 0
-        ? ` ${duplicates.length} exact duplicate${duplicates.length === 1 ? " was" : "s were"} left unchanged because there were no differences to apply.`
+        ? ` ${duplicates.length} exact duplicate staging entr${duplicates.length === 1 ? "y was" : "ies were"} deleted; live orders were left unchanged.`
         : "";
       const approvalMessage = approved > 0
         ? `${approved} selected order${approved === 1 ? "" : "s"} approved into live Orders and removed from the review queue.`
