@@ -61,6 +61,7 @@ type RetainedReplayResponse = {
 
 type RetainedReplayCheckpoint = {
   receivedFromUtc?: string;
+  receivedToUtc?: string;
   afterReceivedAtUtc?: string;
   afterEvidenceId?: string;
   startFromBeginning?: boolean;
@@ -75,16 +76,18 @@ function replayCheckpointKey(date: string) {
   return `slh:retained-order-replay:${date}`;
 }
 
-function readReplayCheckpoint(date: string, receivedFromUtc: string): RetainedReplayCheckpoint | undefined {
+function readReplayCheckpoint(date: string, receivedFromUtc: string, receivedToUtc: string): RetainedReplayCheckpoint | undefined {
   try {
     const raw = sessionStorage.getItem(replayCheckpointKey(date));
     if (!raw) return undefined;
     const value = JSON.parse(raw) as Partial<RetainedReplayCheckpoint>;
     if (!value.startFromBeginning && (!value.afterReceivedAtUtc || !value.afterEvidenceId)) return undefined;
     const checkpointReceivedFrom = value.receivedFromUtc ?? `${addDays(date, -2)}T00:00:00Z`;
-    if (checkpointReceivedFrom !== receivedFromUtc) return undefined;
+    const checkpointReceivedTo = value.receivedToUtc ?? `${addDays(date, 1)}T00:00:00Z`;
+    if (checkpointReceivedFrom !== receivedFromUtc || checkpointReceivedTo !== receivedToUtc) return undefined;
     return {
       receivedFromUtc: checkpointReceivedFrom,
+      receivedToUtc: checkpointReceivedTo,
       afterReceivedAtUtc: value.afterReceivedAtUtc,
       afterEvidenceId: value.afterEvidenceId,
       startFromBeginning: value.startFromBeginning === true,
@@ -234,6 +237,7 @@ function OrderIntakeCacheRecovery({ date }: { date: string }) {
   const [forcing, setForcing] = useState<string | "all" | undefined>();
   const [replaying, setReplaying] = useState(false);
   const [receivedFromDate, setReceivedFromDate] = useState(() => addDays(date, -2));
+  const [receivedThroughDate, setReceivedThroughDate] = useState(date);
   const [data, setData] = useState<CachedEmailResponse>();
   const [notice, setNotice] = useState<string>();
   const [error, setError] = useState<string>();
@@ -241,7 +245,10 @@ function OrderIntakeCacheRecovery({ date }: { date: string }) {
 
   const missing = (data?.records ?? []).filter(item => item.canForceReview || (item.existingOrderCount ?? 0) === 0);
 
-  useEffect(() => setReceivedFromDate(addDays(date, -2)), [date]);
+  useEffect(() => {
+    setReceivedFromDate(addDays(date, -2));
+    setReceivedThroughDate(date);
+  }, [date]);
 
   async function loadCache() {
     setLoading(true);
@@ -296,10 +303,11 @@ function OrderIntakeCacheRecovery({ date }: { date: string }) {
     try {
       const authToken = await token();
       const receivedFromUtc = `${receivedFromDate}T00:00:00Z`;
-      const checkpoint = readReplayCheckpoint(date, receivedFromUtc);
+      const receivedToUtc = `${addDays(receivedThroughDate, 1)}T00:00:00Z`;
+      const checkpoint = readReplayCheckpoint(date, receivedFromUtc, receivedToUtc);
       const baseRequest = {
         receivedFromUtc,
-        receivedToUtc: `${addDays(date, 1)}T00:00:00Z`,
+        receivedToUtc,
         minimumPlanningDate: date,
         maximumPlanningDate: date,
         refreshUnamendedPending: true,
@@ -332,6 +340,7 @@ function OrderIntakeCacheRecovery({ date }: { date: string }) {
           batchSize = 1;
           saveReplayCheckpoint(date, checkpoint ? { ...checkpoint, batchSize } : {
             receivedFromUtc,
+            receivedToUtc,
             startFromBeginning: true,
             batchSize,
             batches,
@@ -355,6 +364,7 @@ function OrderIntakeCacheRecovery({ date }: { date: string }) {
         }
         saveReplayCheckpoint(date, hasMore && afterReceivedAtUtc && afterEvidenceId ? {
           receivedFromUtc,
+          receivedToUtc,
           afterReceivedAtUtc,
           afterEvidenceId,
           batchSize,
@@ -372,7 +382,7 @@ function OrderIntakeCacheRecovery({ date }: { date: string }) {
       await loadCache();
       refreshVisibleReviewData();
     } catch (err) {
-      const checkpoint = readReplayCheckpoint(date, `${receivedFromDate}T00:00:00Z`);
+      const checkpoint = readReplayCheckpoint(date, `${receivedFromDate}T00:00:00Z`, `${addDays(receivedThroughDate, 1)}T00:00:00Z`);
       const detail = err instanceof Error ? err.message : "Retained evidence could not be re-parsed.";
       setError(checkpoint
         ? `${detail} Stopped before batch ${checkpoint.batches + 1}, after ${checkpoint.evidenceScanned} emails. Progress is saved; press Re-parse to resume.`
@@ -393,10 +403,11 @@ function OrderIntakeCacheRecovery({ date }: { date: string }) {
       <div>
         <p className="eyebrow">Intake recovery</p>
         <h2 style={{ margin: 0 }}>Cached emails / manual push</h2>
-        <p className="hint" style={{ margin: "4px 0 0" }}>Replay retained email received from the selected date; only orders planned for {date} are updated. The received date can be earlier than the planning date.</p>
+        <p className="hint" style={{ margin: "4px 0 0" }}>Replay retained email received within the selected date range; only orders planned for {date} are updated.</p>
       </div>
       <div className="title-actions" style={{ gap: 8, flexWrap: "wrap" }}>
-        <label style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>Received from <input aria-label="Replay received from" type="date" value={receivedFromDate} max={date} onChange={event => setReceivedFromDate(event.currentTarget.value)} disabled={replaying || forcing !== undefined} /></label>
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>Received from <input aria-label="Replay received from" type="date" value={receivedFromDate} max={receivedThroughDate} onChange={event => setReceivedFromDate(event.currentTarget.value)} disabled={replaying || forcing !== undefined} /></label>
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>Received through <input aria-label="Replay received through" type="date" value={receivedThroughDate} min={receivedFromDate} max={date} onChange={event => setReceivedThroughDate(event.currentTarget.value)} disabled={replaying || forcing !== undefined} /></label>
         {data && <span className={missing.length ? "status warning" : "status approved"}>{missing.length} missing order rows</span>}
         <button type="button" onClick={() => void replayRetainedEvidence()} disabled={replaying || forcing !== undefined || loading}>{replaying ? "Re-parsing…" : `Re-parse ${date}`}</button>
         <button type="button" onClick={() => setOpen(value => !value)}>{open ? "Hide cached emails" : "Show cached emails"}</button>
