@@ -276,8 +276,12 @@ describe("Driver Dispatch UI contract", () => {
       apiSource.indexOf("export async function getSmartDispatch"),
       apiSource.indexOf("export async function syncDispatchDrivers")
     );
+    const tachoAvailabilitySource = apiSource.slice(
+      apiSource.indexOf("export async function getAvailableTimes"),
+      apiSource.indexOf("export async function syncSamsaraMappings")
+    );
     expect(smartDispatchSource).toContain("DISPATCH_READ_TIMEOUT_MS");
-    expect(smartDispatchSource).toContain("DISPATCH_TACHO_TIMEOUT_MS");
+    expect(tachoAvailabilitySource).toContain("DISPATCH_TACHO_TIMEOUT_MS");
     expect(apiSource).toContain("const DISPATCH_READ_TIMEOUT_MS = 60_000;");
     expect(apiSource).toContain("const DISPATCH_TACHO_TIMEOUT_MS = 180_000;");
   });
