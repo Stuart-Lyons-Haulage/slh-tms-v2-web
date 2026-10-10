@@ -270,4 +270,15 @@ describe("Driver Dispatch UI contract", () => {
     expect(source).toContain("firstCollectionStop(latest)?.plannedArrivalUtc || latest.plannedStartUtc");
     expect(source).not.toContain("/start-time");
   });
+
+  it("bounds core Dispatch reads and the slower Tacho availability request", () => {
+    const smartDispatchSource = apiSource.slice(
+      apiSource.indexOf("export async function getSmartDispatch"),
+      apiSource.indexOf("export async function syncDispatchDrivers")
+    );
+    expect(smartDispatchSource).toContain("DISPATCH_READ_TIMEOUT_MS");
+    expect(smartDispatchSource).toContain("DISPATCH_TACHO_TIMEOUT_MS");
+    expect(apiSource).toContain("const DISPATCH_READ_TIMEOUT_MS = 60_000;");
+    expect(apiSource).toContain("const DISPATCH_TACHO_TIMEOUT_MS = 180_000;");
+  });
 });
