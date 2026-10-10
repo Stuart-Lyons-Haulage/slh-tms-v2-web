@@ -13,6 +13,9 @@ import type {
 } from "./types";
 import { availabilityDayCount } from "./availabilityDayCount";
 
+const DISPATCH_READ_TIMEOUT_MS = 60_000;
+const DISPATCH_TACHO_TIMEOUT_MS = 180_000;
+
 export type SamsaraDispatchResult = {
   success: boolean;
   runId: string;
@@ -72,18 +75,22 @@ export type SmartDispatchOptionalEnrichment = {
 export async function getDispatchVisibility(planningDate: string, token: string): Promise<DispatchVisibilitySnapshot> {
   return request<DispatchVisibilitySnapshot>(
     `/api/dispatch/driver-visibility?date=${encodeURIComponent(planningDate)}`,
-    token
+    token,
+    undefined,
+    DISPATCH_READ_TIMEOUT_MS
   );
 }
 
 export async function getDriverAvailability(planningDate: string, token: string): Promise<DriverAvailabilitySnapshot> {
-  return request<DriverAvailabilitySnapshot>(`/api/v1/driver-availability?date=${encodeURIComponent(planningDate)}`, token);
+  return request<DriverAvailabilitySnapshot>(`/api/v1/driver-availability?date=${encodeURIComponent(planningDate)}`, token, undefined, DISPATCH_READ_TIMEOUT_MS);
 }
 
 export async function getDispatchHistory(planningDate: string, token: string): Promise<DispatchHistoryItem[]> {
   return request<DispatchHistoryItem[]>(
     `/api/dispatch/history?date=${encodeURIComponent(planningDate)}`,
-    token
+    token,
+    undefined,
+    DISPATCH_READ_TIMEOUT_MS
   );
 }
 
@@ -137,9 +144,9 @@ export async function getSmartDispatch(
   // gives us the driver IDs instead of waiting for the optional enrichment
   // requests (visibility, history and Samsara) to finish first.
   const [drivers, runs, driverAuthority] = await Promise.all([
-    request<DispatchDriverDto[]>(`/api/dispatch/drivers?date=${encoded}`, token),
-    request<DispatchRunDto[]>(`/api/dispatch/runs?date=${encoded}`, token),
-    request<DriverDispatchAuthority>(`/api/v1/driver-dispatch?date=${encoded}`, token)
+    request<DispatchDriverDto[]>(`/api/dispatch/drivers?date=${encoded}`, token, undefined, DISPATCH_READ_TIMEOUT_MS),
+    request<DispatchRunDto[]>(`/api/dispatch/runs?date=${encoded}`, token, undefined, DISPATCH_READ_TIMEOUT_MS),
+    request<DriverDispatchAuthority>(`/api/v1/driver-dispatch?date=${encoded}`, token, undefined, DISPATCH_READ_TIMEOUT_MS)
   ]);
   const availableTimesPromise = getAvailableTimes(
     planningDate,
@@ -151,7 +158,7 @@ export async function getSmartDispatch(
   // a slow optional integration must not delay the Dispatch table.
   const optionalEnrichmentPromise = Promise.all([
     getDispatchHistory(planningDate, token).catch(() => [] as DispatchHistoryItem[]),
-    request<SamsaraDispatchStatusResponse>(`/api/v1/integrations/samsara/dispatch/status?date=${encoded}`, token)
+    request<SamsaraDispatchStatusResponse>(`/api/v1/integrations/samsara/dispatch/status?date=${encoded}`, token, undefined, DISPATCH_READ_TIMEOUT_MS)
       .catch(() => ({
         planningDate,
         configured: false,
@@ -161,7 +168,7 @@ export async function getSmartDispatch(
       } as SamsaraDispatchStatusResponse))
   ]);
   const [statusResponse, visibility, availability] = await Promise.all([
-    request<{ drivers: DispatchDriverStatusDto[] }>(`/api/v1/driver-dispatch-status?date=${encoded}`, token),
+    request<{ drivers: DispatchDriverStatusDto[] }>(`/api/v1/driver-dispatch-status?date=${encoded}`, token, undefined, DISPATCH_READ_TIMEOUT_MS),
     getDispatchVisibility(planningDate, token),
     getDriverAvailability(planningDate, token)
   ]);
@@ -282,7 +289,7 @@ export async function getAvailableTimes(
   return request<DispatchAvailableTimeDto[]>("/api/dispatch/available-times", token, {
     method: "POST",
     body: JSON.stringify({ planningDate, driverIds, reducedRestDriverIds })
-  });
+  }, DISPATCH_TACHO_TIMEOUT_MS);
 }
 
 export async function syncSamsaraMappings(planningDate: string, token: string): Promise<void> {
