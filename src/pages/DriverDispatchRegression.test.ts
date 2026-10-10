@@ -27,7 +27,9 @@ describe("Driver Dispatch UI contract", () => {
     expect(apiSource).toContain("/api/v1/driver-availability?date=");
     expect(apiSource).toContain("sharedAvailability?.employmentType");
     expect(apiSource).toContain("sharedAvailability?.dispatchable === false");
-    expect(apiSource).toContain("return !driver.isBlocked && shared?.dispatchable !== false && !legal?.breachDetail;");
+    expect(apiSource).toContain("const annotateAvailability = (items: DispatchDriverDto[]) => items.map(driver => {");
+    expect(apiSource).toContain("isBlocked: true");
+    expect(apiSource).not.toContain("items.filter(driver => {");
     expect(apiSource).not.toContain("allocatedDriverIds.has(driver.driverId)");
     expect(availabilitySource).toContain("Employment type is read-only here and remains controlled by Master Data.");
     expect(availabilitySource).toContain("Booking confirmed");
