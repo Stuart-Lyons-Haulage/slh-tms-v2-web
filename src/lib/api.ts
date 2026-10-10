@@ -234,6 +234,7 @@ function errorMessage(payload: unknown): string | undefined {
 }
 
 export async function request<T = unknown>(path: string, token?: string, init?: RequestInit, ...legacyArgs: unknown[]): Promise<T> {
+  const baseUrl = requireApiBaseUrl();
   const timeoutMs = legacyArgs.find((value): value is number => typeof value === "number" && Number.isFinite(value) && value > 0);
   const controller = timeoutMs ? new AbortController() : undefined;
   const relayAbort = () => controller?.abort(init?.signal?.reason);
