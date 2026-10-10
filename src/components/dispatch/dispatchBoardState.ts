@@ -296,7 +296,7 @@ export function isDispatchAvailable(
   time?: DispatchAvailableTimeDto
 ): boolean {
   if (driver.isBlocked || driver.onLeave || driver.partDayLeave) return false;
-  if (driver.leaveType && /(annual|leave|holiday|\bec\b)/i.test(driver.leaveType)) return false;
+  if (driver.leaveType && /\b(annual|sick|ec|holiday|maternity|paternity|unpaid|compassionate|medical)\b/i.test(driver.leaveType)) return false;
   if (status?.availabilityStatus !== "Available") return false;
 
   const agency = /agency/i.test(driver.employmentType);
