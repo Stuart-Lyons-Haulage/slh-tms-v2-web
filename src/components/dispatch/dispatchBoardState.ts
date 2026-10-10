@@ -7,7 +7,8 @@ import type {
   DispatchEquipmentWorkbench,
   DispatchFilter,
   DispatchLockFailure,
-  DispatchRunDto
+  DispatchRunDto,
+  DispatchDriverStatusDto
 } from "./types";
 
 export type DispatchSelectionMap = Record<string, DispatchAllocationSelection>;
@@ -282,4 +283,27 @@ export function rowFailures(failures: DispatchLockFailure[], driverId: string): 
 
 export function globalFailures(failures: DispatchLockFailure[], driverIds: Set<string>): DispatchLockFailure[] {
   return failures.filter(failure => !failure.driverId || /^0{8}-0{4}-0{4}-0{4}-0{12}$/i.test(failure.driverId) || !driverIds.has(failure.driverId));
+}
+
+/**
+ * True only when the current planning-date evidence supports assigning this driver.
+ * Missing availability/Tacho evidence is treated as unavailable so the pool cannot
+ * accidentally present an unverified person as ready to dispatch.
+ */
+export function isDispatchAvailable(
+  driver: DispatchDriverDto,
+  status?: DispatchDriverStatusDto,
+  time?: DispatchAvailableTimeDto
+): boolean {
+  if (driver.isBlocked || driver.onLeave || driver.partDayLeave) return false;
+  if (driver.leaveType && /\b(annual|sick|ec|holiday|maternity|paternity|unpaid|compassionate|medical)\b/i.test(driver.leaveType)) return false;
+  if (status?.availabilityStatus !== "Available") return false;
+
+  const agency = /agency/i.test(driver.employmentType);
+  if (agency && driver.availabilityConfirmed !== true) return false;
+
+  // A Tacho legal start must have been calculated for this planning date and
+  // must not report a compliance breach (including an unfinished rest period).
+  if (!time?.availableFrom || time.breachDetail) return false;
+  return true;
 }

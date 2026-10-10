@@ -7,10 +7,11 @@ import {
   filterDriversByDriverSearch,
   filterDriversByEmploymentType,
   filterDispatchDrivers,
+  isDispatchAvailable,
   sortDriversForDispatch,
   validateLockSelections
 } from "./dispatchBoardState";
-import type { DispatchDriverDto, DispatchEquipmentWorkbench, DispatchRunDto } from "./types";
+import type { DispatchDriverDto, DispatchDriverStatusDto, DispatchEquipmentWorkbench, DispatchRunDto } from "./types";
 
 function driver(overrides: Partial<DispatchDriverDto> = {}): DispatchDriverDto {
   return {
@@ -235,5 +236,26 @@ describe("smart Dispatch board state", () => {
     );
 
     expect(rows.some(row => row.reason.includes("earlier than the Tacho-derived available-from"))).toBe(true);
+  });
+
+  it("shows only drivers with explicit availability, legal Tacho time, and confirmed agency bookings", () => {
+    const legalTime = {
+      driverId: "driver-1",
+      availableFrom: "2026-10-12T05:00:00Z",
+      requiredRestPeriod: 11,
+      weeklyWorkingTimeUsed: 30,
+      dailyDrivingTimeUsed: 5,
+      wtdStatus: "ok" as const
+    };
+    const availableStatus: DispatchDriverStatusDto = { driverId: "driver-1", dispatchStatus: "No Run", availabilityStatus: "Available" };
+
+    expect(isDispatchAvailable(driver(), availableStatus, legalTime)).toBe(true);
+    expect(isDispatchAvailable(driver({ onLeave: true }), availableStatus, legalTime)).toBe(false);
+    expect(isDispatchAvailable(driver({ leaveType: "Annual Leave" }), availableStatus, legalTime)).toBe(false);
+    expect(isDispatchAvailable(driver(), { ...availableStatus, availabilityStatus: "Unverified" }, legalTime)).toBe(false);
+    expect(isDispatchAvailable(driver({ employmentType: "AgencyDay" }), availableStatus, legalTime)).toBe(false);
+    expect(isDispatchAvailable(driver({ employmentType: "AgencyDay", availabilityConfirmed: true }), availableStatus, legalTime)).toBe(true);
+    expect(isDispatchAvailable(driver(), availableStatus, { ...legalTime, breachDetail: "Rest period incomplete" })).toBe(false);
+    expect(isDispatchAvailable(driver(), availableStatus, { ...legalTime, availableFrom: undefined })).toBe(false);
   });
 });
