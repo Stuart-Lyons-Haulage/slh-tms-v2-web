@@ -18,6 +18,7 @@ import {
   filterDispatchDrivers,
   filterDriversByEmploymentType,
   globalFailures,
+  isDispatchAvailable,
   rowFailures,
   type DispatchAvailableTimeMap,
   type DispatchSelectionMap
@@ -195,26 +196,31 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
     [selections, snapshot]
   );
 
-  const visibleDrivers = useMemo(() => {
+  const availableWorkforce = useMemo(() => {
     if (!snapshot) return [];
-    const workforce = filterDriversByEmploymentType(snapshot.drivers, employmentFilter);
+    return snapshot.drivers.filter(driver =>
+      isDispatchAvailable(driver, snapshot.statuses[driver.driverId], availableTimes[driver.driverId])
+    );
+  }, [availableTimes, snapshot]);
+
+  const visibleDrivers = useMemo(() => {
+    const workforce = filterDriversByEmploymentType(availableWorkforce, employmentFilter);
     const searched = filterDriversByDriverSearch(workforce, driverSearch);
-    return filterDispatchDrivers(searched, filter, selections, snapshot.runs, availableTimes, failures);
-  }, [availableTimes, driverSearch, employmentFilter, failures, filter, selections, snapshot]);
+    return filterDispatchDrivers(searched, filter, selections, snapshot?.runs || [], availableTimes, failures);
+  }, [availableTimes, availableWorkforce, driverSearch, employmentFilter, failures, filter, selections, snapshot]);
 
   const filterCounts = useMemo(() => {
-    const workforce = snapshot ? filterDriversByEmploymentType(snapshot.drivers, "all") : [];
-    const searched = filterDriversByDriverSearch(workforce, driverSearch);
+    const searched = filterDriversByDriverSearch(availableWorkforce, driverSearch);
     return Object.fromEntries(filterValues.map(value => [
       value,
-      snapshot ? filterDispatchDrivers(searched, value, selections, snapshot.runs, availableTimes, failures).length : 0
+      filterDispatchDrivers(searched, value, selections, snapshot?.runs || [], availableTimes, failures).length
     ])) as Record<DispatchFilter, number>;
-  }, [availableTimes, driverSearch, failures, selections, snapshot]);
+  }, [availableTimes, availableWorkforce, driverSearch, failures, selections, snapshot]);
 
   const employmentCounts = useMemo(() => Object.fromEntries(employmentFilterValues.map(value => [
     value,
-    snapshot ? filterDriversByEmploymentType(snapshot.drivers, value).length : 0
-  ])) as Record<DispatchEmploymentFilter, number>, [snapshot]);
+    filterDriversByEmploymentType(availableWorkforce, value).length
+  ])) as Record<DispatchEmploymentFilter, number>, [availableWorkforce]);
 
   const samsaraExportCandidates = useMemo(() => {
     if (!snapshot) return [];
@@ -520,7 +526,7 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
       const collectionDriver = snapshot.drivers.find(driver => driver.driverId === load?.driverId);
       return <section className="relay-dispatch-panel" key={run.runId} aria-label={`Relay allocation for ${run.reference}`}>
         <div><strong>{run.reference} · Relay / trailer swap</strong><span>{collectionDriver?.name || "Collection driver not allocated"} collects → {relay.handoverSite || "handover site required"} → delivery driver</span></div>
-        <label>Delivery driver<select value={relay.deliveryDriverId || ""} onChange={event => void saveRelayAllocation(run.runId, { deliveryDriverId: event.target.value || undefined })} disabled={relayBusyId === run.runId}><option value="">Select delivery driver…</option>{snapshot.drivers.filter(driver => !driver.onLeave && !driver.isBlocked).map(driver => <option key={driver.driverId} value={driver.driverId}>{driver.name} · {driver.driverCode}</option>)}</select></label>
+        <label>Delivery driver<select value={relay.deliveryDriverId || ""} onChange={event => void saveRelayAllocation(run.runId, { deliveryDriverId: event.target.value || undefined })} disabled={relayBusyId === run.runId}><option value="">Select delivery driver…</option>{availableWorkforce.map(driver => <option key={driver.driverId} value={driver.driverId}>{driver.name} · {driver.driverCode}</option>)}</select></label>
         <label>Delivery vehicle<select value={relay.deliveryVehicleId || ""} onChange={event => void saveRelayAllocation(run.runId, { deliveryVehicleId: event.target.value || undefined })} disabled={relayBusyId === run.runId}><option value="">Select delivery vehicle…</option>{snapshot.equipment.vehicles.map(vehicle => <option key={vehicle.id} value={vehicle.id}>{vehicle.registration}{vehicle.fleetNumber ? ` · ${vehicle.fleetNumber}` : ""}</option>)}</select></label>
         <label>Delivery trailer<select value={relay.deliveryTrailerId || ""} onChange={event => void saveRelayAllocation(run.runId, { deliveryTrailerId: event.target.value || undefined })} disabled={relayBusyId === run.runId}><option value="">Select replacement trailer…</option>{snapshot.equipment.trailers.map(trailer => <option key={trailer.id} value={trailer.id}>{trailer.trailerNumber}{trailer.type ? ` · ${trailer.type}` : ""}</option>)}</select></label>
         <small>{deliveryDriver ? `Delivery leg: ${deliveryDriver.name}` : "Samsara export will remain blocked until the delivery leg is assigned."}</small>
@@ -582,7 +588,7 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
         runs={snapshot.runs}
         owners={runOwnerById}
         allocatedRunIds={new Set(snapshot.equipment.loads.filter(load => Boolean(load.driverId)).map(load => load.id))}
-        drivers={snapshot.drivers}
+        drivers={availableWorkforce}
         vehicles={snapshot.equipment.vehicles}
         trailers={snapshot.equipment.trailers}
         selections={selections}
