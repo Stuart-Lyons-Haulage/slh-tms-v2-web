@@ -205,15 +205,18 @@ export async function getSmartDispatch(
         : driver.suggestion
     };
   });
-  // Dispatch is an availability workbench, not a complete Driver Master list.
-  // Keep only drivers who pass the shared availability decision and the latest
-  // TachoMaster legal-hours calculation; Sage HR leave/contract blocks are already
-  // reflected in driver.isBlocked by the API authority response.
+  // Keep the full classified roster visible in the availability workbench.
+  // Blocked and unconfirmed people remain visible with their reasons; allocation
+  // controls continue to enforce these decisions.
   const availableTimeByDriver = new Map((await availableTimesPromise).map(item => [item.driverId, item]));
-  const dispatchable = (items: DispatchDriverDto[]) => items.filter(driver => {
-    const shared = availabilityByDriver.get(driver.driverId);
+  const annotateAvailability = (items: DispatchDriverDto[]) => items.map(driver => {
     const legal = availableTimeByDriver.get(driver.driverId);
-    return !driver.isBlocked && shared?.dispatchable !== false && !legal?.breachDetail;
+    if (!legal?.breachDetail || driver.blockedReason?.includes(legal.breachDetail)) return driver;
+    return {
+      ...driver,
+      isBlocked: true,
+      blockedReason: [driver.blockedReason, legal.breachDetail].filter(Boolean).join(" · ")
+    };
   });
 
   void optionalEnrichmentPromise.then(([history, samsaraStatus]) => {
@@ -243,7 +246,7 @@ export async function getSmartDispatch(
       };
     });
     onOptionalEnrichment?.({
-      drivers: dispatchable(driversWithHistory),
+      drivers: annotateAvailability(driversWithHistory),
       samsaraConfigured: samsaraStatus.configured && samsaraStatus.connected,
       samsaraConnectionMessage: samsaraStatus.connectionMessage,
       samsaraStaleRouteCount: samsaraStatus.staleRouteCount || 0,
@@ -252,7 +255,7 @@ export async function getSmartDispatch(
   }).catch(() => undefined);
 
   return {
-    drivers: dispatchable(enrichedDrivers),
+    drivers: annotateAvailability(enrichedDrivers),
     runs: runs.map(run => runDetail(run, equipment)),
     equipment,
     availableTimes: [...availableTimeByDriver.values()],
