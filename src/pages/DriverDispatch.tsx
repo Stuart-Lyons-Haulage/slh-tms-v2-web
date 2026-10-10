@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { request, type LoadDispatch, type Trailer, type Vehicle } from "../lib/api";
 import { useAccessToken } from "../lib/auth";
@@ -339,6 +339,8 @@ export function DriverDispatch() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
   const [statusError, setStatusError] = useState<string>();
+  const [masterError, setMasterError] = useState<string>();
+  const refreshSequence = useRef(0);
   const [filters, setFilters] = useState<Filters>(() => emptyFilters());
   const [message, setMessage] = useState<MessageState>();
   const [historyLoad, setHistoryLoad] = useState<DispatchLoad>();
@@ -348,49 +350,66 @@ export function DriverDispatch() {
   const [driverForm, setDriverForm] = useState<DriverForm>({ displayName: "", employeeNumber: "", driverType: "Agency", agencyName: "", startDate: date, days: 7 });
 
   const refresh = useCallback(async () => {
+    const sequence = ++refreshSequence.current;
     setLoading(true);
     setError(undefined);
+    setMasterError(undefined);
     setStatusError(undefined);
     try {
       const access = await token();
-      const [workbench, master] = await Promise.all([
-        request<Workbench>(`/api/v1/driver-dispatch?date=${encodeURIComponent(date)}`, access, undefined, 90000),
-        getMasterDispatchData(access)
-      ]);
-      const masterDriver = (driver: DispatchDriver) => master.drivers.find(item =>
-        item.driverId === driver.employeeNumber ||
-        item.fullName.localeCompare(driver.displayName, undefined, { sensitivity: "base" }) === 0 ||
-        (item.preferredName && item.preferredName.localeCompare(driver.displayName, undefined, { sensitivity: "base" }) === 0));
-      const masterVehicle = (vehicle: Vehicle) => master.vehicles.find(item =>
-        item.registration.localeCompare(vehicle.registration, undefined, { sensitivity: "base" }) === 0 ||
-        item.vehicleId === vehicle.id);
-      setData({
-        ...workbench,
-        drivers: workbench.drivers.map(driver => {
-          const item = masterDriver(driver);
-          return item ? {
-            ...driver,
-            masterDriverId: item.driverId,
-            displayName: item.preferredName || item.fullName || driver.displayName,
-            licenceExpiry: item.licenceExpiry,
-            cpcExpiry: item.cpcExpiry,
-            digitalTachoCardExpiry: item.digitalTachoCardExpiry,
-            medicalExpiry: item.medicalExpiry
-          } : driver;
-        }),
-        vehicles: workbench.vehicles.map(vehicle => ({ ...vehicle, masterCompliance: masterVehicle(vehicle) }))
-      });
-      try {
-        const statusResponse = await request<{ planningDate: string; drivers: DriverDispatchStatus[] }>(`/api/v1/driver-dispatch-status?date=${encodeURIComponent(date)}`, access, undefined, 90000);
-        setStatuses(Object.fromEntries(statusResponse.drivers.map(item => [item.driverId, item])));
-      } catch (statusException) {
-        setStatuses({});
-        setStatusError(statusException instanceof Error ? statusException.message : "Driver message status and Tacho availability could not be loaded.");
-      }
-    } catch (exception) {
-      setError(exception instanceof Error ? exception.message : "Driver Dispatch could not be loaded.");
-    } finally {
+      const workbench = await request<Workbench>(`/api/v1/driver-dispatch?date=${encodeURIComponent(date)}`, access, undefined, 30000);
+      if (sequence !== refreshSequence.current) return;
+      setData(workbench);
       setLoading(false);
+
+      // The dispatch workbench is usable without either enrichment call. Load
+      // master compliance and live Tacho/message status independently so a slow
+      // integration cannot keep the whole screen behind a spinner.
+      void getMasterDispatchData(access).then(master => {
+        if (sequence !== refreshSequence.current) return;
+        const masterDriver = (driver: DispatchDriver) => master.drivers.find(item =>
+          item.driverId === driver.employeeNumber ||
+          item.fullName.localeCompare(driver.displayName, undefined, { sensitivity: "base" }) === 0 ||
+          (item.preferredName && item.preferredName.localeCompare(driver.displayName, undefined, { sensitivity: "base" }) === 0));
+        const masterVehicle = (vehicle: Vehicle) => master.vehicles.find(item =>
+          item.registration.localeCompare(vehicle.registration, undefined, { sensitivity: "base" }) === 0 ||
+          item.vehicleId === vehicle.id);
+        setData(current => !current ? current : ({
+          ...current,
+          drivers: current.drivers.map(driver => {
+            const item = masterDriver(driver);
+            return item ? {
+              ...driver,
+              masterDriverId: item.driverId,
+              displayName: item.preferredName || item.fullName || driver.displayName,
+              licenceExpiry: item.licenceExpiry,
+              cpcExpiry: item.cpcExpiry,
+              digitalTachoCardExpiry: item.digitalTachoCardExpiry,
+              medicalExpiry: item.medicalExpiry
+            } : driver;
+          }),
+          vehicles: current.vehicles.map(vehicle => ({ ...vehicle, masterCompliance: masterVehicle(vehicle) }))
+        }));
+      }).catch(masterException => {
+        if (sequence === refreshSequence.current)
+          setMasterError(masterException instanceof Error ? masterException.message : "Master data compliance could not be loaded.");
+      });
+
+      void request<{ planningDate: string; drivers: DriverDispatchStatus[] }>(`/api/v1/driver-dispatch-status?date=${encodeURIComponent(date)}`, access, undefined, 30000)
+        .then(statusResponse => {
+          if (sequence === refreshSequence.current)
+            setStatuses(Object.fromEntries(statusResponse.drivers.map(item => [item.driverId, item])));
+        })
+        .catch(statusException => {
+          if (sequence !== refreshSequence.current) return;
+          setStatuses({});
+          setStatusError(statusException instanceof Error ? statusException.message : "Driver message status and Tacho availability could not be loaded.");
+        });
+    } catch (exception) {
+      if (sequence === refreshSequence.current)
+        setError(exception instanceof Error ? exception.message : "Driver Dispatch could not be loaded.");
+    } finally {
+      if (sequence === refreshSequence.current) setLoading(false);
     }
   }, [date, token]);
 
@@ -564,6 +583,7 @@ export function DriverDispatch() {
     {driverToolNotice && <p className="notice inline-notice">{driverToolNotice}</p>}
     {error && <p className="notice inline-notice" style={{ borderColor: "#b42318" }}>{error}</p>}
     {statusError && <p className="notice inline-notice" style={{ borderColor: "#b7791f" }}>{statusError}</p>}
+    {masterError && <p className="notice inline-notice" style={{ borderColor: "#b7791f" }}>Master data enrichment unavailable: {masterError} Dispatch data is still available.</p>}
     {loading && !data && <div className="state">Building Driver Dispatch…</div>}
 
     {data && <>
