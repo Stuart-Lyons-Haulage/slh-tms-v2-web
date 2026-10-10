@@ -11,7 +11,7 @@ import {
   sortDriversForDispatch,
   validateLockSelections
 } from "./dispatchBoardState";
-import type { DispatchDriverDto, DispatchEquipmentWorkbench, DispatchRunDto } from "./types";
+import type { DispatchDriverDto, DispatchDriverStatusDto, DispatchEquipmentWorkbench, DispatchRunDto } from "./types";
 
 function driver(overrides: Partial<DispatchDriverDto> = {}): DispatchDriverDto {
   return {
@@ -247,7 +247,7 @@ describe("smart Dispatch board state", () => {
       dailyDrivingTimeUsed: 5,
       wtdStatus: "ok" as const
     };
-    const availableStatus = { driverId: "driver-1", availabilityStatus: "Available" as const };
+    const availableStatus: DispatchDriverStatusDto = { driverId: "driver-1", dispatchStatus: "No Run", availabilityStatus: "Available" };
 
     expect(isDispatchAvailable(driver(), availableStatus, legalTime)).toBe(true);
     expect(isDispatchAvailable(driver({ onLeave: true }), availableStatus, legalTime)).toBe(false);
