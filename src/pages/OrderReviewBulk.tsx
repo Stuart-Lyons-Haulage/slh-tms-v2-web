@@ -115,7 +115,7 @@ const queuePageSize = 100;
 // Approval promotes each order synchronously on the API. Keep each request
 // comfortably below the App Service/gateway timeout so a slow order cannot
 // discard the result of every order behind it.
-const approvalBatchSize = 1;
+const approvalBatchSize = 10;
 
 function dateKey(value: Date) {
   return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
