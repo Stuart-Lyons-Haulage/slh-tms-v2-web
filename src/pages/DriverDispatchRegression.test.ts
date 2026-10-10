@@ -188,8 +188,9 @@ describe("Driver Dispatch UI contract", () => {
     expect(loadPlanCss).toContain("z-index: 1305");
   });
 
-  it("does not clip the complete Smart Dispatch driver payload to the smaller visibility evidence set", () => {
-    expect(authoritativeSource).toContain('filterDriversByEmploymentType(snapshot.drivers, "all")');
+  it("keeps the complete API payload while showing only verified available drivers in the Dispatch pool", () => {
+    expect(authoritativeSource).toContain("const availableWorkforce = useMemo(() =>");
+    expect(authoritativeSource).toContain("isDispatchAvailable(driver, snapshot.statuses[driver.driverId], availableTimes[driver.driverId])");
     expect(apiSource).not.toContain(".filter(driver => visibilityByDriver.has(driver.driverId))");
   });
 
