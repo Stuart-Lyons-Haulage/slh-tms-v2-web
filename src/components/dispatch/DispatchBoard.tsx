@@ -174,6 +174,16 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
           return updated;
         });
       };
+      const applyDeferredAvailableTimes = (rows: DispatchAvailableTimeDto[]) => {
+        setAvailableTimes(availableTimesByDriver(rows));
+        setSelections(current => applyAvailableTimes(current, rows));
+        setSnapshot(current => {
+          if (!current) return current;
+          const updated = { ...current, availableTimes: rows };
+          dispatchSnapshotCache.set(cacheKey, updated);
+          return updated;
+        });
+      };
       if (cached) {
         const initialSelections = buildInitialSelections(cached.drivers, cached.runs, cached.equipment);
         setSnapshot(cached);
@@ -181,7 +191,7 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
         setAvailableTimes(availableTimesByDriver(cached.availableTimes));
         setFailures([]);
         setAction(undefined);
-        void getSmartDispatch(planningDate, access, applyOptionalEnrichment).then(loadedData => {
+        void getSmartDispatch(planningDate, access, applyOptionalEnrichment, applyDeferredAvailableTimes).then(loadedData => {
           const data = pendingEnrichment ? { ...loadedData, ...pendingEnrichment } : loadedData;
           dispatchSnapshotCache.set(cacheKey, data);
           setSnapshot(data);
@@ -191,8 +201,8 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
         return;
       }
       const loadedData = force
-        ? await getSmartDispatch(planningDate, access, applyOptionalEnrichment)
-        : await dispatchSnapshotCache.getOrLoad(cacheKey, () => getSmartDispatch(planningDate, access, applyOptionalEnrichment));
+        ? await getSmartDispatch(planningDate, access, applyOptionalEnrichment, applyDeferredAvailableTimes)
+        : await dispatchSnapshotCache.getOrLoad(cacheKey, () => getSmartDispatch(planningDate, access, applyOptionalEnrichment, applyDeferredAvailableTimes));
       const data = pendingEnrichment ? { ...loadedData, ...pendingEnrichment } : loadedData;
       const initialSelections = buildInitialSelections(data.drivers, data.runs, data.equipment);
       const rows = data.availableTimes;
