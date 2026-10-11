@@ -558,8 +558,40 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
     setBusyDriverId(driver.driverId);
     setNotice(undefined);
     try {
-      await unassignDispatchRun(selection.runId, await token());
-      await refresh(true);
+      const access = await token();
+      await unassignDispatchRun(selection.runId, access);
+      setSnapshot(current => {
+        if (!current) return current;
+        const updated = {
+          ...current,
+          equipment: {
+            ...current.equipment,
+            loads: current.equipment.loads.map(load => load.id !== selection.runId ? load : {
+              ...load,
+              driverId: undefined,
+              vehicleId: undefined,
+              trailerId: undefined,
+              status: "Draft"
+            })
+          },
+          statuses: {
+            ...current.statuses,
+            [driver.driverId]: {
+              ...current.statuses[driver.driverId],
+              driverId: driver.driverId,
+              dispatchStatus: "No Run",
+              operationalStatus: "No Run",
+              driverConfirmed: false
+            }
+          }
+        };
+        dispatchSnapshotCache.set(dispatchCacheKey(access, planningDate), updated);
+        return updated;
+      });
+      setSelections(current => ({
+        ...current,
+        [driver.driverId]: { ...current[driver.driverId], runId: "", vehicleId: "", trailerId: "", plannedStartTime: undefined }
+      }));
       setNotice(`${reference} unassigned. Driver, vehicle and trailer are free to reallocate.`);
     } catch (exception) {
       setFailures(current => [...current.filter(failure => failure.driverId !== driver.driverId), {
