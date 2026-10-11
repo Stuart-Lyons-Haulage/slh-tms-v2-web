@@ -12,6 +12,7 @@ import type {
   DispatchVisibilitySnapshot
 } from "./types";
 import { availabilityDayCount } from "./availabilityDayCount";
+import { isPotentiallyDispatchAvailable } from "./dispatchBoardState";
 
 const DISPATCH_READ_TIMEOUT_MS = 60_000;
 const DISPATCH_TACHO_TIMEOUT_MS = 180_000;
@@ -166,11 +167,6 @@ export async function getSmartDispatch(
     request<DispatchRunDto[]>(`/api/dispatch/runs?date=${encoded}`, token, undefined, DISPATCH_READ_TIMEOUT_MS),
     request<DriverDispatchAuthority>(`/api/v1/driver-dispatch?date=${encoded}`, token, undefined, DISPATCH_READ_TIMEOUT_MS)
   ]);
-  const availableTimesPromise = getAvailableTimes(
-    planningDate,
-    driverAuthority.drivers.map(driver => driver.driverId),
-    token
-  );
   // History and Samsara improve the board but are not needed to allocate safely.
   // Start both in parallel with the core requests and apply them when they finish;
   // a slow optional integration must not delay the Dispatch table.
@@ -233,6 +229,14 @@ export async function getSmartDispatch(
   // Keep the full classified roster visible in the availability workbench.
   // Blocked and unconfirmed people remain visible with their reasons; allocation
   // controls continue to enforce these decisions.
+  const assignedDriverIds = new Set(equipment.loads.map(load => load.driverId).filter(Boolean));
+  const potentialDriverIds = enrichedDrivers
+    .filter(driver => assignedDriverIds.has(driver.driverId)
+      || isPotentiallyDispatchAvailable(driver, statusResponse.drivers.find(item => item.driverId === driver.driverId)))
+    .map(driver => driver.driverId);
+  const availableTimesPromise = potentialDriverIds.length
+    ? getAvailableTimes(planningDate, potentialDriverIds, token)
+    : Promise.resolve([] as DispatchAvailableTimeDto[]);
   const availableTimeByDriver = new Map<string, DispatchAvailableTimeDto>();
   // Fetch legal-start calculations after rendering the core Dispatch board.
   // Server-side checks still govern allocations.
