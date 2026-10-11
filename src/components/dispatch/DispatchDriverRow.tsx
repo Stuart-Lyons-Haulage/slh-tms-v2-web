@@ -195,7 +195,9 @@ export function DispatchDriverRow({
     });
   }
 
-  return <tr className={driver.onLeave ? "smart-dispatch-row on-leave" : blocked ? "smart-dispatch-row blocked" : driver.needsReturn ? "smart-dispatch-row return-needed" : "smart-dispatch-row"}>
+  const availabilityTone = driver.onLeave ? "on-leave" : blocked ? "blocked" : driver.needsReturn ? "return-needed" : "available";
+  const dispatchTone = samsaraState ? "samsara-sent" : lockedToDriver ? "allocated" : "";
+  return <tr className={`smart-dispatch-row ${availabilityTone} ${dispatchTone}`.trim()}>
     <td className="smart-driver-cell">
       <strong>{driver.name}</strong>
       <div className="smart-driver-meta">
