@@ -200,8 +200,7 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
         setAction(undefined);
         void getSmartDispatch(planningDate, access, applyOptionalEnrichment, applyDeferredAvailableTimes).then(loadedData => {
           if (!isCurrent()) return;
-          if (!isCurrent()) return;
-      const enriched = pendingEnrichment ? { ...loadedData, ...pendingEnrichment } : loadedData;
+          const enriched = pendingEnrichment ? { ...loadedData, ...pendingEnrichment } : loadedData;
           const data = pendingAvailableTimes ? { ...enriched, availableTimes: pendingAvailableTimes } : enriched;
           dispatchSnapshotCache.set(cacheKey, data);
           setSnapshot(data);
@@ -213,6 +212,7 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
       const loadedData = force
         ? await getSmartDispatch(planningDate, access, applyOptionalEnrichment, applyDeferredAvailableTimes)
         : await dispatchSnapshotCache.getOrLoad(cacheKey, () => getSmartDispatch(planningDate, access, applyOptionalEnrichment, applyDeferredAvailableTimes));
+      if (!isCurrent()) return;
       const enriched = pendingEnrichment ? { ...loadedData, ...pendingEnrichment } : loadedData;
       const data = pendingAvailableTimes ? { ...enriched, availableTimes: pendingAvailableTimes } : enriched;
       const initialSelections = buildInitialSelections(data.drivers, data.runs, data.equipment);
