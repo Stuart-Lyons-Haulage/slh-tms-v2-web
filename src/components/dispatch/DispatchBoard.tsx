@@ -165,6 +165,7 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
       const cacheKey = dispatchCacheKey(access, planningDate);
       const cached = !force ? dispatchSnapshotCache.get(cacheKey) : undefined;
       let pendingEnrichment: SmartDispatchOptionalEnrichment | undefined;
+      let pendingAvailableTimes: DispatchAvailableTimeDto[] | undefined;
       const applyOptionalEnrichment = (enrichment: SmartDispatchOptionalEnrichment) => {
         pendingEnrichment = enrichment;
         setSnapshot(current => {
@@ -175,6 +176,7 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
         });
       };
       const applyDeferredAvailableTimes = (rows: DispatchAvailableTimeDto[]) => {
+        pendingAvailableTimes = rows;
         setAvailableTimes(availableTimesByDriver(rows));
         setSelections(current => applyAvailableTimes(current, rows));
         setSnapshot(current => {
@@ -192,7 +194,8 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
         setFailures([]);
         setAction(undefined);
         void getSmartDispatch(planningDate, access, applyOptionalEnrichment, applyDeferredAvailableTimes).then(loadedData => {
-          const data = pendingEnrichment ? { ...loadedData, ...pendingEnrichment } : loadedData;
+          const enriched = pendingEnrichment ? { ...loadedData, ...pendingEnrichment } : loadedData;
+          const data = pendingAvailableTimes ? { ...enriched, availableTimes: pendingAvailableTimes } : enriched;
           dispatchSnapshotCache.set(cacheKey, data);
           setSnapshot(data);
           setSelections(current => applyAvailableTimes(current, data.availableTimes));
@@ -203,7 +206,8 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
       const loadedData = force
         ? await getSmartDispatch(planningDate, access, applyOptionalEnrichment, applyDeferredAvailableTimes)
         : await dispatchSnapshotCache.getOrLoad(cacheKey, () => getSmartDispatch(planningDate, access, applyOptionalEnrichment, applyDeferredAvailableTimes));
-      const data = pendingEnrichment ? { ...loadedData, ...pendingEnrichment } : loadedData;
+      const enriched = pendingEnrichment ? { ...loadedData, ...pendingEnrichment } : loadedData;
+      const data = pendingAvailableTimes ? { ...enriched, availableTimes: pendingAvailableTimes } : enriched;
       const initialSelections = buildInitialSelections(data.drivers, data.runs, data.equipment);
       const rows = data.availableTimes;
       dispatchSnapshotCache.set(cacheKey, data);
