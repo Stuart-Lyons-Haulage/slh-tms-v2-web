@@ -64,6 +64,23 @@ type SamsaraDispatchStatusResponse = {
   runs: SamsaraDispatchState[];
 };
 
+export async function getSamsaraDispatchStatus(planningDate: string, token: string): Promise<{
+  configured: boolean;
+  connectionMessage?: string;
+  staleRouteCount: number;
+  runs: Record<string, SamsaraDispatchState>;
+}> {
+  const status = await request<SamsaraDispatchStatusResponse>(
+    `/api/v1/integrations/samsara/dispatch/status?date=${encodeURIComponent(planningDate)}`, token, undefined, DISPATCH_READ_TIMEOUT_MS
+  );
+  return {
+    configured: status.configured && status.connected,
+    connectionMessage: status.connectionMessage,
+    staleRouteCount: status.staleRouteCount || 0,
+    runs: Object.fromEntries(status.runs.map(run => [run.runId, run]))
+  };
+}
+
 export type SmartDispatchOptionalEnrichment = {
   drivers: DispatchDriverDto[];
   samsaraConfigured: boolean;
