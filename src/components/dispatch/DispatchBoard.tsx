@@ -400,14 +400,38 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
         setSelections(current => ({ ...current, [driver.driverId]: effectiveSelection }));
       }
 
-      if (lockedRunId(driver.driverId) !== effectiveSelection.runId) {
-        await allocateDispatchRun(effectiveSelection.runId, driver.driverId, effectiveSelection, access);
-        setNotice(`${snapshot.runs.find(run => run.runId === effectiveSelection.runId)?.reference || "Route"} allocated to ${driver.name}. Tacho, Sage and Fleetio checks passed; allocation secured in SLH TMS.`);
-        onLocked?.();
-      }
-
-      await refresh(true);
-      setNotice(`${snapshot.runs.find(run => run.runId === effectiveSelection.runId)?.reference || "Route"} allocation secured for ${driver.name}. Use Export to Samsara when the route is ready to send.`);
+      const saved = await allocateDispatchRun(effectiveSelection.runId, driver.driverId, effectiveSelection, access);
+      setSnapshot(current => {
+        if (!current) return current;
+        const updated = {
+          ...current,
+          equipment: {
+            ...current.equipment,
+            loads: current.equipment.loads.map(load => load.id !== saved.id ? load : {
+              ...load,
+              driverId: saved.driverId || undefined,
+              vehicleId: saved.vehicleId || undefined,
+              trailerId: saved.trailerId || undefined,
+              plannedStartUtc: saved.plannedStartUtc || effectiveSelection.plannedStartTime,
+              status: saved.status || load.status
+            })
+          }
+        };
+        dispatchSnapshotCache.set(dispatchCacheKey(access, planningDate), updated);
+        return updated;
+      });
+      setSelections(current => {
+        const next = { ...current };
+        Object.entries(next).forEach(([ownerId, ownerSelection]) => {
+          if (ownerId !== driver.driverId && ownerSelection.runId === saved.id) {
+            next[ownerId] = { ...ownerSelection, runId: "", vehicleId: "", trailerId: "", plannedStartTime: undefined };
+          }
+        });
+        next[driver.driverId] = effectiveSelection;
+        return next;
+      });
+      setNotice(`${snapshot.runs.find(run => run.runId === effectiveSelection.runId)?.reference || "Route"} allocation saved for ${driver.name}. Tacho, Sage and Fleetio checks passed; export to Samsara when ready.`);
+      onLocked?.();
     } catch (exception) {
       const reason = exception instanceof Error ? exception.message : "Dispatch could not be prepared.";
       setNotice(`Dispatch failed for ${driver.name}: ${reason}`);
