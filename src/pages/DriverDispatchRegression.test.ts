@@ -161,6 +161,16 @@ describe("Driver Dispatch UI contract", () => {
     expect(smartDispatchCss).toContain(".smart-dispatch-row.on-leave");
   });
 
+  it("applies allocation responses locally without reloading the Dispatch board", () => {
+    const allocationStart = authoritativeSource.indexOf("async function prepareDispatch");
+    const allocationEnd = authoritativeSource.indexOf("async function refreshSamsaraStatus", allocationStart);
+    const allocationSource = authoritativeSource.slice(allocationStart, allocationEnd);
+    expect(allocationSource).toContain("const saved = await allocateDispatchRun");
+    expect(allocationSource).toContain("dispatchSnapshotCache.set");
+    expect(allocationSource).not.toContain("await refresh(true)");
+    expect(apiSource).toContain("return request<LegacyDispatchLoad>");
+  });
+
   it("exposes Dispatch immediately for a selected row and allocates it before route export", () => {
     expect(rowSource).toContain('action === "allocate" && selection.runId');
     expect(rowSource).toContain('{busy ? "Allocating…" : "Dispatch"}');
