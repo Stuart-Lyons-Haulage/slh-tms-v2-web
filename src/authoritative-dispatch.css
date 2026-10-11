@@ -198,6 +198,24 @@
   background: rgba(255,255,255,.2);
   text-align: center;
 }
+/* Allocation and handoff progress are visible on the driver card:
+   amber means assigned in the TMS; green means a Samsara route is confirmed. */
+@media (min-width: 1151px) {
+  .dispatch-driver-pool-collapse > summary { list-style: none; cursor: pointer; }
+  .dispatch-driver-pool-collapse > summary::-webkit-details-marker { display: none; }
+  .dispatch-driver-pool-collapse > summary::after {
+    content: "⌄";
+    margin-left: auto;
+    font-size: 1.1rem;
+    transition: transform .15s ease;
+  }
+  .dispatch-driver-pool-collapse:not([open]) > summary::after { transform: rotate(-90deg); }
+  .dispatch-driver-pool-collapse:not([open]) { position: sticky; top: 12px; }
+  .dispatch-driver-pool .smart-dispatch-table tbody tr.available { border-left-color: #8796a3; }
+  .dispatch-driver-pool .smart-dispatch-table tbody tr.allocated { border-left-color: #dc9a18; background: #fff8e8; }
+  .dispatch-driver-pool .smart-dispatch-table tbody tr.samsara-sent { border-left-color: #229268; background: #f0fbf5; }
+}
+
 .dispatch-driver-pool-help {
   margin: 0;
   padding: 10px 14px;
