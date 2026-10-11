@@ -124,7 +124,8 @@ function runDetail(run: DispatchRunDto, equipment: DispatchEquipmentWorkbench): 
 export async function getSmartDispatch(
   planningDate: string,
   token: string,
-  onOptionalEnrichment?: (enrichment: SmartDispatchOptionalEnrichment) => void
+  onOptionalEnrichment?: (enrichment: SmartDispatchOptionalEnrichment) => void,
+  onAvailableTimes?: (availableTimes: DispatchAvailableTimeDto[]) => void
 ): Promise<{
   drivers: DispatchDriverDto[];
   runs: DispatchRunDto[];
@@ -215,7 +216,13 @@ export async function getSmartDispatch(
   // Keep the full classified roster visible in the availability workbench.
   // Blocked and unconfirmed people remain visible with their reasons; allocation
   // controls continue to enforce these decisions.
-  const availableTimeByDriver = new Map((await availableTimesPromise).map(item => [item.driverId, item]));
+  const availableTimeByDriver = new Map<string, DispatchAvailableTimeDto>();
+  // Fetch legal-start calculations after rendering the core Dispatch board.
+  // Server-side checks still govern allocations.
+  void availableTimesPromise.then(rows => {
+    rows.forEach(item => availableTimeByDriver.set(item.driverId, item));
+    onAvailableTimes?.(rows);
+  }).catch(() => undefined);
   const annotateAvailability = (items: DispatchDriverDto[]) => items.map(driver => {
     const legal = availableTimeByDriver.get(driver.driverId);
     if (!legal?.breachDetail || driver.blockedReason?.includes(legal.breachDetail)) return driver;
@@ -265,7 +272,7 @@ export async function getSmartDispatch(
     drivers: annotateAvailability(enrichedDrivers),
     runs: runs.map(run => runDetail(run, equipment)),
     equipment,
-    availableTimes: [...availableTimeByDriver.values()],
+    availableTimes: [],
     statuses: Object.fromEntries(statusResponse.drivers.map(status => [status.driverId, status])),
     visibility,
     availability,
