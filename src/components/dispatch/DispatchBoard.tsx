@@ -6,7 +6,7 @@ import { DispatchDriverRow } from "./DispatchDriverRow";
 import { DispatchSnapshotCache } from "./dispatchSnapshotCache";
 import { DispatchFilters } from "./DispatchFilters";
 import { rankDriversForRun } from "./dispatchRunRanking";
-import { allocateDispatchRun, downloadSamsaraCsv, getAvailableTimes, getSmartDispatch, sendRunToSamsara, syncDispatchDrivers, syncSamsaraMappings, unassignDispatchRun } from "./dispatchApi";
+import { allocateDispatchRun, downloadSamsaraCsv, getAvailableTimes, getSmartDispatch, sendRunToSamsara, syncDispatchDrivers, syncSamsaraMappings, unassignDispatchRun, type SmartDispatchOptionalEnrichment } from "./dispatchApi";
 import {
   applyAvailableTimes,
   applyAvailableTime,
@@ -164,17 +164,36 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
       const access = await token();
       const cacheKey = dispatchCacheKey(access, planningDate);
       const cached = !force ? dispatchSnapshotCache.get(cacheKey) : undefined;
+      let pendingEnrichment: SmartDispatchOptionalEnrichment | undefined;
+      const applyOptionalEnrichment = (enrichment: SmartDispatchOptionalEnrichment) => {
+        pendingEnrichment = enrichment;
+        setSnapshot(current => {
+          if (!current) return current;
+          const updated = { ...current, ...enrichment };
+          dispatchSnapshotCache.set(cacheKey, updated);
+          return updated;
+        });
+      };
       if (cached) {
         const initialSelections = buildInitialSelections(cached.drivers, cached.runs, cached.equipment);
         setSnapshot(cached);
         setSelections(applyAvailableTimes(initialSelections, cached.availableTimes));
         setAvailableTimes(availableTimesByDriver(cached.availableTimes));
         setFailures([]);
+        setAction(undefined);
+        void getSmartDispatch(planningDate, access, applyOptionalEnrichment).then(loadedData => {
+          const data = pendingEnrichment ? { ...loadedData, ...pendingEnrichment } : loadedData;
+          dispatchSnapshotCache.set(cacheKey, data);
+          setSnapshot(data);
+          setSelections(current => applyAvailableTimes(current, data.availableTimes));
+          setAvailableTimes(availableTimesByDriver(data.availableTimes));
+        }).catch(exception => setError(exception instanceof Error ? exception.message : "Dispatch refresh failed."));
         return;
       }
-      const data = force
-        ? await getSmartDispatch(planningDate, access)
-        : await dispatchSnapshotCache.getOrLoad(cacheKey, () => getSmartDispatch(planningDate, access));
+      const loadedData = force
+        ? await getSmartDispatch(planningDate, access, applyOptionalEnrichment)
+        : await dispatchSnapshotCache.getOrLoad(cacheKey, () => getSmartDispatch(planningDate, access, applyOptionalEnrichment));
+      const data = pendingEnrichment ? { ...loadedData, ...pendingEnrichment } : loadedData;
       const initialSelections = buildInitialSelections(data.drivers, data.runs, data.equipment);
       const rows = data.availableTimes;
       dispatchSnapshotCache.set(cacheKey, data);
