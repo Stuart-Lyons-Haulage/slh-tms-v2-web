@@ -451,7 +451,12 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
         }
       }
 
-      await refreshSamsaraStatus(access);
+      try {
+        await refreshSamsaraStatus(access);
+      } catch {
+        setNotice(`${exported} route(s) sent; Samsara status could not be reloaded. Refresh Dispatch to confirm.`);
+        return;
+      }
       setFailures(batchFailures);
       if (exported > 0)
         setNotice(`${exported} route${exported === 1 ? "" : "s"} exported to Samsara${batchFailures.length ? `; ${batchFailures.length} need attention` : "."}`);
@@ -472,8 +477,12 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
       const access = await token();
       await syncSamsaraMappings(planningDate, access);
       const result = await sendRunToSamsara(selection.runId, access);
-      await refreshSamsaraStatus(access);
-      setNotice(result.message);
+      try {
+        await refreshSamsaraStatus(access);
+        setNotice(result.message);
+      } catch {
+        setNotice(`${result.message} Samsara status refresh failed; refresh Dispatch to confirm the latest state.`);
+      }
     } catch (exception) {
        const reason = exception instanceof Error ? exception.message : "The route could not be sent to Samsara.";
       setFailures(current => [...current.filter(failure => failure.driverId !== driver.driverId), {
