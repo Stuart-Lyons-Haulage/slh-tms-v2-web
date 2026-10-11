@@ -1,4 +1,4 @@
-import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAccessToken } from "../../lib/auth";
 import { updateRunRelay } from "../../api/runs";
 import "../../smart-dispatch.css";
@@ -156,8 +156,11 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
   const [relayBusyId, setRelayBusyId] = useState<string>();
+  const refreshGeneration = useRef(0);
 
   const refresh = useCallback(async (force = false) => {
+    const generation = ++refreshGeneration.current;
+    const isCurrent = () => generation === refreshGeneration.current;
     setAction(current => current || "refresh");
     setError(undefined);
     try {
@@ -167,6 +170,7 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
       let pendingEnrichment: SmartDispatchOptionalEnrichment | undefined;
       let pendingAvailableTimes: DispatchAvailableTimeDto[] | undefined;
       const applyOptionalEnrichment = (enrichment: SmartDispatchOptionalEnrichment) => {
+        if (!isCurrent()) return;
         pendingEnrichment = enrichment;
         setSnapshot(current => {
           if (!current) return current;
@@ -176,6 +180,7 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
         });
       };
       const applyDeferredAvailableTimes = (rows: DispatchAvailableTimeDto[]) => {
+        if (!isCurrent()) return;
         pendingAvailableTimes = rows;
         setAvailableTimes(availableTimesByDriver(rows));
         setSelections(current => applyAvailableTimes(current, rows));
@@ -194,13 +199,15 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
         setFailures([]);
         setAction(undefined);
         void getSmartDispatch(planningDate, access, applyOptionalEnrichment, applyDeferredAvailableTimes).then(loadedData => {
-          const enriched = pendingEnrichment ? { ...loadedData, ...pendingEnrichment } : loadedData;
+          if (!isCurrent()) return;
+          if (!isCurrent()) return;
+      const enriched = pendingEnrichment ? { ...loadedData, ...pendingEnrichment } : loadedData;
           const data = pendingAvailableTimes ? { ...enriched, availableTimes: pendingAvailableTimes } : enriched;
           dispatchSnapshotCache.set(cacheKey, data);
           setSnapshot(data);
           setSelections(current => applyAvailableTimes(current, data.availableTimes));
           setAvailableTimes(availableTimesByDriver(data.availableTimes));
-        }).catch(exception => setError(exception instanceof Error ? exception.message : "Dispatch refresh failed."));
+        }).catch(exception => { if (isCurrent()) setError(exception instanceof Error ? exception.message : "Dispatch refresh failed."); });
         return;
       }
       const loadedData = force
@@ -216,9 +223,9 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
       setAvailableTimes(availableTimesByDriver(rows));
       setFailures([]);
     } catch (exception) {
-      setError(exception instanceof Error ? exception.message : "Driver Dispatch could not be loaded.");
+      if (isCurrent()) setError(exception instanceof Error ? exception.message : "Driver Dispatch could not be loaded.");
     } finally {
-      setAction(undefined);
+      if (isCurrent()) setAction(undefined);
     }
   }, [planningDate, token]);
 
