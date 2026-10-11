@@ -58,11 +58,12 @@ function runTime(value?: string): string {
   return Number.isNaN(date.getTime()) ? "Time not set" : date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 }
 
-function RouteSidebar({ runs, owners, allocatedRunIds, drivers, vehicles, trailers, selections, statuses, failures, busyDriverId, onSelectionChange, onDispatch, onSamsaraAndDispatch, onDownloadSamsaraCsv }: {
+function RouteSidebar({ runs, owners, allocatedRunIds, drivers, allDrivers, vehicles, trailers, selections, statuses, failures, busyDriverId, onSelectionChange, onDispatch, onSamsaraAndDispatch, onDownloadSamsaraCsv }: {
   runs: DispatchRunDto[];
   owners: Record<string, string | undefined>;
   allocatedRunIds: Set<string>;
   drivers: DispatchDriverDto[];
+  allDrivers: DispatchDriverDto[];
   vehicles: SmartDispatchSnapshot["equipment"]["vehicles"];
   trailers: SmartDispatchSnapshot["equipment"]["trailers"];
   selections: DispatchSelectionMap;
@@ -83,7 +84,7 @@ function RouteSidebar({ runs, owners, allocatedRunIds, drivers, vehicles, traile
     <div className="smart-run-card-list">
       {runs.map(run => {
         const ownerId = owners[run.runId];
-        const owner = ownerId ? drivers.find(driver => driver.driverId === ownerId) : undefined;
+        const owner = ownerId ? allDrivers.find(driver => driver.driverId === ownerId) : undefined;
         const suggestedDrivers = drivers.filter(driver => driver.suggestedRunId === run.runId);
         const rankedDrivers = rankDriversForRun(run, drivers, owners)
           .sort((left, right) => Number(suggestedDrivers.includes(right.driver)) - Number(suggestedDrivers.includes(left.driver)) || right.score - left.score);
@@ -91,8 +92,9 @@ function RouteSidebar({ runs, owners, allocatedRunIds, drivers, vehicles, traile
         const selected = ownerId ? selections[ownerId] || emptyDispatchSelection() : emptyDispatchSelection();
         const status = ownerId ? statuses[ownerId] : undefined;
         const rowFailures = failures.filter(failure => failure.runId === run.runId);
-        const selectableDrivers = drivers.filter(driver => !driver.isBlocked || driver.driverId === ownerId);
-        const canExport = Boolean(ownerId && selected.runId && selected.vehicleId);
+        const selectableDrivers = drivers;
+        const ownerAvailable = Boolean(ownerId && drivers.some(driver => driver.driverId === ownerId));
+        const canExport = Boolean(ownerAvailable && selected.runId && selected.vehicleId);
         const allocated = allocatedRunIds.has(run.runId);
         return <article className={`smart-run-card ${allocated ? "allocated" : "available"}`} key={run.runId}>
           <div className="smart-run-card-title">
@@ -111,8 +113,10 @@ function RouteSidebar({ runs, owners, allocatedRunIds, drivers, vehicles, traile
               onSelectionChange(driverId, { runId: run.runId });
             }}>
               <option value="">Select driver…</option>
+              {owner && !ownerAvailable && <option value={owner.driverId} disabled>{owner.name} · currently allocated · unavailable</option>}
               {selectableDrivers.map(driver => <option key={driver.driverId} value={driver.driverId}>{driver.name} · {driver.driverCode}</option>)}
             </select></label>
+            {owner && !ownerAvailable && <small className="smart-run-warning">{statuses[owner.driverId]?.availabilityMessage || "This route remains allocated, but the current driver is not available for a new dispatch."}</small>}
             <label>Vehicle<select aria-label={`Vehicle for ${run.reference}`} value={selected.vehicleId} disabled={!ownerId} onChange={event => ownerId && onSelectionChange(ownerId, { vehicleId: event.target.value })}>
               <option value="">Select vehicle…</option>
               {vehicles.filter(vehicle => vehicle.active !== false).map(vehicle => <option key={vehicle.id} value={vehicle.id}>{vehicle.registration}{vehicle.fleetNumber ? ` · ${vehicle.fleetNumber}` : ""}</option>)}
@@ -654,6 +658,7 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
         owners={runOwnerById}
         allocatedRunIds={new Set(snapshot.equipment.loads.filter(load => Boolean(load.driverId)).map(load => load.id))}
         drivers={availableWorkforce}
+        allDrivers={snapshot.drivers}
         vehicles={snapshot.equipment.vehicles}
         trailers={snapshot.equipment.trailers}
         selections={selections}
