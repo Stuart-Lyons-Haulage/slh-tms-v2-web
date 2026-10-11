@@ -137,6 +137,15 @@ describe("Driver Dispatch UI contract", () => {
     expect(authoritativeCss).toContain("margin-top: -54px");
   });
 
+  it("keeps available driver cards collapsible and colors allocation through Samsara handoff", () => {
+    expect(authoritativeSource).toContain('<details className="smart-dispatch-table-wrap dispatch-driver-pool dispatch-driver-pool-collapse" aria-label="Available drivers" open>');
+    expect(authoritativeSource).toContain('drivers={availableWorkforce}');
+    expect(authoritativeSource).toContain('allDrivers={snapshot.drivers}');
+    expect(rowSource).toContain('samsaraState ? "samsara-sent" : lockedToDriver ? "allocated"');
+    expect(authoritativeCss).toContain('tr.allocated { border-left-color: #dc9a18');
+    expect(authoritativeCss).toContain('tr.samsara-sent { border-left-color: #229268');
+  });
+
   it("uses Routes wording and carries Driver Master/Sage duty and leave state into dispatch", () => {
     expect(authoritativeSource).toContain('aria-label="Routes ready for driver allocation"');
     expect(authoritativeSource).toContain("<strong>Routes</strong>");
@@ -146,10 +155,20 @@ describe("Driver Dispatch UI contract", () => {
     expect(filterSource).toContain("Unallocated");
     expect(apiSource).toContain("authorityByDriver.has(driver.driverId)");
     expect(apiSource).toContain("onLeave: authority?.onLeave === true");
-    expect(rowSource).toContain('driver.onLeave ? "smart-dispatch-row on-leave"');
+    expect(rowSource).toContain('const availabilityTone = driver.onLeave ? "on-leave"');
     expect(rowSource).toContain("if (day >= 7) return \"red\"");
     expect(rowSource).toContain("if (day >= 5) return \"amber\"");
     expect(smartDispatchCss).toContain(".smart-dispatch-row.on-leave");
+  });
+
+  it("applies allocation responses locally without reloading the Dispatch board", () => {
+    const allocationStart = authoritativeSource.indexOf("async function prepareDispatch");
+    const allocationEnd = authoritativeSource.indexOf("async function refreshSamsaraStatus", allocationStart);
+    const allocationSource = authoritativeSource.slice(allocationStart, allocationEnd);
+    expect(allocationSource).toContain("const saved = await allocateDispatchRun");
+    expect(allocationSource).toContain("dispatchSnapshotCache.set");
+    expect(allocationSource).not.toContain("await refresh(true)");
+    expect(apiSource).toContain("return request<LegacyDispatchLoad>");
   });
 
   it("exposes Dispatch immediately for a selected row and allocates it before route export", () => {

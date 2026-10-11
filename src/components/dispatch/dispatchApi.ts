@@ -8,6 +8,7 @@ import type {
   DispatchEquipmentWorkbench,
   DispatchHistoryItem,
   DispatchLockResponse,
+  LegacyDispatchLoad,
   DispatchRunDto,
   DispatchVisibilitySnapshot
 } from "./types";
@@ -373,8 +374,8 @@ export async function allocateDispatchRun(
   driverId: string,
   selection: DispatchAllocationSelection,
   token: string
-): Promise<void> {
-  await request(`/api/v1/runs/${encodeURIComponent(runId)}/allocation`, token, {
+): Promise<LegacyDispatchLoad> {
+  return request<LegacyDispatchLoad>(`/api/v1/runs/${encodeURIComponent(runId)}/allocation`, token, {
     method: "PUT",
     body: JSON.stringify({
       driverId,

@@ -58,11 +58,12 @@ function runTime(value?: string): string {
   return Number.isNaN(date.getTime()) ? "Time not set" : date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 }
 
-function RouteSidebar({ runs, owners, allocatedRunIds, drivers, vehicles, trailers, selections, statuses, failures, busyDriverId, onSelectionChange, onDispatch, onSamsaraAndDispatch, onDownloadSamsaraCsv }: {
+function RouteSidebar({ runs, owners, allocatedRunIds, drivers, allDrivers, vehicles, trailers, selections, statuses, failures, busyDriverId, onSelectionChange, onDispatch, onSamsaraAndDispatch, onDownloadSamsaraCsv }: {
   runs: DispatchRunDto[];
   owners: Record<string, string | undefined>;
   allocatedRunIds: Set<string>;
   drivers: DispatchDriverDto[];
+  allDrivers: DispatchDriverDto[];
   vehicles: SmartDispatchSnapshot["equipment"]["vehicles"];
   trailers: SmartDispatchSnapshot["equipment"]["trailers"];
   selections: DispatchSelectionMap;
@@ -83,7 +84,7 @@ function RouteSidebar({ runs, owners, allocatedRunIds, drivers, vehicles, traile
     <div className="smart-run-card-list">
       {runs.map(run => {
         const ownerId = owners[run.runId];
-        const owner = ownerId ? drivers.find(driver => driver.driverId === ownerId) : undefined;
+        const owner = ownerId ? allDrivers.find(driver => driver.driverId === ownerId) : undefined;
         const suggestedDrivers = drivers.filter(driver => driver.suggestedRunId === run.runId);
         const rankedDrivers = rankDriversForRun(run, drivers, owners)
           .sort((left, right) => Number(suggestedDrivers.includes(right.driver)) - Number(suggestedDrivers.includes(left.driver)) || right.score - left.score);
@@ -91,8 +92,9 @@ function RouteSidebar({ runs, owners, allocatedRunIds, drivers, vehicles, traile
         const selected = ownerId ? selections[ownerId] || emptyDispatchSelection() : emptyDispatchSelection();
         const status = ownerId ? statuses[ownerId] : undefined;
         const rowFailures = failures.filter(failure => failure.runId === run.runId);
-        const selectableDrivers = drivers.filter(driver => !driver.isBlocked || driver.driverId === ownerId);
-        const canExport = Boolean(ownerId && selected.runId && selected.vehicleId);
+        const selectableDrivers = drivers;
+        const ownerAvailable = Boolean(ownerId && drivers.some(driver => driver.driverId === ownerId));
+        const canExport = Boolean(ownerAvailable && selected.runId && selected.vehicleId);
         const allocated = allocatedRunIds.has(run.runId);
         return <article className={`smart-run-card ${allocated ? "allocated" : "available"}`} key={run.runId}>
           <div className="smart-run-card-title">
@@ -111,8 +113,10 @@ function RouteSidebar({ runs, owners, allocatedRunIds, drivers, vehicles, traile
               onSelectionChange(driverId, { runId: run.runId });
             }}>
               <option value="">Select driver…</option>
+              {owner && !ownerAvailable && <option value={owner.driverId} disabled>{owner.name} · currently allocated · unavailable</option>}
               {selectableDrivers.map(driver => <option key={driver.driverId} value={driver.driverId}>{driver.name} · {driver.driverCode}</option>)}
             </select></label>
+            {owner && !ownerAvailable && <small className="smart-run-warning">{statuses[owner.driverId]?.availabilityMessage || "This route remains allocated, but the current driver is not available for a new dispatch."}</small>}
             <label>Vehicle<select aria-label={`Vehicle for ${run.reference}`} value={selected.vehicleId} disabled={!ownerId} onChange={event => ownerId && onSelectionChange(ownerId, { vehicleId: event.target.value })}>
               <option value="">Select vehicle…</option>
               {vehicles.filter(vehicle => vehicle.active !== false).map(vehicle => <option key={vehicle.id} value={vehicle.id}>{vehicle.registration}{vehicle.fleetNumber ? ` · ${vehicle.fleetNumber}` : ""}</option>)}
@@ -396,14 +400,38 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
         setSelections(current => ({ ...current, [driver.driverId]: effectiveSelection }));
       }
 
-      if (lockedRunId(driver.driverId) !== effectiveSelection.runId) {
-        await allocateDispatchRun(effectiveSelection.runId, driver.driverId, effectiveSelection, access);
-        setNotice(`${snapshot.runs.find(run => run.runId === effectiveSelection.runId)?.reference || "Route"} allocated to ${driver.name}. Tacho, Sage and Fleetio checks passed; allocation secured in SLH TMS.`);
-        onLocked?.();
-      }
-
-      await refresh(true);
-      setNotice(`${snapshot.runs.find(run => run.runId === effectiveSelection.runId)?.reference || "Route"} allocation secured for ${driver.name}. Use Export to Samsara when the route is ready to send.`);
+      const saved = await allocateDispatchRun(effectiveSelection.runId, driver.driverId, effectiveSelection, access);
+      setSnapshot(current => {
+        if (!current) return current;
+        const updated = {
+          ...current,
+          equipment: {
+            ...current.equipment,
+            loads: current.equipment.loads.map(load => load.id !== saved.id ? load : {
+              ...load,
+              driverId: saved.driverId || undefined,
+              vehicleId: saved.vehicleId || undefined,
+              trailerId: saved.trailerId || undefined,
+              plannedStartUtc: saved.plannedStartUtc || effectiveSelection.plannedStartTime,
+              status: saved.status || load.status
+            })
+          }
+        };
+        dispatchSnapshotCache.set(dispatchCacheKey(access, planningDate), updated);
+        return updated;
+      });
+      setSelections(current => {
+        const next = { ...current };
+        Object.entries(next).forEach(([ownerId, ownerSelection]) => {
+          if (ownerId !== driver.driverId && ownerSelection.runId === saved.id) {
+            next[ownerId] = { ...ownerSelection, runId: "", vehicleId: "", trailerId: "", plannedStartTime: undefined };
+          }
+        });
+        next[driver.driverId] = effectiveSelection;
+        return next;
+      });
+      setNotice(`${snapshot.runs.find(run => run.runId === effectiveSelection.runId)?.reference || "Route"} allocation saved for ${driver.name}. Tacho, Sage and Fleetio checks passed; export to Samsara when ready.`);
+      onLocked?.();
     } catch (exception) {
       const reason = exception instanceof Error ? exception.message : "Dispatch could not be prepared.";
       setNotice(`Dispatch failed for ${driver.name}: ${reason}`);
@@ -530,8 +558,40 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
     setBusyDriverId(driver.driverId);
     setNotice(undefined);
     try {
-      await unassignDispatchRun(selection.runId, await token());
-      await refresh(true);
+      const access = await token();
+      await unassignDispatchRun(selection.runId, access);
+      setSnapshot(current => {
+        if (!current) return current;
+        const updated = {
+          ...current,
+          equipment: {
+            ...current.equipment,
+            loads: current.equipment.loads.map(load => load.id !== selection.runId ? load : {
+              ...load,
+              driverId: undefined,
+              vehicleId: undefined,
+              trailerId: undefined,
+              status: "Draft"
+            })
+          },
+          statuses: {
+            ...current.statuses,
+            [driver.driverId]: {
+              ...current.statuses[driver.driverId],
+              driverId: driver.driverId,
+              dispatchStatus: "No Run",
+              operationalStatus: "No Run",
+              driverConfirmed: false
+            }
+          }
+        };
+        dispatchSnapshotCache.set(dispatchCacheKey(access, planningDate), updated);
+        return updated;
+      });
+      setSelections(current => ({
+        ...current,
+        [driver.driverId]: { ...current[driver.driverId], runId: "", vehicleId: "", trailerId: "", plannedStartTime: undefined }
+      }));
       setNotice(`${reference} unassigned. Driver, vehicle and trailer are free to reallocate.`);
     } catch (exception) {
       setFailures(current => [...current.filter(failure => failure.driverId !== driver.driverId), {
@@ -610,11 +670,11 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
     />
 
     <div className="smart-dispatch-workspace dispatch-run-workspace">
-      <div className="smart-dispatch-table-wrap dispatch-driver-pool" aria-label="Available drivers">
-        <div className="dispatch-driver-pool-heading">
+      <details className="smart-dispatch-table-wrap dispatch-driver-pool dispatch-driver-pool-collapse" aria-label="Available drivers" open>
+        <summary className="dispatch-driver-pool-heading">
           <div><span>PLAN FROM THE WORKFORCE</span><strong>Available drivers</strong></div>
           <b>{visibleDrivers.length}</b>
-        </div>
+        </summary>
         <p className="dispatch-driver-pool-help">Employed drivers are listed first. Legal start, Sage availability and working-pattern position are shown before allocating a run.</p>
         <table className="smart-dispatch-table authoritative">
           <thead>
@@ -648,12 +708,13 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
           </tbody>
         </table>
         {visibleDrivers.length === 0 && <div className="smart-dispatch-empty">No drivers match this filter.</div>}
-      </div>
+      </details>
       <RouteSidebar
         runs={snapshot.runs}
         owners={runOwnerById}
         allocatedRunIds={new Set(snapshot.equipment.loads.filter(load => Boolean(load.driverId)).map(load => load.id))}
         drivers={availableWorkforce}
+        allDrivers={snapshot.drivers}
         vehicles={snapshot.equipment.vehicles}
         trailers={snapshot.equipment.trailers}
         selections={selections}
