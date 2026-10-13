@@ -163,11 +163,17 @@ export async function getSmartDispatch(
   // fans out to TachoMaster. Start it as soon as the authoritative workbench
   // gives us the driver IDs instead of waiting for the optional enrichment
   // requests (visibility, history and Samsara) to finish first.
-  const [drivers, runs, driverAuthority] = await Promise.all([
+  const coreResults = await Promise.allSettled([
     request<DispatchDriverDto[]>(`/api/dispatch/drivers?date=${encoded}`, token, undefined, DISPATCH_READ_TIMEOUT_MS),
     request<DispatchRunDto[]>(`/api/dispatch/runs?date=${encoded}`, token, undefined, DISPATCH_READ_TIMEOUT_MS),
     request<DriverDispatchAuthority>(`/api/v1/driver-dispatch?date=${encoded}`, token, undefined, DISPATCH_READ_TIMEOUT_MS)
   ]);
+  const degradedSources: string[] = [];
+  const drivers = coreResults[0].status === "fulfilled" ? coreResults[0].value : (degradedSources.push("drivers"), []);
+  const runs = coreResults[1].status === "fulfilled" ? coreResults[1].value : (degradedSources.push("runs"), []);
+  const driverAuthority = coreResults[2].status === "fulfilled"
+    ? coreResults[2].value
+    : (degradedSources.push("equipment"), { drivers: [], vehicles: [], trailers: [], loads: [] } as DriverDispatchAuthority);
   // History and Samsara improve the board but are not needed to allocate safely.
   // Start both in parallel with the core requests and apply them when they finish;
   // a slow optional integration must not delay the Dispatch table.
@@ -329,7 +335,8 @@ export async function getSmartDispatch(
     samsaraConfigured: false,
     samsaraConnectionMessage: "Samsara status is loading.",
     samsaraStaleRouteCount: 0,
-    samsaraDispatch: {}
+    samsaraDispatch: {},
+    degradedSources
   };
 }
 
