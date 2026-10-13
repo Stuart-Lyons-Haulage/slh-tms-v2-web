@@ -163,11 +163,17 @@ export async function getSmartDispatch(
   // fans out to TachoMaster. Start it as soon as the authoritative workbench
   // gives us the driver IDs instead of waiting for the optional enrichment
   // requests (visibility, history and Samsara) to finish first.
-  const [drivers, runs, driverAuthority] = await Promise.all([
+  const coreResults = await Promise.allSettled([
     request<DispatchDriverDto[]>(`/api/dispatch/drivers?date=${encoded}`, token, undefined, DISPATCH_READ_TIMEOUT_MS),
     request<DispatchRunDto[]>(`/api/dispatch/runs?date=${encoded}`, token, undefined, DISPATCH_READ_TIMEOUT_MS),
     request<DriverDispatchAuthority>(`/api/v1/driver-dispatch?date=${encoded}`, token, undefined, DISPATCH_READ_TIMEOUT_MS)
   ]);
+  const degradedSources: string[] = [];
+  const drivers = coreResults[0].status === "fulfilled" ? coreResults[0].value : (degradedSources.push("drivers"), []);
+  const runs = coreResults[1].status === "fulfilled" ? coreResults[1].value : (degradedSources.push("runs"), []);
+  const driverAuthority = coreResults[2].status === "fulfilled"
+    ? coreResults[2].value
+    : (degradedSources.push("equipment"), { drivers: [], vehicles: [], trailers: [], loads: [] } as DriverDispatchAuthority);
   // History and Samsara improve the board but are not needed to allocate safely.
   // Start both in parallel with the core requests and apply them when they finish;
   // a slow optional integration must not delay the Dispatch table.
@@ -182,16 +188,46 @@ export async function getSmartDispatch(
         runs: []
       } as SamsaraDispatchStatusResponse))
   ]);
+  // Status, visibility and availability are supporting feeds. They must never
+  // take down the authoritative drivers/runs/equipment board when one source is
+  // slow or temporarily unavailable. An empty snapshot is deliberately
+  // conservative: it does not promote anyone to available or clear a block.
   const [statusResponse, visibility, availability] = await Promise.all([
-    request<{ drivers: DispatchDriverStatusDto[] }>(`/api/v1/driver-dispatch-status?date=${encoded}`, token, undefined, DISPATCH_READ_TIMEOUT_MS),
-    getDispatchVisibility(planningDate, token),
+    request<{ drivers: DispatchDriverStatusDto[] }>(`/api/v1/driver-dispatch-status?date=${encoded}`, token, undefined, DISPATCH_READ_TIMEOUT_MS)
+      .catch(() => ({ drivers: [] })),
+    getDispatchVisibility(planningDate, token)
+      .catch(() => ({
+        planningDate,
+        windowDays: 0,
+        cutoffDate: planningDate,
+        drivers: []
+      } as DispatchVisibilitySnapshot)),
     getDriverAvailability(planningDate, token)
+      .catch(() => ({
+        planningDate,
+        generatedAtUtc: new Date().toISOString(),
+        summary: {
+          employedAvailable: 0,
+          agencyConfirmed: 0,
+          agencyUnconfirmed: 0,
+          casualConfirmed: 0,
+          casualUnconfirmed: 0,
+          unavailableBlocked: 0,
+          driversRequired: 0,
+          availableDrivers: 0,
+          surplusShortfall: 0
+        },
+        drivers: [],
+        classificationMismatchCount: 0
+      } as DriverAvailabilitySnapshot))
   ]);
   const visibilityByDriver = new Map(visibility.drivers.map(item => [item.driverId, item]));
   const availabilityByDriver = new Map(availability.drivers.map(item => [item.driverId, item]));
   const authorityByDriver = new Map(driverAuthority.drivers.map(item => [item.driverId, item]));
   const equipment: DispatchEquipmentWorkbench = driverAuthority;
-  const enrichedDrivers = drivers.filter(driver => authorityByDriver.has(driver.driverId)).map(driver => {
+  // The driver roster is useful on its own. Equipment/authority enriches it
+  // when available, but a failed authority read must not hide every driver.
+  const enrichedDrivers = drivers.map(driver => {
     const authority = authorityByDriver.get(driver.driverId);
     const visibilityDriver = visibilityByDriver.get(driver.driverId);
     const sharedAvailability = availabilityByDriver.get(driver.driverId);
@@ -301,7 +337,8 @@ export async function getSmartDispatch(
     samsaraConfigured: false,
     samsaraConnectionMessage: "Samsara status is loading.",
     samsaraStaleRouteCount: 0,
-    samsaraDispatch: {}
+    samsaraDispatch: {},
+    degradedSources
   };
 }
 
