@@ -641,6 +641,11 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
     </header>
 
     {notice && <div className="smart-dispatch-notice" role="status">{notice}</div>}
+    {snapshot.degradedSources?.length ? (
+      <div className="smart-dispatch-notice" role="status">
+        Dispatch is in limited mode: {snapshot.degradedSources.join(", ")} data could not be refreshed. Existing allocations remain visible; verify availability before assigning new work.
+      </div>
+    ) : null}
     {error && <div className="smart-dispatch-error inline" role="alert">{error}</div>}
     {globalLockFailures.map((failure, index) => <div className="smart-dispatch-error inline" role="alert" key={`${failure.reason}-${index}`}>{failure.reason}</div>)}
 
