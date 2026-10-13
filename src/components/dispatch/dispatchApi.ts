@@ -26,7 +26,7 @@ export type SamsaraDispatchResult = {
   externalId: string;
   created: boolean;
   updated: boolean;
-  assignment: "driver" | "vehicle";
+  assignment: "driver" | "vehicle" | "unallocated";
   samsaraDriverId?: string;
   samsaraVehicleId?: string;
   stopCount: number;

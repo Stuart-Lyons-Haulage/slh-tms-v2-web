@@ -279,7 +279,6 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
   const samsaraExportCandidates = useMemo(() => {
     if (!snapshot) return [];
     return snapshot.equipment.loads.filter(load =>
-      Boolean(load.vehicleId) &&
       (load.stops?.length || 0) >= 2 &&
       !snapshot.samsaraDispatch[load.id] &&
       !String(load.status || "").toLowerCase().includes("cancel"));
@@ -645,7 +644,7 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
           type="button"
           disabled={Boolean(action) || !snapshot.samsaraConfigured || samsaraExportCandidates.length === 0}
           onClick={() => void handleSamsaraBatch()}
-          title={!snapshot.samsaraConfigured ? "Configure Samsara in Admin before exporting routes." : samsaraExportCandidates.length === 0 ? "No allocated unsent routes are ready for Samsara." : "Export all allocated routes not already sent to Samsara."}
+          title={!snapshot.samsaraConfigured ? "Configure Samsara in Admin before exporting routes." : samsaraExportCandidates.length === 0 ? "No unsent routes with at least two stops are ready for Samsara." : "Export all unsent routes, including unallocated planning routes, to Samsara."}
         >
           {action === "samsara" ? "Exporting to Samsara…" : `Export to Samsara${samsaraExportCandidates.length ? ` (${samsaraExportCandidates.length})` : ""}`}
         </button>
