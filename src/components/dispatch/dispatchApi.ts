@@ -182,10 +182,38 @@ export async function getSmartDispatch(
         runs: []
       } as SamsaraDispatchStatusResponse))
   ]);
+  // Status, visibility and availability are supporting feeds. They must never
+  // take down the authoritative drivers/runs/equipment board when one source is
+  // slow or temporarily unavailable. An empty snapshot is deliberately
+  // conservative: it does not promote anyone to available or clear a block.
   const [statusResponse, visibility, availability] = await Promise.all([
-    request<{ drivers: DispatchDriverStatusDto[] }>(`/api/v1/driver-dispatch-status?date=${encoded}`, token, undefined, DISPATCH_READ_TIMEOUT_MS),
-    getDispatchVisibility(planningDate, token),
+    request<{ drivers: DispatchDriverStatusDto[] }>(`/api/v1/driver-dispatch-status?date=${encoded}`, token, undefined, DISPATCH_READ_TIMEOUT_MS)
+      .catch(() => ({ drivers: [] })),
+    getDispatchVisibility(planningDate, token)
+      .catch(() => ({
+        planningDate,
+        windowDays: 0,
+        cutoffDate: planningDate,
+        drivers: []
+      } as DispatchVisibilitySnapshot)),
     getDriverAvailability(planningDate, token)
+      .catch(() => ({
+        planningDate,
+        generatedAtUtc: new Date().toISOString(),
+        summary: {
+          employedAvailable: 0,
+          agencyConfirmed: 0,
+          agencyUnconfirmed: 0,
+          casualConfirmed: 0,
+          casualUnconfirmed: 0,
+          unavailableBlocked: 0,
+          driversRequired: 0,
+          availableDrivers: 0,
+          surplusShortfall: 0
+        },
+        drivers: [],
+        classificationMismatchCount: 0
+      } as DriverAvailabilitySnapshot))
   ]);
   const visibilityByDriver = new Map(visibility.drivers.map(item => [item.driverId, item]));
   const availabilityByDriver = new Map(availability.drivers.map(item => [item.driverId, item]));
