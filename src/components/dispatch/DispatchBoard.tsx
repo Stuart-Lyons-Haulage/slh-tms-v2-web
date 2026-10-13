@@ -19,6 +19,7 @@ import {
   filterDriversByEmploymentType,
   globalFailures,
   isDispatchAvailable,
+  isPotentiallyDispatchAvailable,
   rowFailures,
   type DispatchAvailableTimeMap,
   type DispatchSelectionMap
@@ -242,9 +243,15 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
 
   const availableWorkforce = useMemo(() => {
     if (!snapshot) return [];
-    return snapshot.drivers.filter(driver =>
-      isDispatchAvailable(driver, snapshot.statuses[driver.driverId], availableTimes[driver.driverId])
-    );
+    return snapshot.drivers.filter(driver => {
+      const status = snapshot.statuses[driver.driverId];
+      const availableTime = availableTimes[driver.driverId];
+      // Show centrally available people while Tacho times are loading. The
+      // allocation action still recalculates and validates legal start time.
+      return availableTime
+        ? isDispatchAvailable(driver, status, availableTime)
+        : isPotentiallyDispatchAvailable(driver, status);
+    });
   }, [availableTimes, snapshot]);
 
   const visibleDrivers = useMemo(() => {
@@ -641,6 +648,11 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
     </header>
 
     {notice && <div className="smart-dispatch-notice" role="status">{notice}</div>}
+    {snapshot.degradedSources?.length ? (
+      <div className="smart-dispatch-notice" role="status">
+        Dispatch is in limited mode: {snapshot.degradedSources.join(", ")} data could not be refreshed. Existing allocations remain visible; verify availability before assigning new work.
+      </div>
+    ) : null}
     {error && <div className="smart-dispatch-error inline" role="alert">{error}</div>}
     {globalLockFailures.map((failure, index) => <div className="smart-dispatch-error inline" role="alert" key={`${failure.reason}-${index}`}>{failure.reason}</div>)}
 
