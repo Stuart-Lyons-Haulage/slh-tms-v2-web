@@ -56,6 +56,8 @@ type IntegrationRuntimeStatus = {
     lastAttemptUtc?: string;
     lastSuccessUtc?: string;
     lastError?: string;
+    lastFailureStage?: string;
+    inProgress?: boolean;
     lastMessagesSeen?: number;
     lastMessagesIngested?: number;
   };
@@ -140,11 +142,34 @@ export function AdminIntegrationSyncControls() {
           });
         }
       }
+      if (provider === 'all') {
+        try {
+          const graph = await request<{ message: string }>('/api/v1/health/intake/poll', accessToken, { method: 'POST' });
+          rows.push({ provider: 'Graph mailbox', success: true, completedAtUtc: new Date().toISOString(), message: graph.message });
+        } catch (error) {
+          rows.push({ provider: 'Graph mailbox', success: false, completedAtUtc: new Date().toISOString(), message: error instanceof Error ? error.message : 'Graph mailbox poll could not be queued.' });
+        }
+      }
       setMessage(rows.map(item => `${item.provider}: ${item.message}`).join(' · '));
       await loadState();
       await feedHealth.refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Force refresh failed.');
+    } finally {
+      setBusy(undefined);
+    }
+  };
+
+  const pollGraph = async () => {
+    setBusy('graph');
+    setMessage(undefined);
+    try {
+      const result = await request<{ message: string }>('/api/v1/health/intake/poll', await token(), { method: 'POST' });
+      setMessage(result.message);
+      await loadState();
+      await feedHealth.refresh();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Graph mailbox poll could not be queued.');
     } finally {
       setBusy(undefined);
     }
@@ -191,6 +216,7 @@ export function AdminIntegrationSyncControls() {
       </div>
       <div className="admin-integration-actions">
         <button onClick={() => { void loadState(); void feedHealth.refresh(); }}>Check system state</button>
+        <button onClick={() => void pollGraph()} disabled={Boolean(busy)}>{busy === 'graph' ? 'Queueing mailbox poll…' : 'Poll Graph mailbox now'}</button>
         <button onClick={() => void force('tacho')} disabled={Boolean(busy)}>{busy === 'tacho' ? 'Refreshing…' : 'Force TachoMaster'}</button>
         <button onClick={() => void force('sage')} disabled={Boolean(busy)}>{busy === 'sage' ? 'Refreshing…' : 'Force Sage HR'}</button>
         <button onClick={() => void force('fleetio')} disabled={Boolean(busy)}>{busy === 'fleetio' ? 'Refreshing…' : 'Force Fleetio'}</button>
@@ -284,7 +310,8 @@ export function AdminIntegrationSyncControls() {
         {runtimeStatus?.infoMailboxGraph?.lastSuccessUtc &&
           <small>Last success: {lastReceipt(runtimeStatus.infoMailboxGraph.lastSuccessUtc)} · {runtimeStatus.infoMailboxGraph.lastMessagesSeen ?? 0} seen · {runtimeStatus.infoMailboxGraph.lastMessagesIngested ?? 0} ingested</small>}
         {runtimeStatus?.infoMailboxGraph?.lastError &&
-          <div className="notice inline-notice"><strong>Last Graph error:</strong> {runtimeStatus.infoMailboxGraph.lastError}</div>}
+          <div className="notice inline-notice"><strong>Last Graph error:</strong> {runtimeStatus.infoMailboxGraph.lastError}{runtimeStatus.infoMailboxGraph.lastFailureStage ? ` · stage: ${runtimeStatus.infoMailboxGraph.lastFailureStage}` : ''}{runtimeStatus.infoMailboxGraph.inProgress ? ' · a retry is currently running' : ''}</div>}
+        {!runtimeStatus?.infoMailboxGraph?.lastError && runtimeStatus?.infoMailboxGraph?.inProgress && <p className="hint">A Graph mailbox poll is currently running; the next refresh will show its receipt.</p>}
       </article>
     </div>
 
