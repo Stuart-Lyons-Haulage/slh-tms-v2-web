@@ -45,6 +45,14 @@ export type SamsaraDispatchState = {
   lastStopName?: string;
 };
 
+export type DispatchRosterHealth = {
+  healthy: boolean;
+  activeDrivers: number;
+  tachoLinkedDrivers: number;
+  latestTachoSyncUtc?: string;
+  message: string;
+};
+
 type DriverDispatchAuthority = DispatchEquipmentWorkbench & {
   drivers: Array<{
     driverId: string;
@@ -104,6 +112,10 @@ export async function getDriverAvailability(planningDate: string, token: string)
   return request<DriverAvailabilitySnapshot>(`/api/v1/driver-availability?date=${encodeURIComponent(planningDate)}`, token, undefined, DISPATCH_READ_TIMEOUT_MS);
 }
 
+export async function getDispatchRosterHealth(token: string): Promise<DispatchRosterHealth> {
+  return request<DispatchRosterHealth>("/api/v1/driver-dispatch/health", token, undefined, 10_000);
+}
+
 export async function getDispatchHistory(planningDate: string, token: string): Promise<DispatchHistoryItem[]> {
   return request<DispatchHistoryItem[]>(
     `/api/dispatch/history?date=${encodeURIComponent(planningDate)}`,
@@ -158,8 +170,10 @@ export async function getSmartDispatch(
   samsaraStaleRouteCount: number;
   samsaraDispatch: Record<string, SamsaraDispatchState>;
   degradedSources: string[];
+  rosterHealth: DispatchRosterHealth;
 }> {
   const encoded = encodeURIComponent(planningDate);
+  const rosterHealthPromise = getDispatchRosterHealth(token).catch(() => undefined);
   // The legal-start calculation is the slowest Dispatch dependency because it
   // fans out to TachoMaster. Start it as soon as the authoritative workbench
   // gives us the driver IDs instead of waiting for the optional enrichment
@@ -169,6 +183,12 @@ export async function getSmartDispatch(
     request<DispatchRunDto[]>(`/api/dispatch/runs?date=${encoded}`, token, undefined, DISPATCH_READ_TIMEOUT_MS),
     request<DriverDispatchAuthority>(`/api/v1/driver-dispatch?date=${encoded}`, token, undefined, DISPATCH_READ_TIMEOUT_MS)
   ]);
+  const rosterHealth = (await rosterHealthPromise) || {
+    healthy: false,
+    activeDrivers: 0,
+    tachoLinkedDrivers: 0,
+    message: "Driver Master health could not be checked."
+  };
   const degradedSources: string[] = [];
   const drivers = coreResults[0].status === "fulfilled" ? coreResults[0].value : (degradedSources.push("drivers"), []);
   const runs = coreResults[1].status === "fulfilled" ? coreResults[1].value : (degradedSources.push("runs"), []);
@@ -348,7 +368,12 @@ export async function getSmartDispatch(
     samsaraConnectionMessage: "Samsara status is loading.",
     samsaraStaleRouteCount: 0,
     samsaraDispatch: {},
-    degradedSources
+    degradedSources,
+    rosterHealth: {
+      ...rosterHealth,
+      activeDrivers: rosterHealth.activeDrivers || drivers.length,
+      healthy: rosterHealth.healthy || drivers.length > 0
+    }
   };
 }
 

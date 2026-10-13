@@ -659,6 +659,13 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
         Dispatch is in limited mode: {snapshot.degradedSources.join(", ")} data could not be refreshed. Existing allocations remain visible; verify availability before assigning new work.
       </div>
     ) : null}
+    {!snapshot.rosterHealth.healthy || snapshot.rosterHealth.activeDrivers === 0 ? (
+      <div className="smart-dispatch-error inline" role="alert">
+        <strong>Driver Master unavailable or empty.</strong>{" "}
+        {snapshot.rosterHealth.message} Refresh TachoMaster/Driver Master before allocating work.
+        {snapshot.rosterHealth.latestTachoSyncUtc ? ` Last successful sync: ${new Date(snapshot.rosterHealth.latestTachoSyncUtc).toLocaleString("en-GB")}.` : " No successful TachoMaster sync is recorded."}
+      </div>
+    ) : null}
     {error && <div className="smart-dispatch-error inline" role="alert">{error}</div>}
     {globalLockFailures.map((failure, index) => <div className="smart-dispatch-error inline" role="alert" key={`${failure.reason}-${index}`}>{failure.reason}</div>)}
 
