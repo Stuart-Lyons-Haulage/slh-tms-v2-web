@@ -9,6 +9,6 @@ Required release behaviour:
 - wait until provisioning returns to `Succeeded` after the update;
 - verify the configured image is the expected GitHub SHA;
 - verify the portal returns HTTP 200;
-- verify the same-origin `/tms-api/api/v1/health` proxy returns API health.
+- verify the direct Azure API origin `https://slh-tms-api-prod.azurewebsites.net/api/v1/health` returns API health. Azure Static Web Apps does not provide the local Docker Nginx `/tms-api` reverse proxy.
 
 This avoids false failed releases when `az containerapp update` returns before the Azure control-plane operation has fully settled.

@@ -131,7 +131,7 @@ All `VITE_` values are public build-time configuration. Never put client secrets
 
 | Variable | Purpose |
 | --- | --- |
-| `VITE_API_BASE_URL` | API origin or proxy, without `/api/v1`. Production uses `/tms-api`. |
+| `VITE_API_BASE_URL` | API origin or proxy, without `/api/v1`. Azure Static Web Apps production uses `https://slh-tms-api-prod.azurewebsites.net`; local Docker uses `/tms-api`. |
 | `VITE_ENTRA_TENANT_ID` | Microsoft Entra tenant ID. |
 | `VITE_ENTRA_CLIENT_ID` | Portal SPA application/client ID. |
 | `VITE_ENTRA_API_SCOPE` | Normally `api://<API-CLIENT-ID>/Tms.Access`. |
@@ -156,7 +156,7 @@ Deployment flow:
 5. The workflow waits for any existing Container App operation to settle.
 6. The exact image for the Git SHA is deployed to `slh-tms-portal-prod`.
 7. The workflow verifies the production portal root URL.
-8. The workflow verifies the same-origin `/tms-api/api/v1/health` proxy returns healthy API output.
+8. The workflow verifies the portal and the direct Azure API origin return healthy output. The Static Web App has no reverse proxy, so `/tms-api/...` is only valid for the local Docker portal.
 
 Azure Container Apps updates are asynchronous. A CLI timeout does not always mean the deployment failed. The workflow deliberately retries and confirms the image before marking the release finished.
 
@@ -178,7 +178,7 @@ After a wallboard or integration-facing release, verify:
 1. Web GitHub checks are green.
 2. API GitHub checks are green if the backend changed.
 3. Production API `/api/v1/health` reports the intended API revision.
-4. Production portal deploy workflow has verified `/` and `/tms-api/api/v1/health`.
+4. Production portal deploy workflow has verified `/` and `https://slh-tms-api-prod.azurewebsites.net/api/v1/health`.
 5. Operations wallboard opens after sign-in.
 6. TV wallboard opens by authenticated account or TV access flow.
 7. Live runs show signed-on/card-confirmed/not-signed-on explicitly.
