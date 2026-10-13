@@ -225,7 +225,9 @@ export async function getSmartDispatch(
   const availabilityByDriver = new Map(availability.drivers.map(item => [item.driverId, item]));
   const authorityByDriver = new Map(driverAuthority.drivers.map(item => [item.driverId, item]));
   const equipment: DispatchEquipmentWorkbench = driverAuthority;
-  const enrichedDrivers = drivers.filter(driver => authorityByDriver.has(driver.driverId)).map(driver => {
+  // The driver roster is useful on its own. Equipment/authority enriches it
+  // when available, but a failed authority read must not hide every driver.
+  const enrichedDrivers = drivers.map(driver => {
     const authority = authorityByDriver.get(driver.driverId);
     const visibilityDriver = visibilityByDriver.get(driver.driverId);
     const sharedAvailability = availabilityByDriver.get(driver.driverId);
