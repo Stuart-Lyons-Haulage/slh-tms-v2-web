@@ -248,6 +248,9 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
       const availableTime = availableTimes[driver.driverId];
       // Show centrally available people while Tacho times are loading. The
       // allocation action still recalculates and validates legal start time.
+      if (snapshot.degradedSources?.includes("availability") && driver.employmentType === "Employed") {
+        return !driver.isBlocked && !driver.onLeave && !driver.partDayLeave;
+      }
       return availableTime
         ? isDispatchAvailable(driver, status, availableTime)
         : isPotentiallyDispatchAvailable(driver, status);
@@ -386,6 +389,9 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
     setNotice(undefined);
     setFailures(current => current.filter(failure => failure.driverId !== driver.driverId));
     try {
+      if (snapshot.degradedSources?.includes("availability")) {
+        throw new Error("Driver availability could not be verified. Refresh Dispatch before allocating work.");
+      }
       const vehicle = snapshot.equipment.vehicles.find(item => item.id === selection.vehicleId);
       const fleetWarning = fleetioWarning(vehicle?.fleetioStatus);
       if (fleetWarning) throw new Error(`${fleetWarning}. Resolve or change the vehicle before dispatch.`);
