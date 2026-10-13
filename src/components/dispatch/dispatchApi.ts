@@ -157,6 +157,7 @@ export async function getSmartDispatch(
   samsaraConnectionMessage?: string;
   samsaraStaleRouteCount: number;
   samsaraDispatch: Record<string, SamsaraDispatchState>;
+  degradedSources: string[];
 }> {
   const encoded = encodeURIComponent(planningDate);
   // The legal-start calculation is the slowest Dispatch dependency because it

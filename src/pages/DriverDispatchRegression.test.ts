@@ -153,7 +153,8 @@ describe("Driver Dispatch UI contract", () => {
     expect(filterSource).toContain("All people");
     expect(filterSource).toContain("Sage unmatched");
     expect(filterSource).toContain("Unallocated");
-    expect(apiSource).toContain("authorityByDriver.has(driver.driverId)");
+    expect(apiSource).toContain("const enrichedDrivers = drivers.map(driver => {");
+    expect(apiSource).toContain("authorityByDriver.get(driver.driverId)");
     expect(apiSource).toContain("onLeave: authority?.onLeave === true");
     expect(rowSource).toContain('const availabilityTone = driver.onLeave ? "on-leave"');
     expect(rowSource).toContain("if (day >= 7) return \"red\"");
@@ -209,7 +210,8 @@ describe("Driver Dispatch UI contract", () => {
 
   it("keeps the complete API payload while showing only verified available drivers in the Dispatch pool", () => {
     expect(authoritativeSource).toContain("const availableWorkforce = useMemo(() =>");
-    expect(authoritativeSource).toContain("isDispatchAvailable(driver, snapshot.statuses[driver.driverId], availableTimes[driver.driverId])");
+    expect(authoritativeSource).toContain("isPotentiallyDispatchAvailable(driver, status)");
+    expect(authoritativeSource).toContain("isDispatchAvailable(driver, status, availableTime)");
     expect(apiSource).not.toContain(".filter(driver => visibilityByDriver.has(driver.driverId))");
   });
 
