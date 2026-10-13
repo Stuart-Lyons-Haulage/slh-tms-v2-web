@@ -296,7 +296,12 @@ export function isPotentiallyDispatchAvailable(
 ): boolean {
   if (driver.isBlocked || driver.onLeave || driver.partDayLeave) return false;
   if (driver.leaveType && /\b(annual|sick|ec|holiday|maternity|paternity|unpaid|compassionate|medical)\b/i.test(driver.leaveType)) return false;
-  if (status?.availabilityStatus !== "Available") return false;
+  if (status && status.availabilityStatus !== "Available") return false;
+  // Status is a supporting feed. If it is unavailable, use the central
+  // availability snapshot already merged onto the driver instead of hiding
+  // the whole workforce.
+  if (!status && driver.availabilityConfirmed === false) return false;
+  if (!status && !driver.availabilityConfirmed && !driver.availableFrom) return false;
   const agency = /agency/i.test(driver.employmentType);
   return !agency || driver.availabilityConfirmed === true;
 }
