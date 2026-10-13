@@ -44,3 +44,10 @@ jobs:
           action: upload
           app_location: dist
           skip_app_build: true
+      - name: Verify portal and API health
+        run: |
+          set -euo pipefail
+          test "$(curl -fsS -o /dev/null -w '%{http_code}' https://tms.lyonshaulage.com/)" = "200"
+          health="$(curl -fsS https://slh-tms-api-prod.azurewebsites.net/api/v1/health)"
+          echo "$health" | grep -q '"status":"healthy"'
+          echo "API health verified directly against the Azure API origin."
