@@ -162,6 +162,25 @@ export function UndatedOrderReviewQueue() {
     }
   }
 
+  async function rejectRow(row: PendingRow) {
+    setBusyId(row.item.id);
+    setError(undefined);
+    try {
+      await request(`/api/v1/staging/${row.item.id}/reject`, await token(), {
+        method: "POST",
+        body: JSON.stringify({ note: "Rejected from Needs attention after source-evidence review." }),
+      });
+      if (editing?.id === row.item.id) setEditing(undefined);
+      if (sourceEmailStagingId === row.item.id) setSourceEmailStagingId(undefined);
+      await refresh();
+      window.dispatchEvent(new Event(SILENT_API_REFRESH_EVENT));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "The staged order could not be rejected.");
+    } finally {
+      setBusyId(undefined);
+    }
+  }
+
   if (!loading && undatedRows.length === 0 && complete) return null;
 
   return <section className="panel order-selection-panel" style={{ marginBottom: 18 }}>
@@ -197,6 +216,7 @@ export function UndatedOrderReviewQueue() {
           <div className="bulk-order-actions">
             {hasSource && <button type="button" className="source-email-review-button" onClick={() => setSourceEmailStagingId(row.item.id)} disabled={Boolean(busyId)}>Review source email</button>}
             {!isEditing && <button type="button" onClick={() => void beginFix(row)} disabled={Boolean(busyId)}>{rowBusy ? "Loading…" : "Fix dates"}</button>}
+            {!isEditing && <button type="button" className="reject-button" onClick={() => void rejectRow(row)} disabled={Boolean(busyId)}>{rowBusy ? "Working…" : "Reject"}</button>}
             {isEditing && <>
               <button type="button" onClick={() => setEditing(undefined)} disabled={rowBusy}>Cancel</button>
               <button type="button" className="primary" onClick={() => void saveDates(row)} disabled={rowBusy}>{rowBusy ? "Saving…" : "Save dates"}</button>
