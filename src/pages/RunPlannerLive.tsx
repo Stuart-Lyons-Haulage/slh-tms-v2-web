@@ -523,6 +523,14 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
     return request<AllocationResult>("/api/v1/planning-control/allocations", access, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ orderId, loadId, date, pallets, note: "Auto-saved from live Run Planner" }) });
   }
 
+  async function allocateBatch(entries: Array<[string, number]>, loadId: string, access: string) {
+    return request<{ allocationCount: number }>("/api/v1/planning-control/allocations/batch", access, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ date, allocations: entries.map(([orderId, pallets]) => ({ orderId, loadId, date, pallets, note: "Auto-saved from live Run Planner" })) }),
+    });
+  }
+
   async function syncStops(loadId: string, lines: RunLine[], access: string) {
     const stops = buildStops(lines);
     if (!stops.length) {
@@ -667,11 +675,10 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
     setBusyKey(key);
     try {
       const access = await token();
-      // Allocation writes share the planning ledger. Serialise them to avoid
-      // concurrent ledger reads/locks returning a gateway 504 on consolidated jobs.
-      for (const [orderId, quantity] of Object.entries(allocations)) {
-        await allocate(orderId, loadId, quantity, access);
-      }
+      // Save the whole consolidated row in one server transaction. This keeps
+      // Pallet Control from seeing a partially-written row and removes the
+      // repeated ledger reads that previously caused slow mobile saves/504s.
+      await allocateBatch(Object.entries(allocations), loadId, access);
       if (pallets === 0) await syncStops(loadId, linesAfterEdit, access);
       dirtyRunKeys.current.delete(runKey);
       // Re-read the authoritative run/order projection before notifying Pallet Control.
