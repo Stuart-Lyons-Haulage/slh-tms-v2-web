@@ -75,6 +75,12 @@ export type DispatchRosterHealth = {
 type DriverDispatchAuthority = DispatchEquipmentWorkbench & {
   drivers: Array<{
     driverId: string;
+    employeeNumber?: string;
+    displayName?: string;
+    driverType?: string;
+    driverGroup?: string;
+    skills?: string;
+    coding?: string;
     dayNumber: number;
     onLeave: boolean;
     leaveType?: string;
@@ -84,12 +90,13 @@ type DriverDispatchAuthority = DispatchEquipmentWorkbench & {
 };
 
 function authorityFallbackDriver(driver: DriverDispatchAuthority["drivers"][number]): DispatchDriverDto {
+  const employmentType = driver.driverType || driver.driverGroup || "Unknown";
   return {
     driverId: driver.driverId,
-    driverCode: driver.driverId,
-    name: driver.driverId,
-    employmentType: "Unknown",
-    skills: "",
+    driverCode: driver.coding || driver.employeeNumber || driver.driverId,
+    name: driver.displayName || driver.employeeNumber || driver.driverId,
+    employmentType,
+    skills: driver.skills || "",
     holidayDates: [],
     contractedDays: [],
     tachoData: {
@@ -511,45 +518,3 @@ export async function allocateDispatchRun(
   return request<LegacyDispatchLoad>(`/api/v1/runs/${encodeURIComponent(runId)}/allocation`, token, {
     method: "PUT",
     body: JSON.stringify({
-      driverId,
-      vehicleId: selection.vehicleId,
-      trailerId: selection.trailerId || null,
-      plannedStartUtc: selection.plannedStartTime || null,
-      useReducedDailyRest: selection.useReducedDailyRest === true
-    })
-  }, 90000);
-}
-
-export async function lockDispatchPlan(
-  planningDate: string,
-  selections: Array<{ driverId: string; selection: DispatchAllocationSelection }>,
-  token: string
-): Promise<DispatchLockResponse> {
-  const response = await fetch(`${apiBaseUrl}/api/dispatch/lock`, {
-    method: "POST",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`
-    },
-    body: JSON.stringify({
-      planningDate,
-      allocations: selections.map(({ driverId, selection }) => ({
-        driverId,
-        vehicleId: selection.vehicleId,
-        trailerId: selection.trailerId || null,
-        runId: selection.runId,
-        plannedStartTime: selection.plannedStartTime,
-        useReducedDailyRest: selection.useReducedDailyRest === true
-      }))
-    })
-  });
-
-  const payload = (await response.json().catch(() => ({ success: false, failures: [] }))) as DispatchLockResponse;
-  if (response.ok) return payload;
-  if (payload.failures?.length) return payload;
-  return {
-    success: false,
-    failures: [{ driverId: "", reason: `Plan lock failed (${response.status}). Refresh and try again.` }]
-  };
-}
