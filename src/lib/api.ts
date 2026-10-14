@@ -280,6 +280,8 @@ export interface TmsApi {
   trailers(token?: string): Promise<Trailer[]>;
   sites(token?: string): Promise<Site[]>;
   updateSite(id: string, payload: SiteUpdate, token?: string): Promise<Site>;
+  matchStagedSite(id: string, payload: { siteId: string; alias?: string; field: 'collection' | 'destination' }, token?: string): Promise<{ siteId: string; siteName: string; alias: string; field: string; updated: boolean }>;
+  createStagedSite(id: string, payload: { field: 'collection' | 'destination'; name: string; address: string; alias?: string; customerCode?: string }, token?: string): Promise<{ siteId: string; siteName: string; externalCode: string; alias: string; field: string; created: boolean }>;
   marketContacts(token?: string): Promise<MarketContact[]>;
   updateMarketContact(id: string, payload: Omit<MarketContact, 'id'>, token?: string): Promise<MarketContact>;
   fuelPrices(token?: string): Promise<FuelPrice[]>;
@@ -347,6 +349,8 @@ export const api: TmsApi = {
   trailers: token => request<Trailer[]>('/api/v1/trailers', token),
   sites: token => request<Site[]>('/api/v1/sites', token),
   updateSite: (id, payload, token) => request<Site>(`/api/v1/sites/${id}`, token, { method: 'PUT', body: JSON.stringify(payload) }),
+  matchStagedSite: (id, payload, token) => request(`/api/v1/staging/${id}/match-site`, token, { method: 'POST', body: JSON.stringify(payload) }),
+  createStagedSite: (id, payload, token) => request(`/api/v1/staging/${id}/create-site`, token, { method: 'POST', body: JSON.stringify(payload) }),
   marketContacts: async token => normaliseMarketContacts(await request<MarketContact[]>('/api/v1/market-contacts', token)),
   updateMarketContact: (id, payload, token) => request<MarketContact>(`/api/v1/market-contacts/${id}`, token, { method: 'PUT', body: JSON.stringify(payload) }),
   fuelPrices: token => request<FuelPrice[]>('/api/v1/fuel-prices', token),

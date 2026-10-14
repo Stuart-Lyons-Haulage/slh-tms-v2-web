@@ -109,6 +109,9 @@ type ApprovalComparison = {
   changes?: AmendmentChange[];
 };
 
+type MappingField = "collection" | "destination";
+type MappingAction = { rowId: string; field: MappingField; mode: "match" | "create" };
+
 const text = (value: unknown) => String(value ?? "").trim();
 const numberText = (value: unknown) => value == null || value === "" ? "" : String(value);
 const queuePageSize = 100;
@@ -289,7 +292,13 @@ export function OrderReviewBulk({ date }: { date: string }) {
   const [requestingOrders, setRequestingOrders] = useState(false);
   const [loadingAllClean, setLoadingAllClean] = useState(false);
   const [customers, setCustomers] = useState<Array<{ code: string; name: string; active: boolean }>>([]);
-  const [sites, setSites] = useState<Array<{ id: string; name: string; driverTextName?: string; externalCode: string; active: boolean }>>([]);
+  const [sites, setSites] = useState<Array<{ id: string; name: string; driverTextName?: string; externalCode: string; collectionAddress?: string; aliases?: string; active: boolean }>>([]);
+  const [mappingAction, setMappingAction] = useState<MappingAction>();
+  const [mappingSiteId, setMappingSiteId] = useState("");
+  const [mappingAlias, setMappingAlias] = useState("");
+  const [mappingName, setMappingName] = useState("");
+  const [mappingAddress, setMappingAddress] = useState("");
+  const [mappingBusy, setMappingBusy] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -451,6 +460,42 @@ export function OrderReviewBulk({ date }: { date: string }) {
       setNotice(error instanceof Error ? error.message : "The staged order could not be saved.");
     } finally {
       setBusyId(undefined);
+    }
+  }
+
+  function beginMapping(row: ParsedRow, field: MappingField, mode: "match" | "create") {
+    const current = field === "collection" ? text(row.payload.sellerName) : text(row.payload.stallNumber);
+    const notes = text(row.payload.driverInstructions);
+    const guessedAddress = field === "destination"
+      ? notes.match(/Deliver to\s+(.+?)(?:\. Must arrive|\. Source email|$)/i)?.[1]?.trim() || text(row.payload.deliveryAddress)
+      : text(row.payload.collectionAddress);
+    setMappingAction({ rowId: row.item.id, field, mode });
+    setMappingSiteId("");
+    setMappingAlias(current);
+    setMappingName(current);
+    setMappingAddress(guessedAddress);
+  }
+
+  async function applyMapping(row: ParsedRow) {
+    if (!mappingAction) return;
+    setMappingBusy(true);
+    setNotice(undefined);
+    try {
+      const authToken = await token();
+      if (mappingAction.mode === "match") {
+        if (!mappingSiteId) throw new Error("Select the canonical site to match.");
+        await api.matchStagedSite(row.item.id, { siteId: mappingSiteId, alias: mappingAlias, field: mappingAction.field }, authToken);
+      } else {
+        if (!mappingName.trim() || !mappingAddress.trim()) throw new Error("Enter both a site name and full address.");
+        await api.createStagedSite(row.item.id, { field: mappingAction.field, name: mappingName, address: mappingAddress, alias: mappingAlias || mappingName, customerCode: text(row.payload.customerCode) }, authToken);
+      }
+      setMappingAction(undefined);
+      await queue.refresh();
+      setNotice(`${displayReference(row.payload)} site mapping updated and kept waiting for approval.`);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "The site mapping could not be saved.");
+    } finally {
+      setMappingBusy(false);
     }
   }
 
@@ -789,12 +834,12 @@ export function OrderReviewBulk({ date }: { date: string }) {
                 {text(payload.sellerName) && !sites.some((site) => site.name === text(payload.sellerName) || site.driverTextName === text(payload.sellerName)) && <option value={text(payload.sellerName)}>Imported: {text(payload.sellerName)}</option>}
                 <option value="">Select collection site…</option>
                 {sites.map((site) => <option key={"collection-" + site.id} value={site.name}>{site.name}{site.driverTextName ? " · " + site.driverTextName : ""}</option>)}
-              </select></label>
+              </select><span className="site-mapping-actions"><button type="button" onClick={() => beginMapping(row, "collection", "match")} disabled={rowBusy}>Match as alias</button><button type="button" onClick={() => beginMapping(row, "collection", "create")} disabled={rowBusy}>Add new site</button></span></label>
               <label>Destination<select value={text(payload.stallNumber)} onChange={(event) => setDraft((current) => ({ ...(current || payload), stallNumber: event.target.value }))}>
                 {text(payload.stallNumber) && !sites.some((site) => site.name === text(payload.stallNumber) || site.driverTextName === text(payload.stallNumber)) && <option value={text(payload.stallNumber)}>Imported: {text(payload.stallNumber)}</option>}
                 <option value="">Select destination…</option>
                 {sites.map((site) => <option key={"destination-" + site.id} value={site.name}>{site.name}{site.driverTextName ? " · " + site.driverTextName : ""}</option>)}
-              </select></label>
+              </select><span className="site-mapping-actions"><button type="button" onClick={() => beginMapping(row, "destination", "match")} disabled={rowBusy}>Match as alias</button><button type="button" onClick={() => beginMapping(row, "destination", "create")} disabled={rowBusy}>Add new site</button></span></label>
               <label>Wave<select value={text(payload.wave)} onChange={(event) => setDraft((current) => ({ ...(current || payload), wave: event.target.value === "" ? undefined : Number(event.target.value), planningWindow: event.target.value === "1" ? "AM" : event.target.value === "3" ? "PM" : payload.planningWindow, suggestedPlanningWindow: event.target.value === "1" ? "AM" : event.target.value === "3" ? "PM" : payload.suggestedPlanningWindow, routeTiming: event.target.value === "3" ? "Overnight" : event.target.value === "1" ? "SameDay" : payload.routeTiming, overnightRoute: event.target.value === "3", runsOvernight: event.target.value === "3" }))}>
                 <option value="">Not specified</option>
                 <option value="1">Wave 1 · AM</option>
@@ -825,6 +870,31 @@ export function OrderReviewBulk({ date }: { date: string }) {
       })}
     </div>}
 
+    {mappingAction && (() => {
+      const mappingRow = datedRows.find((row) => row.item.id === mappingAction.rowId);
+      if (!mappingRow) return null;
+      const fieldLabel = mappingAction.field === "collection" ? "collection site" : "destination";
+      return <div className="site-mapping-modal" role="dialog" aria-modal="true" aria-label={`Map ${fieldLabel}`}>
+        <div className="site-mapping-modal-card">
+          <h3>{mappingAction.mode === "match" ? "Match existing site as alias" : "Add new site"}</h3>
+          <p>Customer: <strong>{text(mappingRow.payload.customerCode) || "Not set"}</strong> · {fieldLabel}</p>
+          {mappingAction.mode === "match" ? <>
+            <label>Source name or address<input value={mappingAlias} onChange={(event) => setMappingAlias(event.target.value)} placeholder="e.g. K&N facility" autoFocus /></label>
+            <label>Canonical site<select value={mappingSiteId} onChange={(event) => setMappingSiteId(event.target.value)}>
+              <option value="">Select canonical site…</option>
+              {sites.map((site) => <option key={site.id} value={site.id}>{site.name}{site.driverTextName ? ` · ${site.driverTextName}` : ""}{site.collectionAddress ? ` · ${site.collectionAddress}` : ""}</option>)}
+            </select></label>
+            <p className="site-mapping-help">The alias is saved against this customer/site and will be used by future mailbox parses. Ambiguous aliases are rejected.</p>
+          </> : <>
+            <label>Site name<input value={mappingName} onChange={(event) => setMappingName(event.target.value)} placeholder="e.g. K&N facility" autoFocus /></label>
+            <label>Full address<textarea rows={3} value={mappingAddress} onChange={(event) => setMappingAddress(event.target.value)} placeholder="Building, road, town, postcode" /></label>
+            <label>Source alias<input value={mappingAlias} onChange={(event) => setMappingAlias(event.target.value)} placeholder="The name used in source emails" /></label>
+            <p className="site-mapping-help">The site is duplicate-checked before creation, added to Site Master and applied to this order. The order will remain pending review.</p>
+          </>}
+          <div className="site-mapping-modal-actions"><button type="button" onClick={() => setMappingAction(undefined)} disabled={mappingBusy}>Cancel</button><button type="button" className="primary" onClick={() => void applyMapping(mappingRow)} disabled={mappingBusy}>{mappingBusy ? "Saving…" : mappingAction.mode === "match" ? "Match alias" : "Create and apply"}</button></div>
+        </div>
+      </div>;
+    })()}
     {sourceEmailStagingId && <SourceEmailEvidenceDrawer stagingId={sourceEmailStagingId} onClose={() => setSourceEmailStagingId(undefined)} />}
   </section>;
 }
