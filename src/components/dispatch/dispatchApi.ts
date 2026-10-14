@@ -185,6 +185,28 @@ function cleanStopName(value?: string): string | undefined {
   return cleaned || undefined;
 }
 
+function authorityRun(load: LegacyDispatchLoad): DispatchRunDto {
+  const stops = [...(load.stops || [])].sort((left, right) => left.sequence - right.sequence);
+  const collection = stops.find(stop => /^collect\\b/i.test(stop.name)) || stops[0];
+  const delivery = [...stops].reverse().find(stop => /^deliver\\b/i.test(stop.name)) || stops.at(-1);
+  return {
+    runId: load.id,
+    reference: load.reference || load.rawReference || load.id,
+    collectionPoint: { name: cleanStopName(collection?.name) || collection?.name || "Collection pending", latitude: collection?.latitude, longitude: collection?.longitude },
+    requiredSkills: "",
+    requiresDoubleDeck: false,
+    requiresRefrigerated: false,
+    isBackload: Boolean(load.southbound),
+    isOvernightMarket: false,
+    isSouthbound: Boolean(load.southbound),
+    firstCollectionTimeUtc: collection?.plannedArrivalUtc || load.plannedStartUtc,
+    finalDeliveryPoint: delivery ? { name: cleanStopName(delivery.name) || delivery.name, latitude: delivery.latitude, longitude: delivery.longitude } : undefined,
+    plannerNotes: load.plannerNotes,
+    trailerSwapRequested: /(?:trailer\\s*(?:swap|change)|swap\\s*trailer|drop\\s*trailer|pick\\s*up\\s+(?:a\\s*)?(?:different|new)\\s*trailer)/i.test(load.plannerNotes || ""),
+    relay: load.relayPlan
+  };
+}
+
 function runDetail(run: DispatchRunDto, equipment: DispatchEquipmentWorkbench): DispatchRunDto {
   const load = equipment.loads.find(item => item.id === run.runId);
   if (!load) return run;
@@ -229,13 +251,11 @@ export async function getSmartDispatch(
 }> {
   const encoded = encodeURIComponent(planningDate);
   const rosterHealthPromise = getDispatchRosterHealth(token).catch(() => undefined);
-  // The legal-start calculation is the slowest Dispatch dependency because it
-  // fans out to TachoMaster. Start it as soon as the authoritative workbench
-  // gives us the driver IDs instead of waiting for the optional enrichment
-  // requests (visibility, history and Samsara) to finish first.
-  const coreResults = await Promise.allSettled([
-    request<DispatchDriverDto[]>(`/api/dispatch/drivers?date=${encoded}`, token, undefined, DISPATCH_READ_TIMEOUT_MS),
-    request<DispatchRunDto[]>(`/api/dispatch/runs?date=${encoded}`, token, undefined, DISPATCH_READ_TIMEOUT_MS),
+  // Use the single authoritative Driver Dispatch snapshot for the initial board.
+  // The old implementation started three heavyweight reads together; each rebuilt
+  // Tacho/availability state and they competed for the same SQL/provider resources,
+  // causing the mobile gateway to return 504 and an empty limited-mode board.
+  const authorityResult = await Promise.allSettled([
     request<DriverDispatchAuthority>(`/api/v1/driver-dispatch?date=${encoded}`, token, undefined, DISPATCH_READ_TIMEOUT_MS)
   ]);
   const rosterHealth = (await rosterHealthPromise) || {
@@ -245,11 +265,11 @@ export async function getSmartDispatch(
     message: "Driver Master health could not be checked."
   };
   const degradedSources: string[] = [];
-  const requestedDrivers = coreResults[0].status === "fulfilled" ? coreResults[0].value : (degradedSources.push("drivers"), []);
-  const runs = coreResults[1].status === "fulfilled" ? coreResults[1].value : (degradedSources.push("runs"), []);
-  const driverAuthority = coreResults[2].status === "fulfilled"
-    ? coreResults[2].value
-    : (degradedSources.push("equipment"), { drivers: [], vehicles: [], trailers: [], loads: [] } as DriverDispatchAuthority);
+  const driverAuthority = authorityResult[0].status === "fulfilled"
+    ? authorityResult[0].value
+    : (degradedSources.push("equipment", "drivers", "runs"), { drivers: [], vehicles: [], trailers: [], loads: [] } as DriverDispatchAuthority);
+  const requestedDrivers: DispatchDriverDto[] = [];
+  const runs = driverAuthority.loads.map(authorityRun);
   // The Driver Master authority endpoint is a deliberately smaller, resilient
   // roster. If the enriched dispatch roster is empty or unavailable, retain
   // those identities rather than rendering an empty driver board.
