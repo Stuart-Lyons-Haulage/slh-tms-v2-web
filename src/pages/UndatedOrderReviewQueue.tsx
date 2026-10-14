@@ -133,7 +133,7 @@ export function UndatedOrderReviewQueue() {
     }
   }
 
-  async function saveDates(row: PendingRow) {
+  async function saveAmendment(row: PendingRow) {
     if (!editing || editing.id !== row.item.id) return;
     const collectionDate = text(editing.payload.collectionDate);
     const deliveryDate = text(editing.payload.deliveryDate);
@@ -145,11 +145,32 @@ export function UndatedOrderReviewQueue() {
     setBusyId(row.item.id);
     setError(undefined);
     try {
+      const reference = text(editing.payload.poNumber) || text(editing.payload.customerPo);
+      const customerCode = text(editing.payload.customerCode);
+      const collectionSite = text(editing.payload.collectionSite) || text(editing.payload.sellerName);
+      const deliverySite = text(editing.payload.deliverySite) || text(editing.payload.stallNumber);
+      if (!reference || !customerCode || !collectionSite || !deliverySite) {
+        setError("Reference, customer, collection site and delivery site are required before saving an amended order.");
+        return;
+      }
+      const amendedPayload: Payload = {
+        ...editing.payload,
+        poNumber: reference,
+        customerCode,
+        collectionSite,
+        deliverySite,
+        sellerName: collectionSite,
+        stallNumber: deliverySite,
+        plannerReady: true,
+        plannerReviewAcknowledged: true,
+        intakeConfidence: "High",
+        intakeWarnings: [],
+      };
       await request<StagedImport>(`/api/v1/staging/${row.item.id}/payload`, await token(), {
         method: "PUT",
         body: JSON.stringify({
-          payload: editing.payload,
-          note: "Planning date corrected from the Needs attention queue before approval.",
+          payload: amendedPayload,
+          note: "Order amended against the original retained Outlook message and attachment from Needs attention.",
         }),
       });
       setEditing(undefined);
@@ -215,15 +236,20 @@ export function UndatedOrderReviewQueue() {
           <span className="bulk-order-status blocked">{row.reason}</span>
           <div className="bulk-order-actions">
             {hasSource && <button type="button" className="source-email-review-button" onClick={() => setSourceEmailStagingId(row.item.id)} disabled={Boolean(busyId)}>Review source email</button>}
-            {!isEditing && <button type="button" onClick={() => void beginFix(row)} disabled={Boolean(busyId)}>{rowBusy ? "Loading…" : "Fix dates"}</button>}
+            {!isEditing && <button type="button" onClick={() => void beginFix(row)} disabled={Boolean(busyId)}>{rowBusy ? "Loading…" : "Amend from source"}</button>}
             {!isEditing && <button type="button" className="reject-button" onClick={() => void rejectRow(row)} disabled={Boolean(busyId)}>{rowBusy ? "Working…" : "Reject"}</button>}
             {isEditing && <>
               <button type="button" onClick={() => setEditing(undefined)} disabled={rowBusy}>Cancel</button>
-              <button type="button" className="primary" onClick={() => void saveDates(row)} disabled={rowBusy}>{rowBusy ? "Saving…" : "Save dates"}</button>
+              <button type="button" className="primary" onClick={() => void saveAmendment(row)} disabled={rowBusy}>{rowBusy ? "Saving…" : "Save amended order"}</button>
             </>}
           </div>
           {isEditing && <div className="bulk-order-editor">
             <div className="bulk-editor-grid">
+              <label>Reference<input value={text(payload.poNumber) || text(payload.customerPo)} onChange={(event) => setEditing((current) => current ? { ...current, payload: { ...current.payload, poNumber: event.target.value, customerPo: event.target.value } } : current)} /></label>
+              <label>Customer code<input value={text(payload.customerCode)} onChange={(event) => setEditing((current) => current ? { ...current, payload: { ...current.payload, customerCode: event.target.value } } : current)} /></label>
+              <label>Collection site<input value={text(payload.collectionSite) || text(payload.sellerName)} onChange={(event) => setEditing((current) => current ? { ...current, payload: { ...current.payload, collectionSite: event.target.value, sellerName: event.target.value } } : current)} /></label>
+              <label>Delivery site<input value={text(payload.deliverySite) || text(payload.stallNumber)} onChange={(event) => setEditing((current) => current ? { ...current, payload: { ...current.payload, deliverySite: event.target.value, stallNumber: event.target.value } } : current)} /></label>
+              <label>Pallets<input inputMode="numeric" value={text(payload.pallets)} onChange={(event) => setEditing((current) => current ? { ...current, payload: { ...current.payload, pallets: event.target.value } } : current)} /></label>
               <label>Collection date<input type="date" value={text(payload.collectionDate)} onChange={(event) => setEditing((current) => current ? { ...current, payload: { ...current.payload, collectionDate: event.target.value } } : current)} /></label>
               <label>Delivery date<input type="date" value={text(payload.deliveryDate)} onChange={(event) => setEditing((current) => current ? { ...current, payload: { ...current.payload, deliveryDate: event.target.value } } : current)} /></label>
             </div>
