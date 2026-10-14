@@ -17,6 +17,26 @@ import { isPotentiallyDispatchAvailable } from "./dispatchBoardState";
 
 const DISPATCH_READ_TIMEOUT_MS = 60_000;
 const DISPATCH_TACHO_TIMEOUT_MS = 180_000;
+// Supporting feeds must not hold the authoritative driver board hostage. They
+// still complete in the background at the HTTP layer, but the UI uses a
+// conservative snapshot if they exceed this render budget.
+const DISPATCH_SUPPORT_TIMEOUT_MS = 5_000;
+
+function supportFeed<T>(promise: Promise<T>, fallback: T, onDegraded: () => void): Promise<T> {
+  return new Promise(resolve => {
+    let settled = false;
+    let timer: number;
+    const finish = (value: T, degraded: boolean) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      if (degraded) onDegraded();
+      resolve(value);
+    };
+    timer = window.setTimeout(() => finish(fallback, true), DISPATCH_SUPPORT_TIMEOUT_MS);
+    promise.then(value => finish(value, false)).catch(() => finish(fallback, true));
+  });
+}
 
 export type SamsaraDispatchResult = {
   success: boolean;
@@ -214,42 +234,42 @@ export async function getSmartDispatch(
   // slow or temporarily unavailable. An empty snapshot is deliberately
   // conservative: it does not promote anyone to available or clear a block.
   const [statusResponse, visibility, availability] = await Promise.all([
-    request<{ drivers: DispatchDriverStatusDto[] }>(`/api/v1/driver-dispatch-status?date=${encoded}`, token, undefined, DISPATCH_READ_TIMEOUT_MS)
-      .catch(() => {
-        degradedSources.push("status");
-        return { drivers: [] };
-      }),
-    getDispatchVisibility(planningDate, token)
-      .catch(() => {
-        degradedSources.push("visibility");
-        return {
-          planningDate,
-          windowDays: 0,
-          cutoffDate: planningDate,
-          drivers: []
-        } as DispatchVisibilitySnapshot;
-      }),
-    getDriverAvailability(planningDate, token)
-      .catch(() => {
-        degradedSources.push("availability");
-        return {
-          planningDate,
-          generatedAtUtc: new Date().toISOString(),
-          summary: {
-            employedAvailable: 0,
-            agencyConfirmed: 0,
-            agencyUnconfirmed: 0,
-            casualConfirmed: 0,
-            casualUnconfirmed: 0,
-            unavailableBlocked: 0,
-            driversRequired: 0,
-            availableDrivers: 0,
-            surplusShortfall: 0
-          },
-          drivers: [],
-          classificationMismatchCount: 0
-        } as DriverAvailabilitySnapshot;
-      })
+    supportFeed(
+      request<{ drivers: DispatchDriverStatusDto[] }>(`/api/v1/driver-dispatch-status?date=${encoded}`, token, undefined, DISPATCH_READ_TIMEOUT_MS),
+      { drivers: [] },
+      () => degradedSources.push("status")
+    ),
+    supportFeed(
+      getDispatchVisibility(planningDate, token),
+      {
+        planningDate,
+        windowDays: 0,
+        cutoffDate: planningDate,
+        drivers: []
+      } as DispatchVisibilitySnapshot,
+      () => degradedSources.push("visibility")
+    ),
+    supportFeed(
+      getDriverAvailability(planningDate, token),
+      {
+        planningDate,
+        generatedAtUtc: new Date().toISOString(),
+        summary: {
+          employedAvailable: 0,
+          agencyConfirmed: 0,
+          agencyUnconfirmed: 0,
+          casualConfirmed: 0,
+          casualUnconfirmed: 0,
+          unavailableBlocked: 0,
+          driversRequired: 0,
+          availableDrivers: 0,
+          surplusShortfall: 0
+        },
+        drivers: [],
+        classificationMismatchCount: 0
+      } as DriverAvailabilitySnapshot,
+      () => degradedSources.push("availability")
+    )
   ]);
   const visibilityByDriver = new Map(visibility.drivers.map(item => [item.driverId, item]));
   const availabilityByDriver = new Map(availability.drivers.map(item => [item.driverId, item]));
