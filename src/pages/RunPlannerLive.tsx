@@ -674,12 +674,12 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
       }
       if (pallets === 0) await syncStops(loadId, linesAfterEdit, access);
       dirtyRunKeys.current.delete(runKey);
+      // Re-read the authoritative run/order projection before notifying Pallet Control.
+      // This prevents a refresh race where the second screen queries between the
+      // allocation commit and the planner projection refresh.
+      await refreshAll();
       signalPlanningChange();
-      setMessage(`Auto-saved · ${pallets} pallet${pallets === 1 ? "" : "s"} on this consolidated movement.`);
-      // Re-read runs, allocations and order review together after the server
-      // allocation succeeds. This keeps Planner Builder and Pallet Order on the
-      // same authoritative state instead of refreshing only the local summary.
-      void refreshAll().catch(() => undefined);
+      setMessage(`Saved to Pallet Control · ${pallets} load unit${pallets === 1 ? "" : "s"} on this consolidated movement.`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Pallet quantity could not be auto-saved.");
       if (mutation === mutationCounter.current) void refreshAll();
@@ -694,7 +694,7 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
     const distributed = distributeQuantity(ids, pallets, run.key);
     if (distributed.remaining > 0) {
       const maximum = pallets - distributed.remaining;
-      setMessage(`Maximum available for this consolidated movement is ${maximum} pallets.`);
+      setMessage(`Maximum available for this consolidated movement is ${maximum} load units.`);
       return;
     }
     const linesAfterEdit = run.lines.map((item) => item.key === line.key ? { ...item, pallets: value, orderAllocations: distributed.allocations } : item);
