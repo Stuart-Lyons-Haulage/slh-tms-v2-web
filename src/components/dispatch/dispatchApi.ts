@@ -25,7 +25,6 @@ const DISPATCH_SUPPORT_TIMEOUT_MS = 5_000;
 function supportFeed<T>(promise: Promise<T>, fallback: T, onDegraded: () => void): Promise<T> {
   return new Promise(resolve => {
     let settled = false;
-    let timer: number;
     const finish = (value: T, degraded: boolean) => {
       if (settled) return;
       settled = true;
@@ -33,7 +32,7 @@ function supportFeed<T>(promise: Promise<T>, fallback: T, onDegraded: () => void
       if (degraded) onDegraded();
       resolve(value);
     };
-    timer = window.setTimeout(() => finish(fallback, true), DISPATCH_SUPPORT_TIMEOUT_MS);
+    const timer = window.setTimeout(() => finish(fallback, true), DISPATCH_SUPPORT_TIMEOUT_MS);
     promise.then(value => finish(value, false)).catch(() => finish(fallback, true));
   });
 }
@@ -83,6 +82,35 @@ type DriverDispatchAuthority = DispatchEquipmentWorkbench & {
     partDayLeave: boolean;
   }>;
 };
+
+function authorityFallbackDriver(driver: DriverDispatchAuthority["drivers"][number]): DispatchDriverDto {
+  return {
+    driverId: driver.driverId,
+    driverCode: driver.driverId,
+    name: driver.driverId,
+    employmentType: "Unknown",
+    skills: "",
+    holidayDates: [],
+    contractedDays: [],
+    tachoData: {
+      currentDutyDay: driver.dayNumber || 0,
+      weeklyWorkingTime: 0,
+      dailyDrivingTime: 0,
+      breakCompliance: false,
+      requiredRestPeriod: 11,
+      reducedDailyRestsUsed: 0
+    },
+    trackingData: {},
+    needsReturn: false,
+    isBlocked: false,
+    backloadCandidate: false,
+    onLeave: driver.onLeave,
+    leaveType: driver.leaveType,
+    leaveDetails: driver.leaveDetails,
+    partDayLeave: driver.partDayLeave,
+    suggestion: driver.onLeave ? `Unavailable · Sage HR ${driver.leaveType || "leave"}.` : "Roster identity loaded; availability requires verification."
+  };
+}
 
 type SamsaraDispatchStatusResponse = {
   planningDate: string;
@@ -210,11 +238,20 @@ export async function getSmartDispatch(
     message: "Driver Master health could not be checked."
   };
   const degradedSources: string[] = [];
-  const drivers = coreResults[0].status === "fulfilled" ? coreResults[0].value : (degradedSources.push("drivers"), []);
+  const requestedDrivers = coreResults[0].status === "fulfilled" ? coreResults[0].value : (degradedSources.push("drivers"), []);
   const runs = coreResults[1].status === "fulfilled" ? coreResults[1].value : (degradedSources.push("runs"), []);
   const driverAuthority = coreResults[2].status === "fulfilled"
     ? coreResults[2].value
     : (degradedSources.push("equipment"), { drivers: [], vehicles: [], trailers: [], loads: [] } as DriverDispatchAuthority);
+  // The Driver Master authority endpoint is a deliberately smaller, resilient
+  // roster. If the enriched dispatch roster is empty or unavailable, retain
+  // those identities rather than rendering an empty driver board.
+  const drivers = requestedDrivers.length > 0
+    ? requestedDrivers
+    : driverAuthority.drivers.map(authorityFallbackDriver);
+  if (requestedDrivers.length === 0 && driverAuthority.drivers.length > 0 && !degradedSources.includes("drivers")) {
+    degradedSources.push("drivers");
+  }
   // History and Samsara improve the board but are not needed to allocate safely.
   // Start both in parallel with the core requests and apply them when they finish;
   // a slow optional integration must not delay the Dispatch table.
@@ -303,6 +340,10 @@ export async function getSmartDispatch(
       availableFrom: sharedAvailability?.availableFromUtc ?? driver.availableFrom,
       availabilityUntil: sharedAvailability?.availableUntilUtc,
       availabilityConfirmed: sharedAvailability?.availabilityConfirmed,
+      availabilityState: (sharedAvailability
+        ? sharedAvailability.dispatchable === false ? "unavailable" : "available"
+        : "unknown") as DispatchDriverDto["availabilityState"],
+      availabilitySourceUpdatedAtUtc: availability.generatedAtUtc,
       availabilityDayCount: availabilityDayCount(sharedAvailability, planningDate),
       agencyName: sharedAvailability?.agencyName,
       placementEndDate: sharedAvailability?.placementEndDate,

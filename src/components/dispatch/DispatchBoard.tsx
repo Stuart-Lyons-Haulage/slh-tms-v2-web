@@ -257,24 +257,31 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
     });
   }, [availableTimes, snapshot]);
 
+  // Always render the active Driver Master roster. Availability feeds control
+  // allocation eligibility, never whether a driver exists on the board.
+  const rosterDrivers = useMemo(() => {
+    if (!snapshot) return [];
+    return snapshot.drivers;
+  }, [snapshot]);
+
   const visibleDrivers = useMemo(() => {
-    const workforce = filterDriversByEmploymentType(availableWorkforce, employmentFilter);
+    const workforce = filterDriversByEmploymentType(rosterDrivers, employmentFilter);
     const searched = filterDriversByDriverSearch(workforce, driverSearch);
     return filterDispatchDrivers(searched, filter, selections, snapshot?.runs || [], availableTimes, failures);
-  }, [availableTimes, availableWorkforce, driverSearch, employmentFilter, failures, filter, selections, snapshot]);
+  }, [availableTimes, driverSearch, employmentFilter, failures, filter, rosterDrivers, selections, snapshot]);
 
   const filterCounts = useMemo(() => {
-    const searched = filterDriversByDriverSearch(availableWorkforce, driverSearch);
+    const searched = filterDriversByDriverSearch(rosterDrivers, driverSearch);
     return Object.fromEntries(filterValues.map(value => [
       value,
       filterDispatchDrivers(searched, value, selections, snapshot?.runs || [], availableTimes, failures).length
     ])) as Record<DispatchFilter, number>;
-  }, [availableTimes, availableWorkforce, driverSearch, failures, selections, snapshot]);
+  }, [availableTimes, driverSearch, failures, rosterDrivers, selections, snapshot]);
 
   const employmentCounts = useMemo(() => Object.fromEntries(employmentFilterValues.map(value => [
     value,
-    filterDriversByEmploymentType(availableWorkforce, value).length
-  ])) as Record<DispatchEmploymentFilter, number>, [availableWorkforce]);
+    filterDriversByEmploymentType(rosterDrivers, value).length
+  ])) as Record<DispatchEmploymentFilter, number>, [rosterDrivers]);
 
   const samsaraExportCandidates = useMemo(() => {
     if (!snapshot) return [];
@@ -696,10 +703,10 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
     <div className="smart-dispatch-workspace dispatch-run-workspace">
       <details className="smart-dispatch-table-wrap dispatch-driver-pool dispatch-driver-pool-collapse" aria-label="Available drivers" open>
         <summary className="dispatch-driver-pool-heading">
-          <div><span>PLAN FROM THE WORKFORCE</span><strong>Available drivers</strong></div>
+          <div><span>PLAN FROM THE WORKFORCE</span><strong>Driver roster</strong></div>
           <b>{visibleDrivers.length}</b>
         </summary>
-        <p className="dispatch-driver-pool-help">Employed drivers are listed first. Legal start, Sage availability and working-pattern position are shown before allocating a run.</p>
+        <p className="dispatch-driver-pool-help">All active Driver Master records remain visible. Green is available, red is blocked and hatched is unknown or stale until Sage/Tacho refreshes.</p>
         <table className="smart-dispatch-table authoritative">
           <thead>
             <tr>
