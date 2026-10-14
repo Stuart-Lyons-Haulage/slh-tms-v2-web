@@ -188,7 +188,8 @@ export type OperationsReconciliation = {
   orders: { total: number; readyToPlan: number; planned: number; inTransit: number; delivered: number };
   loads: { total: number; planned: number; dispatched: number; completed: number; unallocated: number };
   fleet: { activeDrivers: number; assignedDrivers: number; unassignedDrivers: number; activeVehicles: number; assignedVehicles: number; vehiclesSeenToday: number; vehiclesNoSignal: number };
-  staging: { pendingReview: number };
+  staging: { pendingReview: number; failed?: number; mappingExceptions?: number; allocationRecords?: number };
+  audit?: { pendingOutbox: number; mailboxPoll?: { lastAttemptUtc?: string; lastSuccessUtc?: string; inProgress: boolean; lastMessagesSeen: number; lastMessagesIngested: number; lastFailureStage?: string; lastError?: string } | null };
 };
 
 export type OperationalException = { type: string; severity: string; reference: string; description: string; loadId?: string };
