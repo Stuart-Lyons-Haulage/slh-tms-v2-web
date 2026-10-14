@@ -223,9 +223,17 @@
   line-height: 1.35;
 }
 
+/* Drivers are the workforce view. Route cards are the only allocation surface
+   at every viewport, including mobile, so the driver cards never offer a
+   second route/vehicle/trailer workflow. */
+.dispatch-driver-pool .smart-dispatch-table tbody tr td:nth-child(5),
+.dispatch-driver-pool .smart-dispatch-table tbody tr td:nth-child(6),
+.dispatch-driver-pool .smart-dispatch-table tbody tr td:nth-child(7),
+.dispatch-driver-pool .smart-dispatch-table tbody tr td:nth-child(10) { display: none; }
+
 /* On the wide Dispatch workbench, render each driver row as the same compact
    card grid used by the local planner. The table semantics remain available
-   for accessibility and the allocation handlers are untouched. */
+   for accessibility. */
 @media (min-width: 1151px) {
   .dispatch-driver-pool .smart-dispatch-table-wrap { overflow: visible; }
   .dispatch-driver-pool .smart-dispatch-table { min-width: 0; display: block; }
@@ -267,12 +275,6 @@
   .dispatch-driver-pool .smart-dispatch-table tbody tr td:nth-child(8) { border-top: 1px solid #e1e8ee; }
   .dispatch-driver-pool .smart-dispatch-table tbody tr td:nth-child(9) { padding-top: 2px; }
   .dispatch-driver-pool .smart-dispatch-table tbody tr td:nth-child(10) { padding-bottom: 10px; }
-  /* Allocation belongs to the route board. Driver cards remain the workforce
-     view, while allocated routes stay editable on the right. */
-  .dispatch-driver-pool .smart-dispatch-table tbody tr td:nth-child(5),
-  .dispatch-driver-pool .smart-dispatch-table tbody tr td:nth-child(6),
-  .dispatch-driver-pool .smart-dispatch-table tbody tr td:nth-child(7),
-  .dispatch-driver-pool .smart-dispatch-table tbody tr td:nth-child(10) { display: none; }
   .dispatch-driver-pool .smart-dispatch-table tbody tr.dispatch-group { display: none; }
 }
 
