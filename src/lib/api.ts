@@ -299,6 +299,7 @@ export interface TmsApi {
   fleetStatus(token?: string): Promise<FleetStatus>;
   trackingHistory(date: string, token?: string): Promise<Telemetry>;
   operationsReconciliation(date: string, token?: string): Promise<OperationsReconciliation>;
+  operationsFullSnapshot(date: string, token?: string): Promise<UnknownRecord>;
   operationsExceptions(date: string, token?: string): Promise<OperationsExceptions>;
   driverAssignments(from: string, to: string, token?: string): Promise<DriverAssignment[]>;
   driverTimesheets(from: string, to: string, token?: string): Promise<DriverTimesheetReport>;
@@ -368,6 +369,7 @@ export const api: TmsApi = {
   fleetStatus: token => request<FleetStatus>('/api/v1/tracking/dot/fleet-status', token),
   trackingHistory: (date, token) => request<Telemetry>(`/api/v1/tracking/dot/history?date=${encodeURIComponent(date)}`, token),
   operationsReconciliation: (date, token) => request<OperationsReconciliation>(`/api/v1/operations/reconciliation?date=${encodeURIComponent(date)}`, token),
+  operationsFullSnapshot: (date, token) => request<UnknownRecord>(`/api/v1/operations/full-snapshot?date=${encodeURIComponent(date)}`, token, undefined, 60000),
   operationsExceptions: (date, token) => request<OperationsExceptions>(`/api/v1/operations/exceptions?date=${encodeURIComponent(date)}`, token),
   driverAssignments: (from, to, token) => request<DriverAssignment[]>(`/api/v1/driver-assignments?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, token),
   driverTimesheets: (from, to, token) => request<DriverTimesheetReport>(`/api/v1/driver-timesheets?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, token),
