@@ -679,7 +679,9 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
       // Pallet Control from seeing a partially-written row and removes the
       // repeated ledger reads that previously caused slow mobile saves/504s.
       await allocateBatch(Object.entries(allocations), loadId, access);
-      if (pallets === 0) await syncStops(loadId, linesAfterEdit, access);
+      // Persist the allocation and the run's stop list together. Without this,
+      // reopening the run could show the old stops even after a successful save.
+      await syncStops(loadId, linesAfterEdit, access);
       dirtyRunKeys.current.delete(runKey);
       // Re-read the authoritative run/order projection before notifying Pallet Control.
       // This prevents a refresh race where the second screen queries between the
