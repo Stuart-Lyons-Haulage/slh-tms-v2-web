@@ -603,8 +603,11 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
       updateRun(run.key, (current) => ({ ...current, loadId: created.id, lines: linkedLines }));
       // Run creation establishes the operational shell only. Pallet Control is
       // the explicit allocation step, so no order allocation is written here.
-      const confirmed = (await listRuns(date, access)).find((item) => item.id === created.id);
-      if (!confirmed) throw new Error(`${created.reference} was accepted but could not be confirmed in the saved run list. It was not made available for allocation.`);
+      // The create response is the authoritative write result. Do not immediately
+      // re-read the full run register here: that expensive read was the source
+      // of gateway 504s after a successful run save.
+      const confirmed = created;
+      if (!confirmed?.id) throw new Error(`${created.reference} was accepted without a run id. The draft has been kept for retry.`);
       if (run.relayEnabled) await updateRunRelay(created.id, relayPayload(run), access);
       dirtyRunKeys.current.delete(run.key);
       signalPlanningChange();
@@ -664,7 +667,11 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
     setBusyKey(key);
     try {
       const access = await token();
-      await Promise.all(Object.entries(allocations).map(([orderId, quantity]) => allocate(orderId, loadId, quantity, access)));
+      // Allocation writes share the planning ledger. Serialise them to avoid
+      // concurrent ledger reads/locks returning a gateway 504 on consolidated jobs.
+      for (const [orderId, quantity] of Object.entries(allocations)) {
+        await allocate(orderId, loadId, quantity, access);
+      }
       if (pallets === 0) await syncStops(loadId, linesAfterEdit, access);
       dirtyRunKeys.current.delete(runKey);
       signalPlanningChange();
@@ -725,7 +732,9 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
     setBusyKey(timerKey);
     try {
       const access = await token();
-      await Promise.all(ids.map((orderId) => allocate(orderId, run.loadId!, 0, access)));
+      for (const orderId of ids) {
+        await allocate(orderId, run.loadId!, 0, access);
+      }
       if (remaining.some(item => lineOrderIds(item).length > 0)) {
         await syncStops(run.loadId, remaining, access);
       } else {
