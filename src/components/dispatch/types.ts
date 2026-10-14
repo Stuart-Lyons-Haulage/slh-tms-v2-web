@@ -90,6 +90,9 @@ export interface DispatchDriverDto {
   availabilityGroup?: string;
   availabilityUntil?: string;
   availabilityConfirmed?: boolean;
+  /** Roster visibility is independent from allocation eligibility. */
+  availabilityState?: "available" | "unavailable" | "unknown";
+  availabilitySourceUpdatedAtUtc?: string;
   agencyName?: string;
   placementEndDate?: string;
   classificationMismatch?: boolean;
