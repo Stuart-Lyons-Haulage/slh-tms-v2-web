@@ -175,6 +175,9 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
   const [periodFilter, setPeriodFilter] = useState<PeriodFilter>("ALL");
   const [dismissedPlanChecks, setDismissedPlanChecks] = useState(() => new Set<string>());
   const saveTimers = useRef<Record<string, number>>({});
+  // Multiple order additions can happen before the first request returns. Keep
+  // each run's allocation/stop writes in order so they cannot race each other.
+  const quantitySaveQueues = useRef<Record<string, Promise<void>>>({});
   const mutationCounter = useRef(0);
   const refreshSequence = useRef(0);
   const loadsRef = useRef<Load[]>([]);
@@ -428,7 +431,7 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
     };
     const nextLines = [...run.lines.filter(line => lineOrderIds(line).length > 0 || line.collectionSite.trim() || line.deliverySite.trim() || line.pallets.trim()), nextLine];
     updateRun(run.key, current => ({ ...current, lines: nextLines }));
-    if (run.loadId) void persistQuantity(run.key, nextLine.key, run.loadId, { [order.id]: quantity }, quantity, nextLines);
+    if (run.loadId) void enqueuePersistQuantity(run.key, nextLine.key, run.loadId, { [order.id]: quantity }, quantity, nextLines);
     setMessage(`${order.reference} added to ${run.loadId ? "the live run and saved" : "the draft run"}.`);
   };
   const changeLineLocation = (runKey: string, line: RunLine, field: "collectionSite" | "deliverySite", value: string) => {
@@ -695,6 +698,18 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
     } finally { setBusyKey((current) => current === key ? undefined : current); }
   }
 
+  function enqueuePersistQuantity(runKey: string, lineKey: string, loadId: string, allocations: Record<string, number>, pallets: number, linesAfterEdit: RunLine[]) {
+    const previous = quantitySaveQueues.current[runKey] || Promise.resolve();
+    const next = previous
+      .catch(() => undefined)
+      .then(() => persistQuantity(runKey, lineKey, loadId, allocations, pallets, linesAfterEdit));
+    quantitySaveQueues.current[runKey] = next;
+    void next.finally(() => {
+      if (quantitySaveQueues.current[runKey] === next) delete quantitySaveQueues.current[runKey];
+    });
+    return next;
+  }
+
   function scheduleQuantity(run: RunDraft, line: RunLine, value: string) {
     const pallets = validPallets(value);
     if (pallets === undefined) { updateLine(run.key, line.key, { pallets: value }); return; }
@@ -716,7 +731,7 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
       // below emits again, so a refresh that races the request is followed by
       // the authoritative result without refreshing on every keystroke.
       signalPlanningChange();
-      void persistQuantity(run.key, line.key, run.loadId!, distributed.allocations, pallets, linesAfterEdit);
+      void enqueuePersistQuantity(run.key, line.key, run.loadId!, distributed.allocations, pallets, linesAfterEdit);
     }, 250);
   }
 
