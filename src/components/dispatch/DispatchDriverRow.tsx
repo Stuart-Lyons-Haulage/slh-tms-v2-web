@@ -209,6 +209,8 @@ export function DispatchDriverRow({
       {driver.agencyName && <small>{driver.agencyName}</small>}
       {driver.availabilityGroup && <small>{driver.availabilityGroup}{driver.placementEndDate ? ` · placement ends ${driver.placementEndDate}` : ""}</small>}
       {driver.classificationMismatch && <small className="smart-inline-warning">Master Data review</small>}
+      {samsaraState && <small className="smart-inline-status">Dispatched to Samsara</small>}
+      {!samsaraState && lockedToDriver && <small className="smart-inline-warning">Allocated</small>}
     </td>
 
     <td>
