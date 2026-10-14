@@ -341,18 +341,30 @@ export interface TmsApi {
   invoiceHistory(query: { from?: string; to?: string; customerCode?: string; status?: string }, token?: string): Promise<InvoiceHistoryRecord[]>;
 }
 
+type SharedLookupEntry = { expiresAt: number; promise: Promise<unknown> };
+const sharedLookupCache = new Map<string, SharedLookupEntry>();
+const SHARED_LOOKUP_TTL_MS = 5 * 60_000;
+function sharedLookup<T>(key: string, load: () => Promise<T>): Promise<T> {
+  const current = sharedLookupCache.get(key);
+  if (current && current.expiresAt > Date.now()) return current.promise as Promise<T>;
+  const promise = load().catch(error => { sharedLookupCache.delete(key); throw error; });
+  sharedLookupCache.set(key, { expiresAt: Date.now() + SHARED_LOOKUP_TTL_MS, promise });
+  return promise;
+}
+function invalidateSharedLookup(key: string) { sharedLookupCache.delete(key); }
+
 export const api: TmsApi = {
   customers: token => request<Customer[]>('/api/v1/customers', token),
   customerContacts: token => request<CustomerContact[]>('/api/v1/customer-contacts', token),
-  vehicles: token => request<Vehicle[]>('/api/v1/vehicles', token),
-  updateVehicle: (id, payload, token) => request<Vehicle>(`/api/v1/vehicles/${id}`, token, { method: 'PUT', body: JSON.stringify(payload) }),
-  drivers: token => request<Driver[]>('/api/v1/drivers', token),
-  updateDriver: (id, payload, token) => request<Driver>(`/api/v1/drivers/${id}`, token, { method: 'PUT', body: JSON.stringify(payload) }),
-  trailers: token => request<Trailer[]>('/api/v1/trailers', token),
-  sites: token => request<Site[]>('/api/v1/sites', token),
-  updateSite: (id, payload, token) => request<Site>(`/api/v1/sites/${id}`, token, { method: 'PUT', body: JSON.stringify(payload) }),
-  matchStagedSite: (id, payload, token) => request(`/api/v1/staging/${id}/match-site`, token, { method: 'POST', body: JSON.stringify(payload) }),
-  createStagedSite: (id, payload, token) => request(`/api/v1/staging/${id}/create-site`, token, { method: 'POST', body: JSON.stringify(payload) }),
+  vehicles: token => sharedLookup('vehicles', () => request<Vehicle[]>('/api/v1/vehicles', token)),
+  updateVehicle: async (id, payload, token) => { const result = await request<Vehicle>(`/api/v1/vehicles/${id}`, token, { method: 'PUT', body: JSON.stringify(payload) }); invalidateSharedLookup('vehicles'); return result; },
+  drivers: token => sharedLookup('drivers', () => request<Driver[]>('/api/v1/drivers', token)),
+  updateDriver: async (id, payload, token) => { const result = await request<Driver>(`/api/v1/drivers/${id}`, token, { method: 'PUT', body: JSON.stringify(payload) }); invalidateSharedLookup('drivers'); return result; },
+  trailers: token => sharedLookup('trailers', () => request<Trailer[]>('/api/v1/trailers', token)),
+  sites: token => sharedLookup('sites', () => request<Site[]>('/api/v1/sites', token)),
+  updateSite: async (id, payload, token) => { const result = await request<Site>(`/api/v1/sites/${id}`, token, { method: 'PUT', body: JSON.stringify(payload) }); invalidateSharedLookup('sites'); return result; },
+  matchStagedSite: async (id, payload, token) => { const result = await request(`/api/v1/staging/${id}/match-site`, token, { method: 'POST', body: JSON.stringify(payload) }); invalidateSharedLookup('sites'); return result; },
+  createStagedSite: async (id, payload, token) => { const result = await request(`/api/v1/staging/${id}/create-site`, token, { method: 'POST', body: JSON.stringify(payload) }); invalidateSharedLookup('sites'); return result; },
   marketContacts: async token => normaliseMarketContacts(await request<MarketContact[]>('/api/v1/market-contacts', token)),
   updateMarketContact: (id, payload, token) => request<MarketContact>(`/api/v1/market-contacts/${id}`, token, { method: 'PUT', body: JSON.stringify(payload) }),
   fuelPrices: token => request<FuelPrice[]>('/api/v1/fuel-prices', token),
