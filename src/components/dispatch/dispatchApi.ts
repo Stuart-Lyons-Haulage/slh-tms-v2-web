@@ -75,6 +75,12 @@ export type DispatchRosterHealth = {
 type DriverDispatchAuthority = DispatchEquipmentWorkbench & {
   drivers: Array<{
     driverId: string;
+    employeeNumber?: string;
+    displayName?: string;
+    driverType?: string;
+    driverGroup?: string;
+    skills?: string;
+    coding?: string;
     dayNumber: number;
     onLeave: boolean;
     leaveType?: string;
@@ -84,12 +90,13 @@ type DriverDispatchAuthority = DispatchEquipmentWorkbench & {
 };
 
 function authorityFallbackDriver(driver: DriverDispatchAuthority["drivers"][number]): DispatchDriverDto {
+  const employmentType = driver.driverType || driver.driverGroup || "Unknown";
   return {
     driverId: driver.driverId,
-    driverCode: driver.driverId,
-    name: driver.driverId,
-    employmentType: "Unknown",
-    skills: "",
+    driverCode: driver.coding || driver.employeeNumber || driver.driverId,
+    name: driver.displayName || driver.employeeNumber || driver.driverId,
+    employmentType,
+    skills: driver.skills || "",
     holidayDates: [],
     contractedDays: [],
     tachoData: {
