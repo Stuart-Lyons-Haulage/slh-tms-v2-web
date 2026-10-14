@@ -14,6 +14,7 @@ import { displayRunReference } from "../lib/runDisplay";
 import { useApi } from "../lib/useApi";
 import "../runs-capacity-allocation.css";
 import { allocateRun, getRunDispatch, getRunRoute, listRuns, updateRunOperational, updateRunStops } from '../api/runs';
+import { sendRunToSamsara } from '../components/dispatch/dispatchApi';
 import { tomorrowIsoDate } from "../lib/dateUtils";
 
 const localDate = tomorrowIsoDate;
@@ -200,6 +201,7 @@ function RunAllocationCard({ load, vehicles, drivers, trailers, sites, onSaved }
   const [capacityType, setCapacityType] = useState<CapacityType>(capacityTypeFromLoad(load.capacityType));
   const [used, setUsed] = useState(load.palletSpacesUsed?.toString() || "0");
   const [saving, setSaving] = useState(false);
+  const [samsaraBusy, setSamsaraBusy] = useState(false);
   const [message, setMessage] = useState<string>();
   const [routeSummary, setRouteSummary] = useState<string>();
   const [stops, setStops] = useState<EditableStop[]>(() => editableStops(load, sites));
@@ -232,6 +234,21 @@ function RunAllocationCard({ load, vehicles, drivers, trailers, sites, onSaved }
     longitude: stop.longitude.trim() ? Number(stop.longitude) : undefined,
     plannedArrivalUtc: stop.plannedArrivalUtc ? new Date(stop.plannedArrivalUtc).toISOString() : undefined,
   }));
+
+  async function sendToSamsara() {
+    setSamsaraBusy(true);
+    setMessage(undefined);
+    try {
+      const result = await sendRunToSamsara(load.id, await token());
+      await onSaved();
+      signalPlanningChange();
+      setMessage(result.message || `${runLabel} sent to Samsara. It can now be assigned there without a driver or vehicle.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "The route could not be sent to Samsara.");
+    } finally {
+      setSamsaraBusy(false);
+    }
+  }
 
   async function saveAllocation() {
     setSaving(true); setMessage(undefined);
@@ -470,7 +487,8 @@ function RunAllocationCard({ load, vehicles, drivers, trailers, sites, onSaved }
       </div>
 
       <div className="run-card-actions">
-        <button className="primary" type="button" onClick={() => void dispatchRun()} disabled={saving || !driverId || !vehicleId}>{saving ? "Dispatching…" : "Dispatch"}</button>
+        <button type="button" aria-label={`Actions for ${runLabel}`} disabled={saving || samsaraBusy} onClick={() => void sendToSamsara()}>{samsaraBusy ? "Sending…" : "Action · Send to Samsara"}</button>
+        <button className="primary" type="button" onClick={() => void dispatchRun()} disabled={saving || samsaraBusy || !driverId || !vehicleId}>{saving ? "Dispatching…" : "Dispatch"}</button>
         <button type="button" onClick={() => void prepareDriverText(true)} disabled={saving}>Preview driver text</button>
         <button type="button" onClick={() => { setFreeText(""); setFreeTextOpen(true); }} disabled={saving || !driverId || !vehicleId}>Free type text</button>
       </div>
