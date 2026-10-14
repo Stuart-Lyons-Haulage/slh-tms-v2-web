@@ -5,7 +5,8 @@ describe("Run Planner autosave", () => {
   it("creates a persisted run when a collection and delivery resolve to live work", () => {
     expect(planner).toContain("void createPlanningRun({ ...currentRun, lines: linkedLines });");
     expect(planner).toContain("void createPlanningRun({ ...currentRun, lines: nextLines });");
-    expect(planner).toContain("const confirmed = (await listRuns(date, access)).find((item) => item.id === created.id);");
+    expect(planner).toContain("const confirmed = created;");
+    expect(planner).toContain("gateway 504s after a successful run save");
     expect(planner).toContain("Run creation establishes the operational shell only");
     expect(planner).not.toContain("await Promise.all(allocationWrites);");
     expect(planner).toContain("signalPlanningChange();");
