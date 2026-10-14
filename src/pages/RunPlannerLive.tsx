@@ -672,7 +672,10 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
       for (const [orderId, quantity] of Object.entries(allocations)) {
         await allocate(orderId, loadId, quantity, access);
       }
-      if (pallets === 0) await syncStops(loadId, linesAfterEdit, access);
+      // Keep the persisted run stops in step with the allocation ledger for every edit.
+      // Previously this only ran when quantity became zero, so a successful line
+      // allocation could be reported as saved while the reopened run kept old stops.
+      await syncStops(loadId, linesAfterEdit, access);
       dirtyRunKeys.current.delete(runKey);
       // Re-read the authoritative run/order projection before notifying Pallet Control.
       // This prevents a refresh race where the second screen queries between the
