@@ -681,7 +681,15 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
       // Save the whole consolidated row in one server transaction. This keeps
       // Pallet Control from seeing a partially-written row and removes the
       // repeated ledger reads that previously caused slow mobile saves/504s.
-      await allocateBatch(Object.entries(allocations), loadId, access);
+      const entries = Object.entries(allocations);
+      // A quantity edit is a single allocation replacement. Use the proven
+      // single-allocation endpoint for it; reserve the batch endpoint for
+      // genuinely multi-order consolidated rows.
+      if (entries.length === 1) {
+        await allocate(entries[0][0], loadId, entries[0][1], access);
+      } else {
+        await allocateBatch(entries, loadId, access);
+      }
       // Persist the allocation and the run's stop list together. Without this,
       // reopening the run could show the old stops even after a successful save.
       await syncStops(loadId, linesAfterEdit, access);
@@ -704,9 +712,10 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
       .catch(() => undefined)
       .then(() => persistQuantity(runKey, lineKey, loadId, allocations, pallets, linesAfterEdit));
     quantitySaveQueues.current[runKey] = next;
-    void next.finally(() => {
-      if (quantitySaveQueues.current[runKey] === next) delete quantitySaveQueues.current[runKey];
-    });
+    void next.then(
+      () => { if (quantitySaveQueues.current[runKey] === next) delete quantitySaveQueues.current[runKey]; },
+      () => { if (quantitySaveQueues.current[runKey] === next) delete quantitySaveQueues.current[runKey]; },
+    );
     return next;
   }
 
