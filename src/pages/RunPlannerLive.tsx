@@ -177,7 +177,8 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
   const saveTimers = useRef<Record<string, number>>({});
   // Multiple order additions can happen before the first request returns. Keep
   // each run's allocation/stop writes in order so they cannot race each other.
-  const quantitySaveQueues = useRef<Record<string, Promise<void>>>({});
+  const quantitySaveQueues = useRef<Record<string, Promise<boolean>>>({});
+  const quantitySaveFailures = useRef(new Set<string>());
   const mutationCounter = useRef(0);
   const refreshSequence = useRef(0);
   const loadsRef = useRef<Load[]>([]);
@@ -185,11 +186,9 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
   const dirtyRunKeys = useRef(new Set<string>());
   const runsRef = useRef(runs);
   const setPlannerRuns = (next: RunDraft[] | ((current: RunDraft[]) => RunDraft[])) => {
-    setRuns((current) => {
-      const resolved = typeof next === "function" ? next(current) : next;
-      runsRef.current = resolved;
-      return resolved;
-    });
+    const resolved = typeof next === "function" ? next(runsRef.current) : next;
+    runsRef.current = resolved;
+    setRuns(resolved);
   };
 
   const consolidateLines = useCallback((rawLines: RunLine[], ordersById: Map<string, PlanningOrder>) => {
@@ -408,10 +407,15 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
   };
   const updateRun = (key: string, updater: (run: RunDraft) => RunDraft) => {
     dirtyRunKeys.current.add(key);
-    setPlannerRuns((current) => current.map((run) => run.key === key ? updater(run) : run));
+    // Keep the ref current synchronously as well as React state. Several jobs can
+    // be added before React renders again, and each save must build from every
+    // line already added to this run.
+    const nextRuns = runsRef.current.map((run) => run.key === key ? updater(run) : run);
+    setPlannerRuns(nextRuns);
   };
   const updateLine = (runKey: string, lineKey: string, patch: Partial<RunLine>) => updateRun(runKey, (run) => ({ ...run, lines: run.lines.map((line) => line.key === lineKey ? { ...line, ...patch } : line) }));
   const addSuggestedOrder = (run: RunDraft, order: PlanningOrder) => {
+    const currentRun = runsRef.current.find((candidate) => candidate.key === run.key) || run;
     const quantity = run.loadId
       ? distributeQuantity([order.id], order.outstandingPallets, run.key).allocations[order.id] || 0
       : order.outstandingPallets;
@@ -429,10 +433,11 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
       orderAllocations: { [order.id]: quantity },
       note: orderLineNote(order),
     };
-    const nextLines = [...run.lines.filter(line => lineOrderIds(line).length > 0 || line.collectionSite.trim() || line.deliverySite.trim() || line.pallets.trim()), nextLine];
+    const nextLines = [...currentRun.lines.filter(line => lineOrderIds(line).length > 0 || line.collectionSite.trim() || line.deliverySite.trim() || line.pallets.trim()), nextLine];
     updateRun(run.key, current => ({ ...current, lines: nextLines }));
     if (run.loadId) void enqueuePersistQuantity(run.key, nextLine.key, run.loadId, { [order.id]: quantity }, quantity, nextLines);
-    setMessage(`${order.reference} added to ${run.loadId ? "the live run and saved" : "the draft run"}.`);
+    const runReference = run.loadId ? loads.find((load) => load.id === run.loadId)?.reference : undefined;
+    setMessage(run.loadId ? `Saving ${order.reference} to ${runReference || "the run"}…` : `${order.reference} added to the draft run.`);
   };
   const changeLineLocation = (runKey: string, line: RunLine, field: "collectionSite" | "deliverySite", value: string) => {
     const currentRun = runs.find((run) => run.key === runKey);
@@ -692,27 +697,42 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
       }
       // Adding an order changes the route's stops. A quantity-only edit does not,
       // so avoid a second write that can time out after the allocation succeeded.
-      if (persistStops) await syncStops(loadId, linesAfterEdit, access);
-      dirtyRunKeys.current.delete(runKey);
-      signalPlanningChange();
-      setMessage(`Saved to Pallet Control · ${pallets} load unit${pallets === 1 ? "" : "s"} on this consolidated movement.`);
-      // signalPlanningChange refreshes this planner and other open planning views.
-      // Do not await a second copy of those reads: a slow refresh must not turn a
-      // successful write into a failure message.
+      if (persistStops) {
+        // A queued save may have been created before the next clicks rendered.
+        // Read the current run immediately before replacing its stop list so an
+        // older snapshot cannot remove jobs added while this request was running.
+        const latestLines = runsRef.current.find((run) => run.key === runKey)?.lines || linesAfterEdit;
+        await syncStops(loadId, latestLines, access);
+      }
+      return true;
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Pallet quantity could not be auto-saved.");
       if (mutation === mutationCounter.current) void refreshAll();
+      return false;
     } finally { setBusyKey((current) => current === key ? undefined : current); }
   }
 
   function enqueuePersistQuantity(runKey: string, lineKey: string, loadId: string, allocations: Record<string, number>, pallets: number, linesAfterEdit: RunLine[], persistStops = true) {
-    const previous = quantitySaveQueues.current[runKey] || Promise.resolve();
+    const previous = quantitySaveQueues.current[runKey] || Promise.resolve(true);
+    if (!quantitySaveQueues.current[runKey]) quantitySaveFailures.current.delete(runKey);
     const next = previous
       .catch(() => undefined)
-      .then(() => persistQuantity(runKey, lineKey, loadId, allocations, pallets, linesAfterEdit, persistStops));
+      .then(async () => {
+        const saved = await persistQuantity(runKey, lineKey, loadId, allocations, pallets, linesAfterEdit, persistStops);
+        if (!saved) quantitySaveFailures.current.add(runKey);
+        return saved;
+      });
     quantitySaveQueues.current[runKey] = next;
     void next.then(
-      () => { if (quantitySaveQueues.current[runKey] === next) delete quantitySaveQueues.current[runKey]; },
+      (saved) => {
+        if (quantitySaveQueues.current[runKey] !== next) return;
+        delete quantitySaveQueues.current[runKey];
+        if (quantitySaveFailures.current.has(runKey) || !saved) return;
+        quantitySaveFailures.current.delete(runKey);
+        dirtyRunKeys.current.delete(runKey);
+        signalPlanningChange();
+        setMessage(`Saved to Pallet Control · ${pallets} load unit${pallets === 1 ? "" : "s"} on this consolidated movement.`);
+      },
       () => { if (quantitySaveQueues.current[runKey] === next) delete quantitySaveQueues.current[runKey]; },
     );
     return next;
