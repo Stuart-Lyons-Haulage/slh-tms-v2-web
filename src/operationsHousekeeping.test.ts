@@ -9,6 +9,7 @@ import review from "./pages/OrderReviewBulk.tsx?raw";
 import palletControl from "./pages/PalletPlanningControl.tsx?raw";
 import planner from "./pages/PlannerEnhanced.tsx?raw";
 import runBuilder from "./pages/RunPlannerLive.tsx?raw";
+import runBuilderLine from "./pages/RunPlannerLine.tsx?raw";
 
 describe("operations housekeeping contract", () => {
   it("keeps Planner focused on planning only", () => {
@@ -87,7 +88,7 @@ describe("operations housekeeping contract", () => {
 
   it("keeps Planner Builder full-width and selects live jobs for the selected day", () => {
     expect(runBuilder).not.toContain('className="simple-order-pool"');
-    expect(runBuilder).toContain('simple-picker-options');
+    expect(runBuilderLine).toContain('simple-picker-options');
     expect(runBuilder).not.toContain('planner-collection-site-options');
     expect(runBuilder).toContain("liveCollections");
     expect(runBuilder).toContain("matchingLiveOrders");
@@ -95,8 +96,8 @@ describe("operations housekeeping contract", () => {
     expect(runBuilder).toContain("Choose both to link the line to the matching order(s)");
     expect(runBuilder).toContain("orderLineNote(order)");
     expect(runBuilder).toContain("mergedOrderLineNote");
-    expect(runBuilder).toContain('Start typing live collection');
-    expect(runBuilder).toContain('Choose delivery from this collection');
+    expect(runBuilderLine).toContain('Start typing live collection');
+    expect(runBuilderLine).toContain('Choose delivery from this collection');
   });
 
   it("keeps Run Builder suggestions scrollable and signals Pallet Order during quantity edits", () => {
