@@ -532,11 +532,15 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
   }
 
   async function allocateBatch(entries: Array<[string, number]>, loadId: string, access: string) {
-    return request<{ allocationCount: number }>("/api/v1/planning-control/allocations/batch", access, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ date, allocations: entries.map(([orderId, pallets]) => ({ orderId, loadId, date, pallets, note: "Auto-saved from live Run Planner" })) }),
-    });
+    // Do not use the SQL batch transaction for mobile planner edits. It invokes
+    // the full allocation recalculation once per order while holding one
+    // transaction open, which can sit in Saving indefinitely for a consolidated
+    // line. The single endpoint is idempotent and the queue already serialises
+    // these writes for the run.
+    for (const [orderId, pallets] of entries) {
+      await allocate(orderId, loadId, pallets, access);
+    }
+    return { allocationCount: entries.length };
   }
 
   async function syncStops(loadId: string, lines: RunLine[], access: string) {
