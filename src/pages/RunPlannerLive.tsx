@@ -528,7 +528,10 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
   }
 
   async function allocate(orderId: string, loadId: string, pallets: number, access: string) {
-    return request<AllocationResult>("/api/v1/planning-control/allocations", access, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ orderId, loadId, date, pallets, note: "Auto-saved from live Run Planner" }) });
+    // The key belongs to this save operation: retries reuse it, while a later
+    // edit back to a previously used quantity must create a new ledger event.
+    const idempotencyKey = crypto.randomUUID();
+    return request<AllocationResult>("/api/v1/planning-control/allocations", access, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ orderId, loadId, date, pallets, idempotencyKey, note: "Auto-saved from live Run Planner" }) });
   }
 
   async function allocateBatch(entries: Array<[string, number]>, loadId: string, access: string) {

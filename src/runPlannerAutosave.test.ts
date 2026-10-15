@@ -18,4 +18,8 @@ describe("Run Planner autosave", () => {
     expect(planner).toContain("Linked to ${lineOrderIds(line).length} live order");
     expect(planner).toContain("line.collectionSite.trim() && line.deliverySite.trim()");
   });
+  it("uses a unique idempotency key for each allocation save", () => {
+    expect(planner).toContain("const idempotencyKey = crypto.randomUUID();");
+    expect(planner).toContain("date, pallets, idempotencyKey, note:");
+  });
 });
