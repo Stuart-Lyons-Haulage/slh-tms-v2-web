@@ -10,6 +10,7 @@ import { tomorrowIsoDate } from "../lib/dateUtils";
 import { calculateRunCapacity } from "./runPlannerCapacity";
 import { findFinalRunSavings, type FinalCheckLine, type FinalCheckRun } from "./runPlannerFinalCheck";
 import { suggestJobsForRun, suggestionConfidencePercent, type RunSuggestionLine, type RunSuggestionSite } from "./runPlannerSuggestions";
+import { RunPlannerLine } from "./RunPlannerLine";
 
 type Period = "" | "AM" | "PM";
 type PeriodFilter = "ALL" | "AM" | "PM";
@@ -445,7 +446,7 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
     setMessage(run.loadId ? `Saving ${order.reference} to ${runReference || "the run"}…` : `${order.reference} added to the draft run.`);
   };
   const changeLineLocation = (runKey: string, line: RunLine, field: "collectionSite" | "deliverySite", value: string) => {
-    const currentRun = runs.find((run) => run.key === runKey);
+    const currentRun = runsRef.current.find((run) => run.key === runKey);
     if (!currentRun) return;
     const nextLine = { ...line, [field]: value, orderId: undefined, orderIds: undefined, orderAllocations: undefined } as RunLine;
     const nextLines = currentRun.lines.map((item) => item.key === line.key ? nextLine : item);
@@ -475,7 +476,7 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
     const matches = matchingAvailableOrders(collection, destination);
     if (!matches.length) return;
     const outstanding = matches.reduce((sum, order) => sum + Math.max(order.outstandingPallets, 0), 0);
-    const currentRun = runs.find((run) => run.key === runKey);
+    const currentRun = runsRef.current.find((run) => run.key === runKey);
     const currentLine = currentRun?.lines.find((line) => line.key === lineKey);
     if (!currentRun || !currentLine) return;
     const nextLine: RunLine = {
@@ -775,17 +776,19 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
   }
 
   function scheduleQuantity(run: RunDraft, line: RunLine, value: string) {
+    const currentRun = runsRef.current.find((item) => item.key === run.key) || run;
+    const currentLine = currentRun.lines.find((item) => item.key === line.key) || line;
     const pallets = validPallets(value);
     if (pallets === undefined) { updateLine(run.key, line.key, { pallets: value }); return; }
-    const ids = lineOrderIds(line);
-    if (!ids.length || !run.loadId) { updateLine(run.key, line.key, { pallets: value }); return; }
-    const distributed = distributeQuantity(ids, pallets, run.key);
+    const ids = lineOrderIds(currentLine);
+    if (!ids.length || !currentRun.loadId) { updateLine(run.key, line.key, { pallets: value }); return; }
+    const distributed = distributeQuantity(ids, pallets, currentRun.key);
     if (distributed.remaining > 0) {
       const maximum = pallets - distributed.remaining;
       setMessage(`Maximum available for this consolidated movement is ${maximum} load units.`);
       return;
     }
-    const linesAfterEdit = run.lines.map((item) => item.key === line.key ? { ...item, pallets: value, orderAllocations: distributed.allocations } : item);
+    const linesAfterEdit = currentRun.lines.map((item) => item.key === line.key ? { ...item, pallets: value, orderAllocations: distributed.allocations } : item);
     updateRun(run.key, (current) => ({ ...current, lines: linesAfterEdit }));
     const timerKey = `${run.key}:${line.key}`;
     if (saveTimers.current[timerKey]) window.clearTimeout(saveTimers.current[timerKey]);
@@ -795,20 +798,21 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
       // below emits again, so a refresh that races the request is followed by
       // the authoritative result without refreshing on every keystroke.
       signalPlanningChange();
-      void enqueuePersistQuantity(run.key, line.key, run.loadId!, distributed.allocations, pallets, linesAfterEdit, false);
+      void enqueuePersistQuantity(currentRun.key, line.key, currentRun.loadId!, distributed.allocations, pallets, linesAfterEdit, false);
     }, 250);
   }
 
   async function persistLineNote(run: RunDraft, line: RunLine, note: string) {
-    const linesAfterEdit = run.lines.map((item) => item.key === line.key ? { ...item, note } : item);
+    const currentRun = runsRef.current.find((item) => item.key === run.key) || run;
+    const linesAfterEdit = currentRun.lines.map((item) => item.key === line.key ? { ...item, note } : item);
     updateRun(run.key, (current) => ({ ...current, lines: linesAfterEdit }));
-    if (!run.loadId || !lineOrderIds(line).length) return;
+    if (!currentRun.loadId || !lineOrderIds(line).length) return;
     const key = `${run.key}:${line.key}:note`;
     setBusyKey(key);
     try {
       await enqueueRunMutation(run.key, async () => {
         const latestLines = runsRef.current.find((item) => item.key === run.key)?.lines || linesAfterEdit;
-        await syncStops(run.loadId!, latestLines, await token());
+        await syncStops(currentRun.loadId!, latestLines, await token());
       });
       dirtyRunKeys.current.delete(run.key); signalPlanningChange(); setMessage("Line note auto-saved.");
     }
@@ -817,23 +821,24 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
   }
 
   async function clearLine(run: RunDraft, line: RunLine) {
+    const currentRun = runsRef.current.find((item) => item.key === run.key) || run;
     const timerKey = `${run.key}:${line.key}`;
     if (saveTimers.current[timerKey]) { window.clearTimeout(saveTimers.current[timerKey]); delete saveTimers.current[timerKey]; }
-    const remaining = run.lines.length === 1 ? [blankLine()] : run.lines.filter((item) => item.key !== line.key);
+    const remaining = currentRun.lines.length === 1 ? [blankLine()] : currentRun.lines.filter((item) => item.key !== line.key);
     updateRun(run.key, (current) => ({ ...current, lines: remaining }));
     const ids = lineOrderIds(line);
-    if (!ids.length || !run.loadId) return;
+    if (!ids.length || !currentRun.loadId) return;
     setBusyKey(timerKey);
     try {
       await enqueueRunMutation(run.key, async () => {
         const access = await token();
-        for (const orderId of ids) await allocate(orderId, run.loadId!, 0, access);
+        for (const orderId of ids) await allocate(orderId, currentRun.loadId!, 0, access);
         const latestLines = runsRef.current.find((item) => item.key === run.key)?.lines || remaining;
         if (latestLines.some(item => lineOrderIds(item).length > 0)) {
-          await syncStops(run.loadId!, latestLines, access);
+          await syncStops(currentRun.loadId!, latestLines, access);
         } else {
           // Removing the final movement leaves a cancellation tombstone.
-          await updateRunStatus(run.loadId!, "Cancelled", access);
+          await updateRunStatus(currentRun.loadId!, "Cancelled", access);
         }
       });
       dirtyRunKeys.current.delete(run.key);
@@ -899,34 +904,28 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
             {nextOrderSuggestions.length > 0 && <details className="simple-run-suggestions" aria-label={`Suggested next orders for ${run.key}`} onClick={(event) => event.stopPropagation()}><summary className="simple-run-suggestions-heading"><span><strong>Route suggestions</strong><small>{nextOrderSuggestions.length} sensible fit{nextOrderSuggestions.length === 1 ? "" : "s"} · mileage and direction checked</small></span><span className="simple-run-suggestion-hint">Show</span></summary><div className="simple-run-suggestion-list">{nextOrderSuggestions.map(item => { const confidencePercent = suggestionConfidencePercent(item.score); const confidence = confidencePercent >= 70 ? "high" : confidencePercent >= 45 ? "medium" : "low"; const loadType = item.order.palletType || item.order.loadUnitType; return <article key={item.order.id} className={`simple-run-suggestion confidence-${confidence}`}><div className="simple-run-suggestion-route"><span><small>From</small><strong>{item.order.collection}</strong></span><b aria-hidden="true">→</b><span><small>To</small><strong>{item.order.destination}</strong></span></div><div className="simple-run-suggestion-meta"><span><small>Load</small><strong>{item.order.outstandingPallets}{loadType ? ` ${loadType}` : ""}</strong></span>{item.connectorMiles != null && <span><small>Reposition</small><strong>~{Math.round(item.connectorMiles)} mi</strong></span>}<span><small>Fit</small><strong>{confidencePercent}%</strong></span></div><details><summary>Why?</summary><small>{item.reasons.join(" · ")}</small></details><button type="button" onClick={() => addSuggestedOrder(run, item.order)}>Add</button></article>; })}</div></details>}
             {builderWarnings.length > 0 && <aside className="simple-run-warnings" aria-label="Run builder checks"><strong>Planner checks</strong><ul>{builderWarnings.map(warning => <li key={warning}>{warning}</li>)}</ul></aside>}
             <div className="simple-run-columns"><span>Collection</span><span>Pallets</span><span>Delivery</span><span>Line note</span><span /></div>
-            <div className="simple-run-lines">{run.lines.map((line, lineIndex) => {
-              const refs = lineOrderIds(line).map((id) => effectiveOrders.find((order) => order.id === id)?.reference).filter(Boolean);
-              const matches = matchingLiveOrders(line.collectionSite, line.deliverySite);
-              const completeRoute = Boolean(line.collectionSite.trim() && line.deliverySite.trim());
-              const collectionSuggestions = liveCollections.filter((collection) => !line.collectionSite || normalise(collection).includes(normalise(line.collectionSite))).slice(0, 8);
-              const deliveryByName = new Map<string, { destination: string; pallets: number }>();
-              availableOrders.filter((order) => normalise(order.collection) === normalise(line.collectionSite)).forEach((order) => {
-                const destination = order.destination.trim();
-                const current = deliveryByName.get(normalise(destination));
-                deliveryByName.set(normalise(destination), { destination, pallets: (current?.pallets || 0) + Math.max(order.outstandingPallets, 0) });
-              });
-              const deliverySuggestions = [...deliveryByName.values()].sort((left, right) => left.destination.localeCompare(right.destination));
-              return <div className="simple-run-line" key={line.key} title={refs.length > 1 ? `${refs.length} source orders: ${refs.join(", ")}` : refs[0]}>
-                <span className="simple-line-number">{lineIndex + 1}</span>
-                <div className="simple-picker"><input autoComplete="off" inputMode="search" enterKeyHint="next" value={line.collectionSite} onFocus={() => setOpenPicker(`${run.key}:${line.key}:collection`)} onBlur={() => window.setTimeout(() => setOpenPicker((current) => current === `${run.key}:${line.key}:collection` ? undefined : current), 180)} onChange={(event) => changeLineLocation(run.key, line, "collectionSite", event.target.value)} placeholder="Start typing live collection…" />{openPicker === `${run.key}:${line.key}:collection` && line.collectionSite && (() => { if (collectionSuggestions.length > 0 && normalise(collectionSuggestions[0]) !== normalise(line.collectionSite)) return <div className="simple-picker-options">{collectionSuggestions.map((collection) => <button type="button" key={collection} onPointerDown={(event) => event.preventDefault()} onClick={() => { chooseCollection(run.key, line.key, collection); setOpenPicker(undefined); }}>{collection}</button>)}</div>; return <div className="simple-picker-options simple-picker-empty">No live collection orders for this date</div>; })()}</div>
-                <input className="simple-pallet-input" type="number" min="0" inputMode="numeric" value={line.pallets} onChange={(event) => scheduleQuantity(run, line, event.target.value)} placeholder="0" />
-                <div className="simple-picker"><input autoComplete="off" inputMode="search" enterKeyHint="next" value={line.deliverySite} onFocus={() => setOpenPicker(`${run.key}:${line.key}:delivery`)} onBlur={() => window.setTimeout(() => setOpenPicker((current) => current === `${run.key}:${line.key}:delivery` ? undefined : current), 180)} onChange={(event) => changeLineLocation(run.key, line, "deliverySite", event.target.value)} placeholder="Choose delivery from this collection…" />{openPicker === `${run.key}:${line.key}:delivery` && (() => { if (deliverySuggestions.length > 0) return <div className="simple-picker-options delivery-options">{deliverySuggestions.map((choice) => <button type="button" key={choice.destination} onPointerDown={(event) => event.preventDefault()} onClick={() => { chooseDelivery(run.key, line.key, line.collectionSite, choice.destination); setOpenPicker(undefined); }}><span>{choice.destination}</span><small>{choice.pallets} pallet{choice.pallets === 1 ? "" : "s"}</small></button>)}</div>; return line.collectionSite ? <div className="simple-picker-options simple-picker-empty">No deliveries available from this collection</div> : null; })()}</div>
-                <input value={line.note} onChange={(event) => updateLine(run.key, line.key, { note: event.target.value })} onBlur={(event) => void persistLineNote(run, line, event.currentTarget.value)} placeholder={refs.length > 1 ? `${refs.length} orders consolidated` : "Facility / load-line note"} />
-                <button type="button" className="simple-clear-line" aria-label={`Clear line ${lineIndex + 1}`} disabled={busyKey === `${run.key}:${line.key}`} onClick={(event) => { event.stopPropagation(); void clearLine(run, line); }}>×</button>
-                {completeRoute && <small className={`simple-line-match ${lineOrderIds(line).length || matches.length ? "matched" : "unmatched"}`}>
-                  {lineOrderIds(line).length
-                    ? `Linked to ${lineOrderIds(line).length} live order${lineOrderIds(line).length === 1 ? "" : "s"}`
-                    : matches.length
-                    ? `${matches.length} live order${matches.length === 1 ? "" : "s"} · ${matches.reduce((sum, order) => sum + order.outstandingPallets, 0)} available`
-                    : "No live order matches this collection and delivery for the selected date"}
-                </small>}
-              </div>;
-            })}</div>
+            <div className="simple-run-lines">{run.lines.map((line, lineIndex) => (
+              <RunPlannerLine
+                key={line.key}
+                run={run}
+                line={line}
+                lineIndex={lineIndex}
+                effectiveOrders={effectiveOrders}
+                sites={sites}
+                liveCollections={liveCollections}
+                availableOrders={availableOrders}
+                busyKey={busyKey}
+                openPicker={openPicker}
+                setOpenPicker={setOpenPicker}
+                changeLineLocation={changeLineLocation}
+                scheduleQuantity={scheduleQuantity}
+                chooseCollection={chooseCollection}
+                chooseDelivery={chooseDelivery}
+                updateLine={updateLine}
+                persistLineNote={persistLineNote}
+                clearLine={clearLine}
+              />
+            ))}</div>
             <div className="simple-run-footer"><div className="simple-line-actions"><button type="button" onClick={(event) => { event.stopPropagation(); updateRun(run.key, (current) => ({ ...current, lines: [...current.lines, blankLine()] })); }}>+ Add line</button>{!run.loadId && <button type="button" className="primary" disabled={Boolean(busyKey)} onClick={(event) => { event.stopPropagation(); void createPlanningRun(run); }}>{saving ? "Saving…" : "Retry save"}</button>}</div><small>{saving ? "Saving…" : run.loadId ? "✓ Live · available in Pallet Order" : "Select a valid collection and delivery to auto-save this run"}</small></div>
           </article>;
         })}
