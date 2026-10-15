@@ -317,8 +317,11 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
   }, [refreshAll]);
 
   useEffect(() => {
-    const refresh = () => void refreshAll().catch(() => undefined);
-    const stopPolling = startVisiblePolling(refresh, 30_000);
+    const refresh = () => {
+      if (dirtyRunKeys.current.size > 0) return;
+      void refreshAll().catch(() => undefined);
+    };
+    const stopPolling = startVisiblePolling(refresh, 60_000);
     const unsubscribe = subscribePlanningChanges(refresh);
     return () => { stopPolling(); unsubscribe(); };
   }, [refreshAll]);
