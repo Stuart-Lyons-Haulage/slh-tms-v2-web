@@ -672,7 +672,7 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
     return { allocations, remaining };
   }
 
-  async function persistQuantity(runKey: string, lineKey: string, loadId: string, allocations: Record<string, number>, pallets: number, linesAfterEdit: RunLine[]) {
+  async function persistQuantity(runKey: string, lineKey: string, loadId: string, allocations: Record<string, number>, pallets: number, linesAfterEdit: RunLine[], persistStops = true) {
     const mutation = ++mutationCounter.current;
     const key = `${runKey}:${lineKey}`;
     setBusyKey(key);
@@ -690,27 +690,26 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
       } else {
         await allocateBatch(entries, loadId, access);
       }
-      // Persist the allocation and the run's stop list together. Without this,
-      // reopening the run could show the old stops even after a successful save.
-      await syncStops(loadId, linesAfterEdit, access);
+      // Adding an order changes the route's stops. A quantity-only edit does not,
+      // so avoid a second write that can time out after the allocation succeeded.
+      if (persistStops) await syncStops(loadId, linesAfterEdit, access);
       dirtyRunKeys.current.delete(runKey);
-      // Re-read the authoritative run/order projection before notifying Pallet Control.
-      // This prevents a refresh race where the second screen queries between the
-      // allocation commit and the planner projection refresh.
-      await refreshAll();
       signalPlanningChange();
       setMessage(`Saved to Pallet Control · ${pallets} load unit${pallets === 1 ? "" : "s"} on this consolidated movement.`);
+      // signalPlanningChange refreshes this planner and other open planning views.
+      // Do not await a second copy of those reads: a slow refresh must not turn a
+      // successful write into a failure message.
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Pallet quantity could not be auto-saved.");
       if (mutation === mutationCounter.current) void refreshAll();
     } finally { setBusyKey((current) => current === key ? undefined : current); }
   }
 
-  function enqueuePersistQuantity(runKey: string, lineKey: string, loadId: string, allocations: Record<string, number>, pallets: number, linesAfterEdit: RunLine[]) {
+  function enqueuePersistQuantity(runKey: string, lineKey: string, loadId: string, allocations: Record<string, number>, pallets: number, linesAfterEdit: RunLine[], persistStops = true) {
     const previous = quantitySaveQueues.current[runKey] || Promise.resolve();
     const next = previous
       .catch(() => undefined)
-      .then(() => persistQuantity(runKey, lineKey, loadId, allocations, pallets, linesAfterEdit));
+      .then(() => persistQuantity(runKey, lineKey, loadId, allocations, pallets, linesAfterEdit, persistStops));
     quantitySaveQueues.current[runKey] = next;
     void next.then(
       () => { if (quantitySaveQueues.current[runKey] === next) delete quantitySaveQueues.current[runKey]; },
@@ -740,7 +739,7 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
       // below emits again, so a refresh that races the request is followed by
       // the authoritative result without refreshing on every keystroke.
       signalPlanningChange();
-      void enqueuePersistQuantity(run.key, line.key, run.loadId!, distributed.allocations, pallets, linesAfterEdit);
+      void enqueuePersistQuantity(run.key, line.key, run.loadId!, distributed.allocations, pallets, linesAfterEdit, false);
     }, 250);
   }
 
