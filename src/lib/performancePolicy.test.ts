@@ -35,7 +35,8 @@ describe("SLH TMS performance policy", () => {
     expect(pallet).not.toContain("2000");
     expect(pallet).not.toContain("2_000");
     expect(planner).toContain("subscribePlanningChanges");
-    expect(planner).toContain("30_000");
+    expect(planner).toContain("60_000");
+    expect(planner).toContain("if (dirtyRunKeys.current.size > 0) return;");
     expect(plannerShell).not.toContain("serverRevision");
     expect(plannerShell).not.toContain("subscribeServerPlanningChanges");
   });
