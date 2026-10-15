@@ -184,6 +184,7 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
   const loadsRef = useRef<Load[]>([]);
   const sitesRef = useRef<Site[]>([]);
   const dirtyRunKeys = useRef(new Set<string>());
+  const dirtyRunVersions = useRef(new Map<string, number>());
   const runsRef = useRef(runs);
   const setPlannerRuns = (next: RunDraft[] | ((current: RunDraft[]) => RunDraft[])) => {
     const resolved = typeof next === "function" ? next(runsRef.current) : next;
@@ -407,6 +408,7 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
   };
   const updateRun = (key: string, updater: (run: RunDraft) => RunDraft) => {
     dirtyRunKeys.current.add(key);
+    dirtyRunVersions.current.set(key, (dirtyRunVersions.current.get(key) ?? 0) + 1);
     // Keep the ref current synchronously as well as React state. Several jobs can
     // be added before React renders again, and each save must build from every
     // line already added to this run.
@@ -703,6 +705,7 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
 
   async function persistQuantity(runKey: string, lineKey: string, loadId: string, allocations: Record<string, number>, pallets: number, linesAfterEdit: RunLine[], persistStops = true) {
     const mutation = ++mutationCounter.current;
+    const dirtyVersion = dirtyRunVersions.current.get(runKey) ?? 0;
     const key = `${runKey}:${lineKey}`;
     setBusyKey(key);
     try {
@@ -728,6 +731,9 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
         const latestLines = runsRef.current.find((run) => run.key === runKey)?.lines || linesAfterEdit;
         await syncStops(loadId, latestLines, access);
       }
+      // Only clear the dirty marker after every save has succeeded. Keep newer
+      // edits protected if they were made while this request was in flight.
+      if (dirtyRunVersions.current.get(runKey) === dirtyVersion) dirtyRunKeys.current.delete(runKey);
       return true;
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Pallet quantity could not be auto-saved.");
@@ -753,7 +759,6 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
         delete quantitySaveQueues.current[runKey];
         if (quantitySaveFailures.current.has(runKey) || !saved) return;
         quantitySaveFailures.current.delete(runKey);
-        dirtyRunKeys.current.delete(runKey);
         signalPlanningChange();
         setMessage(`Saved to Pallet Control · ${pallets} load unit${pallets === 1 ? "" : "s"} on this consolidated movement.`);
       },
