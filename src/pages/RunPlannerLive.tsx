@@ -555,6 +555,23 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
     await updateRunStops(loadId, stops, access);
   }
 
+  // Every mutation that replaces the complete stop list must share the same
+  // per-run queue. Otherwise a note edit or removal can race an order add and
+  // persist an older snapshot over the newer route.
+  function enqueueRunMutation(runKey: string, mutation: () => Promise<void>) {
+    const previous = quantitySaveQueues.current[runKey] || Promise.resolve(true);
+    const next = previous.catch(() => true).then(async () => {
+      await mutation();
+      return true;
+    });
+    quantitySaveQueues.current[runKey] = next;
+    void next.then(
+      () => { if (quantitySaveQueues.current[runKey] === next) delete quantitySaveQueues.current[runKey]; },
+      () => { if (quantitySaveQueues.current[runKey] === next) delete quantitySaveQueues.current[runKey]; },
+    );
+    return next;
+  }
+
   function notesForRun(run: RunDraft, period = run.period) {
     const current = loads.find((item) => item.id === run.loadId)?.plannerNotes;
     let notes = plannerTag(plannerTag(withPlannerPeriod(current, period), "Night out", run.nightOut ? "Yes" : "No"), "Operational amendment", run.operationalAmendment);
@@ -776,7 +793,13 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
     if (!run.loadId || !lineOrderIds(line).length) return;
     const key = `${run.key}:${line.key}:note`;
     setBusyKey(key);
-    try { await syncStops(run.loadId, linesAfterEdit, await token()); dirtyRunKeys.current.delete(run.key); signalPlanningChange(); setMessage("Line note auto-saved."); }
+    try {
+      await enqueueRunMutation(run.key, async () => {
+        const latestLines = runsRef.current.find((item) => item.key === run.key)?.lines || linesAfterEdit;
+        await syncStops(run.loadId!, latestLines, await token());
+      });
+      dirtyRunKeys.current.delete(run.key); signalPlanningChange(); setMessage("Line note auto-saved.");
+    }
     catch (error) { setMessage(error instanceof Error ? error.message : "Line note could not be saved."); }
     finally { setBusyKey((current) => current === key ? undefined : current); }
   }
@@ -790,17 +813,17 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
     if (!ids.length || !run.loadId) return;
     setBusyKey(timerKey);
     try {
-      const access = await token();
-      for (const orderId of ids) {
-        await allocate(orderId, run.loadId!, 0, access);
-      }
-      if (remaining.some(item => lineOrderIds(item).length > 0)) {
-        await syncStops(run.loadId, remaining, access);
-      } else {
-        // Removing the final movement removes the planning run. Persist a cancellation
-        // tombstone so Dispatch and audit recovery cannot continue to show the old run.
-        await updateRunStatus(run.loadId, "Cancelled", access);
-      }
+      await enqueueRunMutation(run.key, async () => {
+        const access = await token();
+        for (const orderId of ids) await allocate(orderId, run.loadId!, 0, access);
+        const latestLines = runsRef.current.find((item) => item.key === run.key)?.lines || remaining;
+        if (latestLines.some(item => lineOrderIds(item).length > 0)) {
+          await syncStops(run.loadId!, latestLines, access);
+        } else {
+          // Removing the final movement leaves a cancellation tombstone.
+          await updateRunStatus(run.loadId!, "Cancelled", access);
+        }
+      });
       dirtyRunKeys.current.delete(run.key);
       signalPlanningChange();
       setMessage("Movement removed from the run and its remaining pallets returned to Pallet Order.");

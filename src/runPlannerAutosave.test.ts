@@ -18,8 +18,16 @@ describe("Run Planner autosave", () => {
     expect(planner).toContain("Linked to ${lineOrderIds(line).length} live order");
     expect(planner).toContain("line.collectionSite.trim() && line.deliverySite.trim()");
   });
+
   it("uses a unique idempotency key for each allocation save", () => {
     expect(planner).toContain("const idempotencyKey = crypto.randomUUID();");
     expect(planner).toContain("date, pallets, idempotencyKey, note:");
+  });
+
+  it("serializes note and removal stop-list writes with order additions", () => {
+    expect(planner).toContain("function enqueueRunMutation(runKey: string, mutation: () => Promise<void>)");
+    expect(planner).toContain("await enqueueRunMutation(run.key, async () => {");
+    expect(planner).toContain("const latestLines = runsRef.current.find((item) => item.key === run.key)?.lines || linesAfterEdit;");
+    expect(planner).toContain("const latestLines = runsRef.current.find((item) => item.key === run.key)?.lines || remaining;");
   });
 });
