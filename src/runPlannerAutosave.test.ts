@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import planner from "./pages/RunPlannerLive.tsx?raw";
+import plannerLine from "./pages/RunPlannerLine.tsx?raw";
 
 describe("Run Planner autosave", () => {
   it("creates a persisted run when a collection and delivery resolve to live work", () => {
@@ -13,10 +14,11 @@ describe("Run Planner autosave", () => {
   });
 
   it("does not mark a linked job unmatched after its remaining quantity reaches zero", () => {
-    expect(planner).toContain("matchingLiveOrders(line.collectionSite, line.deliverySite)");
-    expect(planner).toContain("lineOrderIds(line).length || matches.length");
-    expect(planner).toContain("Linked to ${lineOrderIds(line).length} live order");
-    expect(planner).toContain("line.collectionSite.trim() && line.deliverySite.trim()");
+    expect(plannerLine).toContain("const matches = effectiveOrders.filter");
+    expect(plannerLine).toContain("orderIds.length || matches.length");
+    expect(plannerLine).toContain("Linked to ${orderIds.length} live order");
+    expect(plannerLine).toContain("line.collectionSite.trim() && line.deliverySite.trim()");
+    expect(planner).toContain("<RunPlannerLine");
   });
 
   it("uses a unique idempotency key for each allocation save", () => {
