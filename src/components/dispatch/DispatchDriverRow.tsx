@@ -220,16 +220,8 @@ export function DispatchDriverRow({
     </td>
 
     <td className="smart-location-cell">
-      <strong>{driver.trackingData.lastStopName || "Location unavailable"}</strong>
-      {driver.trackingData.lastPositionAtUtc && <small>Position · {ukTime(driver.trackingData.lastPositionAtUtc)}</small>}
-      {!driver.trackingData.lastPositionAtUtc && driver.previousPlanningDate && driver.trackingData.lastStopName && <small>Last executed route · {driver.previousPlanningDate}</small>}
-      {driver.distanceToSuggestedCollectionMiles != null && driver.suggestedRunReference &&
-        <small>{driver.distanceToSuggestedCollectionMiles.toFixed(1)}mi to suggested collection · {driver.suggestedRunReference}</small>}
-      {driver.suggestion && <small className={driver.needsReturn && !driver.backloadCandidate ? "smart-inline-warning" : ""}>{driver.suggestion}{driver.suggestionScore != null && ` · ${driver.suggestionScore}/100 match`}</small>}
-      {driver.suggestionReasons && driver.suggestionReasons.length > 0 && <details className="smart-suggestion-details">
-        <summary>Why this suggestion?</summary>
-        <ul>{driver.suggestionReasons.map(reason => <li key={reason}>{reason}</li>)}</ul>
-      </details>}
+      <strong>{driver.previousRunReference || "Not recorded"}</strong>
+      {driver.previousPlanningDate && <small>Planning date · {driver.previousPlanningDate}</small>}
     </td>
 
     <td className="smart-skills-cell">

@@ -5,7 +5,6 @@ import "../../smart-dispatch.css";
 import { DispatchDriverRow } from "./DispatchDriverRow";
 import { DispatchSnapshotCache } from "./dispatchSnapshotCache";
 import { DispatchFilters } from "./DispatchFilters";
-import { rankDriversForRun } from "./dispatchRunRanking";
 import { allocateDispatchRun, downloadSamsaraCsv, getAvailableTimes, getSamsaraDispatchStatus, getSmartDispatch, sendRunToSamsara, syncDispatchDrivers, syncSamsaraMappings, unassignDispatchRun, type SmartDispatchOptionalEnrichment } from "./dispatchApi";
 import {
   applyAvailableTimes,
@@ -81,14 +80,11 @@ function RouteSidebar({ runs, owners, allocatedRunIds, drivers, allDrivers, vehi
       <strong>Routes</strong>
       <span>{runs.length}</span>
     </div>
-    <p>First collection → final delivery. Best-fit suggestions use the driver’s last known position plus first collection proximity, skills and continuity.</p>
+    <p>Routes remain available for Samsara export without TMS driver or vehicle assignment. Local allocations are optional.</p>
     <div className="smart-run-card-list">
       {runs.map(run => {
         const ownerId = owners[run.runId];
         const owner = ownerId ? allDrivers.find(driver => driver.driverId === ownerId) : undefined;
-        const suggestedDrivers = drivers.filter(driver => driver.suggestedRunId === run.runId);
-        const rankedDrivers = rankDriversForRun(run, drivers, owners)
-          .sort((left, right) => Number(suggestedDrivers.includes(right.driver)) - Number(suggestedDrivers.includes(left.driver)) || right.score - left.score);
         const selectedDriver = ownerId ? drivers.find(driver => driver.driverId === ownerId) : undefined;
         const selected = ownerId ? selections[ownerId] || emptyDispatchSelection() : emptyDispatchSelection();
         const status = ownerId ? statuses[ownerId] : undefined;
@@ -134,11 +130,6 @@ function RouteSidebar({ runs, owners, allocatedRunIds, drivers, allDrivers, vehi
             <button type="button" className="smart-action ghost dark" disabled={!canExport || busyDriverId === owner.driverId} onClick={() => selectedDriver && onSamsaraAndDispatch(selectedDriver, selected)}>{busyDriverId === owner.driverId ? "Working…" : "Export to Samsara"}</button>
             <button type="button" className="smart-action ghost" disabled={busyDriverId === owner.driverId} onClick={() => selectedDriver && onDownloadSamsaraCsv(selectedDriver, selected)}>CSV</button>
           </div>}
-          {!owner && rankedDrivers.length > 0 && <details className="smart-run-fit">
-            <summary>Best driver matches</summary>
-            <ol>{rankedDrivers.slice(0, 3).map(match => <li key={match.driver.driverId}><strong>{match.driver.name} · {match.score}/100</strong><small>{match.reasons.join(" · ")}</small></li>)}</ol>
-          </details>}
-          {!owner && rankedDrivers.length === 0 && <small className="smart-run-warning">No eligible driver currently matches this route</small>}
           {run.relay?.enabled && <small className="smart-run-warning">Relay: collect → {run.relay.handoverSite || "handover site required"} → delivery</small>}
           {!run.relay?.enabled && run.trailerSwapRequested && <small className="smart-run-warning">Planner note: trailer swap requested</small>}
         </article>;
@@ -710,7 +701,7 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
         <table className="smart-dispatch-table authoritative">
           <thead>
             <tr>
-              <th>Driver</th><th>Duty</th><th>Last location / fit</th><th>Skills</th><th>Route</th><th>Vehicle</th><th>Trailer</th><th>Available / WTD</th><th>Status</th><th>Dispatch</th>
+              <th>Driver</th><th>Duty</th><th>Previous run</th><th>Skills</th><th>Route</th><th>Vehicle</th><th>Trailer</th><th>Available / WTD</th><th>Status</th><th>Dispatch</th>
             </tr>
           </thead>
           <tbody>
