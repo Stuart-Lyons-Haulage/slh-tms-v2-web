@@ -44,9 +44,16 @@ async function installApi(page: Page, state: State) {
   await page.route('**/*', async route => {
     const req = route.request();
     const url = new URL(req.url());
-    if (!url.pathname.includes('/api/v1/') && !url.pathname.includes('/api/master/')) return route.continue();
+    if (!url.pathname.includes('/api/v1/') && !url.pathname.includes('/api/master/') && !url.pathname.includes('/api/dispatch/')) return route.continue();
     const path = url.pathname.replace(/^\/tms-api/, '');
     const method = req.method();
+
+    if (path === '/api/dispatch/driver-visibility' && method === 'GET') return json(route, {
+      planningDate: state.planningDate,
+      windowDays: 7,
+      cutoffDate: state.planningDate,
+      drivers: []
+    });
 
     // Current PlannerEnhanced/RunPlannerLive contract.
     if (path === '/api/v1/integrations/samsara/dispatch/status' && method === 'GET') return json(route, {
