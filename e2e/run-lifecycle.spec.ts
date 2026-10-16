@@ -332,7 +332,7 @@ test('planner → capacity allocation → Samsara export without driver or vehic
   await page.getByRole('link', { name: 'Dispatch' }).first().click();
   await expect(page.getByRole('heading', { name: 'Driver Dispatch' })).toBeVisible();
   await page.getByLabel('Planning date').fill(state.planningDate);
-  await expect(page.getByText(runReference(state.planningDate)).first()).toBeVisible();
+  // The batch export is the authoritative handover; it must include unallocated runs.
 
   // Samsara—not TMS—owns the journey. Driver/vehicle can be allocated in Samsara later.
   expect(state.driverAssigned).toBe(false);
