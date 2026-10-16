@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isIgnorableAgencyStatus } from "./Staffing";
+import { isIgnorableAgencyStatus } from "../lib/agencyStatus";
 
 describe("agency workbook status normalisation", () => {
   it("ignores provider rest, cancellation, and non-availability codes", () => {

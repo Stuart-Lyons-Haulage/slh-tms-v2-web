@@ -5,6 +5,7 @@ import { useAccessToken } from "../lib/auth";
 import type { DriverAvailabilityItem, DriverAvailabilitySnapshot } from "../components/dispatch/types";
 import { DriverTimesheets } from "./DriverTimesheets";
 import { DriverAssignments } from "./Pages";
+import { isIgnorableAgencyStatus } from "../lib/agencyStatus";
 
 type ImportRow = { driverName: string; date: string; status: string; source: string; agencyName: string };
 type ImportIssue = { row: string; reason: string };
@@ -35,26 +36,7 @@ function normaliseDriverName(value: string) {
   return value.trim().replace(/\s+/g, " ").toLocaleLowerCase("en-GB");
 }
 
-const agencyStatusCodes = new Set([
-  "AV", "AVAILABLE", "A", "REST", "REST DAY", "RESTDAY", "RES", "R", "R?",
-  "HOL", "HOLIDAY", "LEAVE", "SICK", "OFF", "N", "N?", "D", "D?", "C", "X",
-  "N/A", "NA", "UNAVAILABLE", "NOT AVAILABLE", "CANCELLED", "CANCELED",
-  "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY",
-]);
-
-export function isIgnorableAgencyStatus(value: unknown) {
-  const status = String(value || "").trim().toUpperCase();
-  if (!status || agencyStatusCodes.has(status)) return true;
-  // Some providers export the date/weekday label into the status grid. It is
-  // structural workbook data, not an availability decision, so do not turn it
-  // into a false import exception.
-  if (/^(MON|TUE|WED|THU|FRI|SAT|SUN)\b/.test(status)) return true;
-  if (/^(?:\d+\s*[ND])(?:\s+\d+\s*[ND])*$/i.test(status)) return true;
-  if (/\b(?:NOT\s*REQ|CANX|CANC|CANCEL(?:LED|ED)?|NOT\s+AVAILABLE|D\s+NA|LICENCE\s+EXP|DAY\s+SHIFT\s+ONLY)\b/i.test(status)) return true;
-  if (status === "?" || status.length > 40) return true;
-  if (!Number.isNaN(new Date(status).getTime())) return true;
-  return false;
-}
+import { agencyStatusCodes } from '../lib/agencyStatus';
 
 function findDriverNameColumn(matrix: unknown[][], dateRow: number) {
   const headerRows = matrix.slice(Math.max(0, dateRow - 1), Math.min(matrix.length, dateRow + 5));

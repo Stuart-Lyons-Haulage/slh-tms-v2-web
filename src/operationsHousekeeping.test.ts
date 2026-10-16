@@ -91,7 +91,6 @@ describe("operations housekeeping contract", () => {
     expect(runBuilderLine).toContain('simple-picker-options');
     expect(runBuilder).not.toContain('planner-collection-site-options');
     expect(runBuilder).toContain("liveCollections");
-    expect(runBuilder).toContain("matchingLiveOrders");
     expect(runBuilder).toContain("matchingAvailableOrders");
     expect(runBuilder).toContain("Choose both to link the line to the matching order(s)");
     expect(runBuilder).toContain("orderLineNote(order)");

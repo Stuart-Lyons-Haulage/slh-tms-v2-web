@@ -6,6 +6,7 @@ import { signalPlanningChange, subscribePlanningChanges } from "../lib/planningE
 import { useApi } from "../lib/useApi";
 import { startVisiblePolling } from "../lib/visiblePolling";
 import { planningDeliveryLocation } from "../lib/planningLocations";
+import { planningCollectionGroup } from "../lib/planningCollectionGroup";
 import { tomorrowIsoDate } from "../lib/dateUtils";
 
 type Allocation = { loadId: string; loadReference?: string; pallets: number; updatedAtUtc: string; updatedBy?: string };
@@ -26,7 +27,6 @@ function palletLabel(order: PlanningOrder) { if (order.loadUnitType && order.loa
 function toneBackground(tone: PalletTone) { if (tone === "standard") return "#dbeafe"; if (tone === "euro") return "#ffedd5"; if (tone === "traycrate") return "#dcfce7"; if (tone === "trolley") return "#fef9c3"; if (tone === "mixed") return "linear-gradient(135deg, #dbeafe 0 25%, #ffedd5 25% 50%, #dcfce7 50% 75%, #fef9c3 75% 100%)"; return "#f3f4f6"; }
 function toneBorder(tone: PalletTone) { if (tone === "standard") return "#2563eb"; if (tone === "euro") return "#ea580c"; if (tone === "traycrate") return "#16a34a"; if (tone === "trolley") return "#ca8a04"; if (tone === "mixed") return "#7c3aed"; return "#9ca3af"; }
 function sectionLabel(value?: string) { return value?.toLowerCase().includes("pm") ? "PM / Overnight" : "AM"; }
-export function planningCollectionGroup(order: { planningGroup?: string; collection: string }) { return order.planningGroup?.trim() || order.collection.trim(); }
 
 export function PalletPlanningControl() {
   const token = useAccessToken();

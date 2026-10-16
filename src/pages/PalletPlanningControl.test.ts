@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { planningCollectionGroup } from "./PalletPlanningControl";
+import { planningCollectionGroup } from "../lib/planningCollectionGroup";
 
 describe("planningCollectionGroup", () => {
   it("uses the temperature-aware planning label while retaining the physical collection site", () => {
