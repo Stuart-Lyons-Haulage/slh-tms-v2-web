@@ -345,6 +345,7 @@ test('planner → capacity allocation → Samsara export without driver or vehic
   expect(state.driverAssigned).toBe(false);
   expect(state.vehicleAssigned).toBe(false);
   const exportButton = page.getByRole('button', { name: /Export to Samsara/ }).first();
+  console.log('DISPATCH E2E BODY:', (await page.locator('body').innerText()).slice(-2500));
   await expect(exportButton).toBeEnabled();
   await exportButton.click();
   await expect(page.getByText(/1 route exported to Samsara\./i)).toBeVisible();
