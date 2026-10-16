@@ -149,7 +149,7 @@ describe("Driver Dispatch UI contract", () => {
   it("uses Routes wording and carries Driver Master/Sage duty and leave state into dispatch", () => {
     expect(authoritativeSource).toContain('aria-label="Routes ready for driver allocation"');
     expect(authoritativeSource).toContain("<strong>Routes</strong>");
-    expect(authoritativeSource).toContain("<th>Driver</th><th>Duty</th><th>Last location / fit</th><th>Skills</th><th>Route</th>");
+    expect(authoritativeSource).toContain("<th>Driver</th><th>Duty</th><th>Previous run</th><th>Skills</th><th>Route</th>");
     expect(filterSource).toContain("All people");
     expect(filterSource).toContain("Sage unmatched");
     expect(filterSource).toContain("Unallocated");
@@ -180,12 +180,14 @@ describe("Driver Dispatch UI contract", () => {
     expect(authoritativeSource).toContain("sendRunToSamsara(selection.runId, access)");
   });
 
-  it("restores the run sidebar with first collection time, first collection, final delivery and fit suggestions", () => {
+  it("retains the run sidebar without TMS live-location driver ranking", () => {
     expect(authoritativeSource).toContain('className="smart-run-sidebar"');
     expect(authoritativeSource).toContain("run.firstCollectionTimeUtc");
     expect(authoritativeSource).toContain("run.collectionPoint.name");
     expect(authoritativeSource).toContain("run.finalDeliveryPoint?.name");
-    expect(authoritativeSource).toContain("drivers.filter(driver => driver.suggestedRunId === run.runId)");
+    expect(authoritativeSource).not.toContain("rankDriversForRun");
+    expect(authoritativeSource).not.toContain("driver.suggestedRunId");
+    expect(rowSource).not.toContain("driver.trackingData.lastStopName");
     expect(apiSource).toContain("firstCollectionTimeUtc: collection?.plannedArrivalUtc || load.plannedStartUtc");
     expect(apiSource).toContain("finalDeliveryPoint: delivery ?");
     expect(authoritativeCss).toContain(".smart-dispatch-workspace");
