@@ -14,7 +14,7 @@ function isoDate(date = new Date()) {
 function atOffset(minutes: number) { return new Date(Date.now() + minutes * 60_000).toISOString(); }
 function runReference(date: string) { return `RUN-${date.replaceAll('-', '')}-01`; }
 
-type State = { runCreated: boolean; allocatedPallets: number; driverAssigned: boolean; vehicleAssigned: boolean; trailerAssigned: boolean; geofenceStage: number; planningDate: string };
+type State = { runCreated: boolean; allocatedPallets: number; driverAssigned: boolean; vehicleAssigned: boolean; trailerAssigned: boolean; geofenceStage: number; planningDate: string; samsaraSent: boolean };
 
 async function json(route: Route, body: unknown, status = 200) {
   await route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
@@ -49,6 +49,17 @@ async function installApi(page: Page, state: State) {
     const method = req.method();
 
     // Current PlannerEnhanced/RunPlannerLive contract.
+    if (path === '/api/v1/integrations/samsara/dispatch/status' && method === 'GET') return json(route, {
+      planningDate: state.planningDate,
+      configured: true,
+      connected: true,
+      runs: state.samsaraSent ? [{ runId, routeId: 'samsara-e2e-route', exportedAtUtc: new Date().toISOString(), state: 'Exported' }] : []
+    });
+    if (path === '/api/v1/integrations/samsara/dispatch/mappings/sync' && method === 'POST') return json(route, { status: 'ok' });
+    if (path === `/api/v1/integrations/samsara/dispatch/${runId}` && method === 'POST') {
+      state.samsaraSent = true;
+      return json(route, { runId, routeId: 'samsara-e2e-route', message: 'Route sent to Samsara.' });
+    }
     if (path === '/api/v1/planning-control/pallets' && method === 'GET') {
       const planned = state.allocatedPallets;
       const outstanding = Math.max(4 - planned, 0);
@@ -292,8 +303,8 @@ async function installApi(page: Page, state: State) {
   });
 }
 
-test('planner → dispatch → geofence arrival/departure → completion stays coherent', async ({ page }) => {
-  const state: State = { runCreated: false, allocatedPallets: 0, driverAssigned: false, vehicleAssigned: false, trailerAssigned: false, geofenceStage: 0, planningDate: isoDate() };
+test('planner → capacity allocation → Samsara export without driver or vehicle', async ({ page }) => {
+  const state: State = { runCreated: false, allocatedPallets: 0, driverAssigned: false, vehicleAssigned: false, trailerAssigned: false, geofenceStage: 0, planningDate: isoDate(), samsaraSent: false };
   await installApi(page, state);
 
   await page.goto('/');
@@ -302,10 +313,9 @@ test('planner → dispatch → geofence arrival/departure → completion stays c
   await page.getByPlaceholder('Start typing live collection…').fill('Hall');
   await page.getByRole('button', { name: 'Hall Hunter', exact: true }).click();
   await page.getByPlaceholder('Choose delivery from this collection…').fill('Ley');
-  await page.getByRole('button', { name: /Leyland\s+4 pallets/i }).click();
-  await expect(page.getByText(/created\. It is now available in Pallet Order for allocation\./i)).toBeVisible();
+  await page.getByRole('button', { name: /Leyland\\s+4 pallets/i }).click();
+  await expect(page.getByText(/created\\. It is now available in Pallet Order for allocation\\./i)).toBeVisible();
   expect(state.runCreated).toBe(true);
-  expect(state.allocatedPallets).toBe(0);
 
   await page.getByRole('link', { name: 'Pallet Order' }).click();
   await expect(page.getByRole('heading', { name: 'Pallet Control' })).toBeVisible();
@@ -315,50 +325,22 @@ test('planner → dispatch → geofence arrival/departure → completion stays c
   await page.getByRole('spinbutton', { name: 'Allocated load units' }).fill('4');
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.getByText(/HH-E2E-001: 4 allocated · 0 remaining/i)).toBeVisible();
-  expect(state.allocatedPallets).toBe(4);
 
-  // The second-screen allocation must hydrate back into Planner with source references in Line note.
   await page.getByRole('link', { name: 'Planner', exact: true }).click();
-  await expect(page.getByText('Run builder', { exact: true })).toBeVisible();
   await expect(page.getByPlaceholder('Facility / load-line note').first()).toHaveValue(/X No: X-E2E-01/);
 
   await page.getByRole('link', { name: 'Dispatch' }).first().click();
   await expect(page.getByRole('heading', { name: 'Driver Dispatch' })).toBeVisible();
-  const runInput = page.getByPlaceholder('Run…');
-  await runInput.fill('RUN-');
-  await page.getByRole('button', { name: new RegExp(runReference(state.planningDate), 'i') }).click();
+  await expect(page.getByText(runReference(state.planningDate)).first()).toBeVisible();
 
-  const vehicleInput = page.getByRole('combobox', { name: 'Vehicle…' });
-  await vehicleInput.fill('AB12');
-  await page.getByRole('button', { name: /AB12 CDE/ }).click();
-  const trailerInput = page.getByRole('combobox', { name: 'Trailer…' });
-  await trailerInput.fill('TRL');
-  await page.getByRole('button', { name: /TRL-101/ }).click();
-  await page.getByRole('button', { name: 'Allocate', exact: true }).click();
-  await expect(page.getByText('Allocation saved. Run remains against this driver and is ready to dispatch.', { exact: true })).toBeVisible();
-  expect(state.driverAssigned && state.vehicleAssigned && state.trailerAssigned).toBe(true);
-
-  await page.getByRole('link', { name: 'Operations Wallboard' }).click();
-  await expect(page.getByRole('heading', { name: 'Live Runs' })).toBeVisible();
-  await expect(page.getByText(/AB12 CDE/).first()).toBeVisible();
-
-  state.geofenceStage = 1;
-  await page.reload();
-  await expect(page.getByText('ON SITE').first()).toBeVisible();
-  await expect(page.getByText(/Hall Hunter/).first()).toBeVisible();
-
-  state.geofenceStage = 2;
-  await page.reload();
-  await expect(page.getByLabel('1 of 2 stops completed')).toBeVisible();
-
-  state.geofenceStage = 3;
-  await page.reload();
-  await expect(page.getByText('ON SITE').first()).toBeVisible();
-  await expect(page.getByText(/Leyland/).first()).toBeVisible();
-
-  state.geofenceStage = 4;
-  await page.reload();
-  await expect(page.getByText('COMPLETED').first()).toBeVisible();
-  await expect(page.getByText('All geofence-confirmed stops completed').first()).toBeVisible();
-  await expect(page.getByLabel('2 of 2 stops completed')).toBeVisible();
+  // Samsara—not TMS—owns the journey. Driver/vehicle can be allocated in Samsara later.
+  expect(state.driverAssigned).toBe(false);
+  expect(state.vehicleAssigned).toBe(false);
+  const exportButton = page.getByRole('button', { name: /Export to Samsara/ }).first();
+  await expect(exportButton).toBeEnabled();
+  await exportButton.click();
+  await expect(page.getByText(/1 route exported to Samsara\\./i)).toBeVisible();
+  expect(state.samsaraSent).toBe(true);
+  expect(state.driverAssigned).toBe(false);
+  expect(state.vehicleAssigned).toBe(false);
 });

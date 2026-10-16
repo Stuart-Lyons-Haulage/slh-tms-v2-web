@@ -213,9 +213,7 @@ export function ApprovedOrdersList({ date, token }: { date: string; token: Retur
   }, [date, token]);
 
   useEffect(() => {
-    let active = true;
     void refresh();
-    return () => { active = false; };
   }, [refresh]);
 
   const runByOrderId = new Map(runs.flatMap(run => run.stops
