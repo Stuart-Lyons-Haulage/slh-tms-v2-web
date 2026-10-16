@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { BackloadMatchNotifications } from "../components/BackloadMatchNotifications";
 import { DispatchBoard } from "../components/dispatch/DispatchBoard";
 import { DispatchResourceQuickAdd } from "../components/dispatch/DispatchResourceQuickAdd";
 import "../authoritative-dispatch.css";
@@ -21,7 +20,6 @@ export function DriverDispatchOperational() {
   }, [dispatchDate]);
 
   return <div className="driver-dispatch-operational-page">
-    <BackloadMatchNotifications />
     <DispatchBoard
       key={`${dispatchDate}-${dispatchRevision}`}
       planningDate={dispatchDate}
