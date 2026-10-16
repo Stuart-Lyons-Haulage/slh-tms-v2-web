@@ -273,7 +273,12 @@ function StopEditor({ load, onSaved }: { load: Load; onSaved: () => Promise<void
   async function save() {
     setSaving(true);
     try {
-      await updateRunStops(load.id, stops.map(stop => ({ orderId: stop.orderId, name: stop.name, address: stop.address })), await token());
+      await updateRunStops(load.id, stops.map(stop => ({
+        orderId: stop.orderId,
+        name: stop.name,
+        address: stop.address,
+        plannerNote: stop.plannerNote ?? undefined,
+      })), await token());
       await onSaved();
       setMessage('Stop addresses saved for Samsara dispatch.');
     } catch (error) {
