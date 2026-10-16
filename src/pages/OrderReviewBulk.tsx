@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api, request, type StagedImport } from "../lib/api";
+import { ApiError, api, request, type StagedImport } from "../lib/api";
 import { useAccessToken } from "../lib/auth";
 import { useApi } from "../lib/useApi";
 import { matchesPlanningDate } from "../lib/orderReviewDates";
@@ -109,6 +109,11 @@ type ApprovalComparison = {
   changes?: AmendmentChange[];
 };
 
+type ComparisonResult = {
+  comparison?: ApprovalComparison;
+  unavailable: boolean;
+};
+
 type MappingField = "collection" | "destination";
 type MappingAction = { rowId: string; field: MappingField; mode: "match" | "create" };
 
@@ -119,6 +124,30 @@ const queuePageSize = 100;
 // comfortably below the App Service/gateway timeout so a slow order cannot
 // discard the result of every order behind it.
 const approvalBatchSize = 10;
+
+async function compareStagedOrder(stagingId: string, accessToken: string): Promise<ComparisonResult> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      return {
+        comparison: await request<ApprovalComparison>(
+          `/api/v1/order-intake/duplicate-check/staging/${encodeURIComponent(stagingId)}/comparison`,
+          accessToken,
+          undefined,
+          30_000,
+        ),
+        unavailable: false,
+      };
+    } catch (error) {
+      lastError = error;
+      if (!(error instanceof ApiError) || error.status !== 503 || attempt === 2) break;
+      await new Promise((resolve) => window.setTimeout(resolve, 500 * (attempt + 1)));
+    }
+  }
+  if (lastError instanceof ApiError && lastError.status === 503)
+    return { unavailable: true };
+  throw lastError instanceof Error ? lastError : new Error("The live order comparison failed.");
+}
 
 function dateKey(value: Date) {
   return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
@@ -318,6 +347,8 @@ export function OrderReviewBulk({ date }: { date: string }) {
     request<StagingQueuePage>(
       `/api/v1/staging/queue?status=PendingReview&entityType=order&page=${queuePage}&pageSize=${queuePageSize}&planningDate=${encodeURIComponent(date)}`,
       await token(),
+      undefined,
+      30_000,
     ), [date, queuePage, token]));
 
   const rows = useMemo(() => (queue.data?.records || []).map(parse), [queue.data]);
@@ -528,12 +559,14 @@ export function OrderReviewBulk({ date }: { date: string }) {
     setBusyId(row.item.id);
     setNotice(undefined);
     try {
-      const comparison = await request<ApprovalComparison>(
-        `/api/v1/order-intake/duplicate-check/staging/${encodeURIComponent(row.item.id)}/comparison`,
-        await token(),
-      );
+      const comparisonResult = await compareStagedOrder(row.item.id, await token());
+      const comparison = comparisonResult.comparison;
+      if (comparisonResult.unavailable && (blockingReason(row, date) || reviewFlagReason(row))) {
+        setNotice("This order still has review flags, so it cannot be approved until the live duplicate check is available.");
+        return;
+      }
 
-      if (comparison.classification === "Exact duplicate") {
+      if (comparison?.classification === "Exact duplicate") {
         if (!window.confirm(`Permanently delete the duplicate staging entry for ${displayReference(row.payload)} and its review history? The live order will remain unchanged.`)) {
           setNotice("Duplicate deletion cancelled. The live order and review entry were not changed.");
           return;
@@ -549,7 +582,7 @@ export function OrderReviewBulk({ date }: { date: string }) {
         return;
       }
 
-      if (comparison.classification === "Amendment/update" &&
+      if (comparison?.classification === "Amendment/update" &&
           !window.confirm(amendmentPrompt([{ row, comparison }]))) {
         setNotice("Amendment approval cancelled. The existing live order has not been changed.");
         return;
@@ -570,6 +603,9 @@ export function OrderReviewBulk({ date }: { date: string }) {
       );
 
       setNotice(`${result.message}${approvalFailureDetail(result)}`);
+      if (comparisonResult.unavailable) {
+        setNotice(`${result.message} Live duplicate comparison was temporarily unavailable; the order passed the clean-order validation and was recorded for follow-up review.`);
+      }
       if (result.approved > 0) {
         setSelectedIds((current) => {
           const next = new Set(current);
@@ -601,15 +637,22 @@ export function OrderReviewBulk({ date }: { date: string }) {
     try {
       const approvalChecks = await Promise.all(rowsToApprove.map(async (row) => ({
         row,
-        comparison: await request<ApprovalComparison>(
-          `/api/v1/order-intake/duplicate-check/staging/${encodeURIComponent(row.item.id)}/comparison`,
-          await token(),
-        ),
+        comparisonResult: await compareStagedOrder(row.item.id, await token()),
       })));
 
-      const duplicates = approvalChecks.filter(({ comparison }) => comparison.classification === "Exact duplicate");
-      const amendments = approvalChecks.filter(({ comparison }) => comparison.classification === "Amendment/update");
-      const approvable = approvalChecks.filter(({ comparison }) => comparison.classification !== "Exact duplicate");
+      const duplicates = approvalChecks.filter(({ comparisonResult }) => comparisonResult.comparison?.classification === "Exact duplicate");
+      const amendments = approvalChecks
+        .filter(({ comparisonResult }) => comparisonResult.comparison?.classification === "Amendment/update")
+        .map(({ row, comparisonResult }) => ({ row, comparison: comparisonResult.comparison! }));
+      const unavailableFlagged = approvalChecks.filter(({ row, comparisonResult }) =>
+        comparisonResult.unavailable && (blockingReason(row, date) || reviewFlagReason(row)));
+      const approvable = approvalChecks.filter(({ row, comparisonResult }) =>
+        comparisonResult.comparison?.classification !== "Exact duplicate" &&
+        (!comparisonResult.unavailable || (!blockingReason(row, date) && !reviewFlagReason(row))));
+
+      if (unavailableFlagged.length > 0) {
+        setNotice(`${unavailableFlagged.length} order${unavailableFlagged.length === 1 ? "" : "s"} still require live duplicate comparison because they have review flags.`);
+      }
 
       if (duplicates.length > 0 && !window.confirm(
         `Permanently delete ${duplicates.length} exact duplicate staging entr${duplicates.length === 1 ? "y" : "ies"} and their review history? The live orders will remain unchanged.`,
