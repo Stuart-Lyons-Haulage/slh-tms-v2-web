@@ -9,7 +9,6 @@ import { planningDeliveryLocation } from "../lib/planningLocations";
 import { tomorrowIsoDate } from "../lib/dateUtils";
 import { calculateRunCapacity } from "./runPlannerCapacity";
 import { findFinalRunSavings, type FinalCheckLine, type FinalCheckRun } from "./runPlannerFinalCheck";
-import { suggestJobsForRun, suggestionConfidencePercent, type RunSuggestionLine, type RunSuggestionSite } from "./runPlannerSuggestions";
 import { RunPlannerLine } from "./RunPlannerLine";
 
 type Period = "" | "AM" | "PM";
@@ -141,7 +140,7 @@ function validPallets(value: string) {
   return Number.isInteger(pallets) && pallets >= 0 ? pallets : undefined;
 }
 
-function runBuilderWarnings(run: RunDraft, capacity: ReturnType<typeof calculateRunCapacity>, effectiveOrders: PlanningOrder[], sites: Site[]) {
+function runBuilderWarnings(run: RunDraft, capacity: ReturnType<typeof calculateRunCapacity>, effectiveOrders: PlanningOrder[]) {
   const warnings: string[] = [];
   if (capacity.status === "Red") warnings.push("Capacity exceeds the current trailer basis.");
   if (capacity.unknownPallets > 0) warnings.push(`${capacity.unknownPallets} load unit${capacity.unknownPallets === 1 ? " is" : "s are"} not classified as Standard, Euro, trolley or tray/crate.`);
@@ -153,10 +152,6 @@ function runBuilderWarnings(run: RunDraft, capacity: ReturnType<typeof calculate
     const ids = lineOrderIds(line);
     const matches = effectiveOrders.filter(order => normalise(order.collection) === normalise(line.collectionSite) && normalise(order.destination) === normalise(line.deliverySite));
     if (!ids.length && matches.length === 0) warnings.push(`Line ${index + 1} does not match a live order for this date.`);
-    const collection = siteFor(sites, line.collectionSite);
-    const delivery = siteFor(sites, line.deliverySite);
-    if (collection && (collection.latitude == null || collection.longitude == null)) warnings.push(`Line ${index + 1} collection is missing mapped coordinates.`);
-    if (delivery && (delivery.latitude == null || delivery.longitude == null)) warnings.push(`Line ${index + 1} delivery is missing mapped coordinates.`);
   });
   return [...new Set(warnings)];
 }
@@ -420,31 +415,6 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
     setPlannerRuns(nextRuns);
   };
   const updateLine = (runKey: string, lineKey: string, patch: Partial<RunLine>) => updateRun(runKey, (run) => ({ ...run, lines: run.lines.map((line) => line.key === lineKey ? { ...line, ...patch } : line) }));
-  const addSuggestedOrder = (run: RunDraft, order: PlanningOrder) => {
-    const currentRun = runsRef.current.find((candidate) => candidate.key === run.key) || run;
-    const quantity = run.loadId
-      ? distributeQuantity([order.id], order.outstandingPallets, run.key).allocations[order.id] || 0
-      : order.outstandingPallets;
-    if (quantity <= 0) {
-      setMessage(`${order.reference} does not fit the remaining capacity on this run.`);
-      return;
-    }
-    const nextLine: RunLine = {
-      ...blankLine(),
-      collectionSite: order.collection,
-      deliverySite: order.destination,
-      pallets: String(quantity),
-      orderId: order.id,
-      orderIds: [order.id],
-      orderAllocations: { [order.id]: quantity },
-      note: orderLineNote(order),
-    };
-    const nextLines = [...currentRun.lines.filter(line => lineOrderIds(line).length > 0 || line.collectionSite.trim() || line.deliverySite.trim() || line.pallets.trim()), nextLine];
-    updateRun(run.key, current => ({ ...current, lines: nextLines }));
-    if (run.loadId) void enqueuePersistQuantity(run.key, nextLine.key, run.loadId, { [order.id]: quantity }, quantity, nextLines);
-    const runReference = run.loadId ? loads.find((load) => load.id === run.loadId)?.reference : undefined;
-    setMessage(run.loadId ? `Saving ${order.reference} to ${runReference || "the run"}…` : `${order.reference} added to the draft run.`);
-  };
   const changeLineLocation = (runKey: string, line: RunLine, field: "collectionSite" | "deliverySite", value: string) => {
     const currentRun = runsRef.current.find((run) => run.key === runKey);
     if (!currentRun) return;
@@ -894,14 +864,10 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
           const capacityRemaining = capacity.status === "Red"
             ? `Over by ${capacity.overStandardEquivalent.toFixed(1)} floor spaces`
             : `Space for ${capacity.euroRemaining} more Euro pallets · ${capacity.standardRemaining} Standard · ${capacity.trolleyRemaining} trolleys`;
-          const suggestionLines: RunSuggestionLine[] = run.lines.map(line => ({ orderId: lineOrderIds(line)[0], collectionSite: line.collectionSite, deliverySite: line.deliverySite, pallets: line.pallets }));
-          const suggestionSites: RunSuggestionSite[] = sites;
-          const nextOrderSuggestions = suggestJobsForRun(suggestionLines, effectiveOrders, suggestionSites, { standard: capacity.standardRemaining, euro: capacity.euroRemaining });
-          const builderWarnings = runBuilderWarnings(run, capacity, effectiveOrders, sites);
+          const builderWarnings = runBuilderWarnings(run, capacity, effectiveOrders);
           return <article key={run.key} className={`simple-run-card ${activeKey === run.key ? "active" : ""}`} onClick={() => setActiveKey(run.key)}>
             <div className="simple-run-header"><div className="simple-run-heading"><strong>RUN {index + 1}{run.period ? ` ${run.period}` : ""}{run.nightOut ? " O/N" : ""}</strong><small>{run.loadId ? "Live" : "New"}</small><span className={`simple-run-capacity ${capacityStatus}`} title={`${capacityBreakdown} · ${usedCapacity.toFixed(1)} / ${totalCapacity} standard-equivalent spaces`}><i><b style={{ width: `${Math.min(utilisation, 100)}%` }} /></i><strong>{utilisation.toFixed(1)}%</strong></span><span className="simple-run-capacity-remaining" aria-label={capacityRemaining}>{capacityRemaining}</span><span className="simple-run-capacity-breakdown" aria-label={`Capacity: ${capacityBreakdown}`}><span>Std {capacity.standardPallets}/{capacity.standardCapacity} · {capacity.standardRemaining} left</span><span>Euro {capacity.euroPallets}/{capacity.euroCapacity} · {capacity.euroRemaining} left</span><span>Trolley {capacity.trolleys}/{capacity.trolleys + capacity.trolleyRemaining} · {capacity.trolleyRemaining} left</span><span>Tray/Crate {capacity.nonPalletUnits}</span>{capacity.unknownPallets ? <span>Unknown {capacity.unknownPallets}</span> : null}</span></div><div className="run-period-selector"><span>Period</span>{(["AM", "PM"] as const).map((period) => <button key={period} type="button" className={run.period === period ? "selected" : ""} onClick={(event) => { event.stopPropagation(); updateRun(run.key, (current) => ({ ...current, period })); void persistRunDetails(run, { period }); }}>{period}</button>)}</div></div>
             <div className="simple-run-details"><label className="simple-night-out"><input type="checkbox" checked={run.nightOut} onChange={(event) => { const nightOut = event.target.checked; updateRun(run.key, (current) => ({ ...current, nightOut })); void persistRunDetails(run, { nightOut }); }} /> Overnight / night-out confirmed</label><label className="simple-night-out"><input type="checkbox" checked={run.relayEnabled} onChange={(event) => { const relayEnabled = event.target.checked; updateRun(run.key, (current) => ({ ...current, relayEnabled })); void persistRunDetails(run, { relayEnabled }); }} /> Trailer swap / relay</label><label>Operational amendment<input value={run.operationalAmendment} placeholder="e.g. swap to trailer 123 / breakdown" onChange={(event) => updateRun(run.key, (current) => ({ ...current, operationalAmendment: event.target.value }))} onBlur={() => void persistRunDetails(run, { operationalAmendment: run.operationalAmendment })} /></label>{run.relayEnabled && <><label>Handover site<input list={`relay-sites-${run.key}`} value={run.handoverSite} placeholder="e.g. Cherwell Valley" onChange={(event) => updateRun(run.key, (current) => ({ ...current, handoverSite: event.target.value }))} onBlur={(event) => void persistRunDetails(run, { handoverSite: event.currentTarget.value })} /></label><label>Handover after stop<input type="number" min="1" value={run.handoverAfterStopSequence} placeholder="Optional" onChange={(event) => updateRun(run.key, (current) => ({ ...current, handoverAfterStopSequence: event.target.value }))} onBlur={(event) => void persistRunDetails(run, { handoverAfterStopSequence: event.currentTarget.value })} /></label><datalist id={`relay-sites-${run.key}`}>{sites.map(site => <option key={site.id} value={site.name} />)}</datalist></>}</div>
-            {nextOrderSuggestions.length > 0 && <details className="simple-run-suggestions" aria-label={`Suggested next orders for ${run.key}`} onClick={(event) => event.stopPropagation()}><summary className="simple-run-suggestions-heading"><span><strong>Route suggestions</strong><small>{nextOrderSuggestions.length} sensible fit{nextOrderSuggestions.length === 1 ? "" : "s"} · mileage and direction checked</small></span><span className="simple-run-suggestion-hint">Show</span></summary><div className="simple-run-suggestion-list">{nextOrderSuggestions.map(item => { const confidencePercent = suggestionConfidencePercent(item.score); const confidence = confidencePercent >= 70 ? "high" : confidencePercent >= 45 ? "medium" : "low"; const loadType = item.order.palletType || item.order.loadUnitType; return <article key={item.order.id} className={`simple-run-suggestion confidence-${confidence}`}><div className="simple-run-suggestion-route"><span><small>From</small><strong>{item.order.collection}</strong></span><b aria-hidden="true">→</b><span><small>To</small><strong>{item.order.destination}</strong></span></div><div className="simple-run-suggestion-meta"><span><small>Load</small><strong>{item.order.outstandingPallets}{loadType ? ` ${loadType}` : ""}</strong></span>{item.connectorMiles != null && <span><small>Reposition</small><strong>~{Math.round(item.connectorMiles)} mi</strong></span>}<span><small>Fit</small><strong>{confidencePercent}%</strong></span></div><details><summary>Why?</summary><small>{item.reasons.join(" · ")}</small></details><button type="button" onClick={() => addSuggestedOrder(run, item.order)}>Add</button></article>; })}</div></details>}
             {builderWarnings.length > 0 && <aside className="simple-run-warnings" aria-label="Run builder checks"><strong>Planner checks</strong><ul>{builderWarnings.map(warning => <li key={warning}>{warning}</li>)}</ul></aside>}
             <div className="simple-run-columns"><span>Collection</span><span>Pallets</span><span>Delivery</span><span>Line note</span><span /></div>
             <div className="simple-run-lines">{run.lines.map((line, lineIndex) => (

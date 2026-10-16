@@ -36,9 +36,6 @@ import './staffing.css';
 installPollingPolicy();
 installPerformanceTelemetry();
 
-if (window.location.pathname === '/' || window.location.pathname === '/tracking' || window.location.pathname === '/planner') {
-  void import('azure-maps-control/dist/atlas.min.css');
-}
 installOperationalUiEnhancements();
 
 const clientId = import.meta.env.VITE_ENTRA_CLIENT_ID;

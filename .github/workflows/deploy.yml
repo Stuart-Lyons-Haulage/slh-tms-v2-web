@@ -35,7 +35,6 @@ jobs:
           VITE_ENTRA_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           VITE_ENTRA_CLIENT_ID: b4d086ae-6e9d-4578-8861-e61410127359
           VITE_ENTRA_API_SCOPE: api://497f6ea5-9753-43ee-8ccf-afaa0a3869c2/Tms.Access
-          VITE_AZURE_MAPS_CLIENT_ID: ${{ vars.AZURE_MAPS_CLIENT_ID }}
         run: pnpm build
       - name: Deploy to Azure Static Web Apps
         uses: Azure/static-web-apps-deploy@v1

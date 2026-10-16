@@ -18,7 +18,6 @@
     "@azure/msal-browser": "^4.18.0",
     "@azure/msal-react": "^3.0.19",
     "@vitejs/plugin-react": "^5.2.0",
-    "azure-maps-control": "^3.7.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-router-dom": "^7.18.3",

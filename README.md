@@ -119,7 +119,7 @@ The Planner Import screen supports:
 ## Local Development
 
 1. Copy `.env.example` to `.env.local` if present, or create `.env.local`.
-2. Enter the API, Entra and Azure Maps values.
+2. Enter the API and Entra values.
 3. Install dependencies with `pnpm install`.
 4. Run the local portal with `pnpm run dev`.
 
@@ -135,7 +135,6 @@ All `VITE_` values are public build-time configuration. Never put client secrets
 | `VITE_ENTRA_TENANT_ID` | Microsoft Entra tenant ID. |
 | `VITE_ENTRA_CLIENT_ID` | Portal SPA application/client ID. |
 | `VITE_ENTRA_API_SCOPE` | Normally `api://<API-CLIENT-ID>/Tms.Access`. |
-| `VITE_AZURE_MAPS_CLIENT_ID` | Azure Maps account client ID / unique ID for map rendering. |
 | `VITE_GRAPH_SITES_SCOPE` | Delegated Graph scope for mailbox intake SharePoint List work, normally `Sites.ReadWrite.All`. |
 | `VITE_GRAPH_MAIL_SCOPE` | Delegated Graph scope for reading the shared mailbox source message, normally `Mail.Read.Shared`. |
 | `VITE_MAILBOX_INTAKE_LIST_ID` | SharePoint List ID for the TMS mailbox queue. Defaults to the live SLH intake list where configured. |
