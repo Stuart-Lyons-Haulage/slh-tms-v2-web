@@ -313,8 +313,8 @@ test('planner → capacity allocation → Samsara export without driver or vehic
   await page.getByPlaceholder('Start typing live collection…').fill('Hall');
   await page.getByRole('button', { name: 'Hall Hunter', exact: true }).click();
   await page.getByPlaceholder('Choose delivery from this collection…').fill('Ley');
-  await page.getByRole('button', { name: /Leyland\\s+4 pallets/i }).click();
-  await expect(page.getByText(/created\\. It is now available in Pallet Order for allocation\\./i)).toBeVisible();
+  await page.getByRole('button', { name: /Leyland\s+4 pallets/i }).click();
+  await expect(page.getByText(/created\. It is now available in Pallet Order for allocation\./i)).toBeVisible();
   expect(state.runCreated).toBe(true);
 
   await page.getByRole('link', { name: 'Pallet Order' }).click();
@@ -339,7 +339,7 @@ test('planner → capacity allocation → Samsara export without driver or vehic
   const exportButton = page.getByRole('button', { name: /Export to Samsara/ }).first();
   await expect(exportButton).toBeEnabled();
   await exportButton.click();
-  await expect(page.getByText(/1 route exported to Samsara\\./i)).toBeVisible();
+  await expect(page.getByText(/1 route exported to Samsara\./i)).toBeVisible();
   expect(state.samsaraSent).toBe(true);
   expect(state.driverAssigned).toBe(false);
   expect(state.vehicleAssigned).toBe(false);
