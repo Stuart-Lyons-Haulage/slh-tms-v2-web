@@ -1,0 +1,286 @@
+.load-planning-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 1.5rem;
+  max-width: 1800px;
+  margin: 0 auto;
+  min-height: 100vh;
+  background-color: #fafafa;
+}
+
+/* Page Header */
+.page-header {
+  background: linear-gradient(135deg, #0066cc 0%, #0052a3 100%);
+  color: white;
+  padding: 2rem;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 102, 204, 0.2);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 2rem;
+}
+
+.header-content h1 {
+  margin: 0 0 0.5rem 0;
+  font-size: 2rem;
+  font-weight: 700;
+}
+
+.header-subtitle {
+  margin: 0;
+  font-size: 1rem;
+  opacity: 0.95;
+  font-weight: 400;
+}
+
+.header-controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  white-space: nowrap;
+}
+
+.date-label {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.date-input {
+  padding: 0.75rem;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.95rem;
+  min-width: 180px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.date-input:focus {
+  outline: 2px solid rgba(255, 255, 255, 0.3);
+}
+
+/* Main Layout Container */
+.layout-container {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  flex: 1;
+  min-height: 600px;
+}
+
+.panel-column {
+  display: flex;
+  flex-direction: column;
+}
+
+.panel-left {
+  align-items: flex-start;
+}
+
+.panel-right {
+  align-items: flex-end;
+}
+
+.panel-wrapper {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Loading & Error States */
+.loading-state,
+.error-state {
+  padding: 3rem 2rem;
+  text-align: center;
+  background: white;
+  border-radius: 8px;
+  border: 1px solid #e0e0e0;
+}
+
+.loading-state p,
+.error-state p {
+  margin: 0;
+  font-size: 1rem;
+  color: #666;
+}
+
+.error-message {
+  color: #c00;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.error-detail {
+  font-size: 0.9rem;
+  color: #888;
+}
+
+/* Instructions Panel */
+.instructions-panel {
+  background: white;
+  border-radius: 8px;
+  border: 1px solid #e0e0e0;
+  padding: 0;
+}
+
+.instructions-summary {
+  display: block;
+  padding: 1rem 1.5rem;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 1rem;
+  background-color: #f9f9f9;
+  border-bottom: 1px solid #e0e0e0;
+  border-radius: 8px 8px 0 0;
+  user-select: none;
+  transition: background-color 0.2s;
+}
+
+.instructions-summary:hover {
+  background-color: #f0f8ff;
+}
+
+details[open] .instructions-summary {
+  background-color: #f0f8ff;
+  border-bottom-color: #0066cc;
+}
+
+.instructions-content {
+  padding: 1.5rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+}
+
+.instruction-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.instruction-section h4 {
+  margin: 0 0 0.5rem 0;
+  color: #0066cc;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.instruction-section ol,
+.instruction-section ul {
+  margin: 0;
+  padding-left: 1.5rem;
+  color: #333;
+  line-height: 1.6;
+}
+
+.instruction-section li {
+  margin-bottom: 0.5rem;
+}
+
+.instruction-section strong {
+  color: #1a1a1a;
+  font-weight: 600;
+}
+
+.instruction-section p {
+  margin: 0.5rem 0 0 0;
+  font-size: 0.95rem;
+  color: #555;
+  line-height: 1.5;
+}
+
+/* Responsive Design */
+@media (max-width: 1400px) {
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+
+  .header-controls {
+    width: 100%;
+    justify-content: space-between;
+  }
+}
+
+@media (max-width: 1000px) {
+  .layout-container {
+    grid-template-columns: 1fr;
+    min-height: auto;
+  }
+
+  .panel-left,
+  .panel-right {
+    align-items: stretch;
+  }
+
+  .panel-wrapper {
+    width: 100%;
+  }
+}
+
+@media (max-width: 768px) {
+  .load-planning-page {
+    padding: 1rem;
+    gap: 1rem;
+  }
+
+  .page-header {
+    padding: 1.5rem;
+    gap: 1rem;
+  }
+
+  .header-content h1 {
+    font-size: 1.5rem;
+  }
+
+  .header-subtitle {
+    font-size: 0.9rem;
+  }
+
+  .header-controls {
+    flex-direction: column;
+    width: 100%;
+    align-items: stretch;
+    gap: 0.75rem;
+  }
+
+  .date-input {
+    min-width: unset;
+    width: 100%;
+  }
+
+  .layout-container {
+    gap: 1rem;
+  }
+
+  .instructions-content {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+    padding: 1rem;
+  }
+}
+
+/* Print Styles */
+@media print {
+  .load-planning-page {
+    padding: 0;
+    gap: 0;
+  }
+
+  .page-header,
+  .instructions-panel,
+  .panel-left {
+    display: none;
+  }
+
+  .layout-container {
+    grid-template-columns: 1fr;
+  }
+
+  .panel-right {
+    width: 100%;
+  }
+}
