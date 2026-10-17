@@ -106,13 +106,39 @@ export const RunBuilder: React.FC<RunBuilderProps> = ({
     );
   };
 
-  // Handle pallet qty change
-  const handlePalletQtyChange = (orderId: string, newQty: number) => {
+  // Handle pallet qty change - auto-save to run
+  const handlePalletQtyChange = async (orderId: string, newQty: number) => {
+    const order = toPlannedOrders.find((o) => o.id === orderId);
+    if (!order) return;
+
+    const actualQty = Math.min(newQty, order.palletQtyOrdered);
+
+    // Update local state immediately for instant UI feedback
     setToPlannedOrders((prev) =>
-      prev.map((order) =>
-        order.id === orderId ? { ...order, palletQtyToRun: Math.min(newQty, order.palletQtyOrdered) } : order
+      prev.map((o) =>
+        o.id === orderId ? { ...o, palletQtyToRun: actualQty } : o
       )
     );
+
+    // Auto-save to API
+    try {
+      await post(`/api/v1/orders/${orderId}/add-to-run`, {
+        palletQty: actualQty,
+        collectionDate,
+        collectionSiteId: selectedSiteId,
+      });
+
+      // Trigger parent refresh of load summary
+      onRunCreated?.();
+    } catch (err) {
+      setError('Failed to save run');
+      // Revert optimistic update on error
+      setToPlannedOrders((prev) =>
+        prev.map((o) =>
+          o.id === orderId ? { ...o, palletQtyToRun: order.palletQtyToRun } : o
+        )
+      );
+    }
   };
 
   // Create run from selected orders
@@ -270,34 +296,14 @@ export const RunBuilder: React.FC<RunBuilderProps> = ({
             </table>
           </div>
 
-          {/* Run Summary */}
-          {selectedOrders.length > 0 && (
-            <div className="run-summary">
-              <div className="summary-stat">
-                <span className="label">Selected Orders:</span>
-                <span className="value">{selectedOrders.length}</span>
-              </div>
-              <div className="summary-stat">
-                <span className="label">Total Pallets:</span>
-                <span className="value font-bold">{totalPallets}</span>
-              </div>
-              <div className="summary-stat">
-                <span className="label">Destinations:</span>
-                <span className="value">{deliveryDestinations.length}</span>
-              </div>
-            </div>
-          )}
+          {/* Auto-Save Indicator */}
+          <div className="auto-save-indicator">
+            <span className="pulse" />
+            <span className="text-small">Auto-saving as you edit</span>
+          </div>
 
-          {/* Actions */}
+          {/* Clear Selection Button */}
           <div className="builder-actions">
-            <Button
-              variant="primary"
-              onClick={handleCreateRun}
-              disabled={selectedOrders.length === 0 || isLoading}
-              className="btn-create-run"
-            >
-              ✓ Confirm Run ({totalPallets} pallets)
-            </Button>
             <Button
               variant="secondary"
               onClick={() => {
