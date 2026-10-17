@@ -167,17 +167,21 @@ export type CustomerCommunication = {
   reviewedBy?: string;
   reviewNote?: string;
   payload: {
-    source: { subject?: string; senderName?: string; senderAddress?: string };
+    source: { subject?: string; senderName?: string; senderAddress?: string; receivedAtUtc?: string; webLink?: string };
+    /** What the sender wrote in this email, without quoted history (mailbox-recorded requests). */
+    ownText?: string;
+    /** Orders in the same email thread (requests) or orders missing from a resent booking. */
+    linkedOrders?: { stagingId: string; reference?: string; status?: string; destination?: string; pallets?: number }[];
     extraction: {
       purpose: string;
-      planVersion: string;
-      exceptionSignals: string[];
-      customerHints: string[];
-      claims: CustomerCommunicationClaim[];
+      planVersion?: string;
+      exceptionSignals?: string[];
+      customerHints?: string[];
+      claims?: CustomerCommunicationClaim[];
       nextUpdateLocal?: string;
       acceptanceUntilLocal?: string;
-      attachments: CustomerCommunicationAttachment[];
-      warnings: string[];
+      attachments?: CustomerCommunicationAttachment[];
+      warnings?: string[];
     };
   };
 };

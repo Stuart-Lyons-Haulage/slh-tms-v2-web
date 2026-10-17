@@ -19,6 +19,7 @@ const Staffing = lazy(() => import('./pages/Staffing').then(module => ({ default
 const AdminIntegrationSyncControls = lazy(() => import('./components/AdminIntegrationSyncControls').then(module => ({ default: module.AdminIntegrationSyncControls })));
 const OrderIntakeMappingAdmin = lazy(() => import('./pages/OrderIntakeMappingAdmin').then(module => ({ default: module.OrderIntakeMappingAdmin })));
 const MobileOperations = lazy(() => import('./pages/MobileOperations').then(module => ({ default: module.MobileOperations })));
+const CustomerComms = lazy(() => import('./pages/CustomerComms').then(module => ({ default: module.CustomerComms })));
 
 import { apiScope, localTestAuthEnabled, useAccessToken } from './lib/auth';
 import { api } from './lib/api';
@@ -37,6 +38,7 @@ const coreNavigation: NavItem[] = [
   ['/pallet-control', 'Pallet Order'],
   ['/bookings', 'Booking & Capacity'],
   ['/driver-dispatch', 'Dispatch'],
+  ['/customer-comms', 'Customer Comms'],
   ['/staffing', 'Staffing'],
   ['/master-data', 'Master Data'],
 ];
@@ -206,6 +208,7 @@ function Shell() {
         <Route path="/pallet-control" element={<PalletPlanningControl />} />
         <Route path="/bookings" element={<BookingReservations />} />
         <Route path="/driver-dispatch" element={<DriverDispatchOperational />} />
+        <Route path="/customer-comms" element={<CustomerComms />} />
         <Route path="/staffing" element={<Staffing />} />
         <Route path="/master-data" element={<MasterDataHub />} />
         <Route path="/drivers" element={<MasterDataHub initialSection="drivers" />} />
