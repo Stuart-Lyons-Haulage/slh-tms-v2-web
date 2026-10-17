@@ -684,6 +684,7 @@ export function OrderReviewBulk({ date }: { date: string }) {
       let skipped = 0;
       let failed = 0;
       let firstBatchResult: BulkApproveResponse | undefined;
+      let requestError: string | undefined;
       for (let offset = 0; offset < approvable.length; offset += approvalBatchSize) {
         const batch = approvable.slice(offset, offset + approvalBatchSize);
         setNotice(`Approving orders ${offset + 1}–${Math.min(offset + batch.length, approvable.length)} of ${approvable.length}…`);
@@ -705,11 +706,12 @@ export function OrderReviewBulk({ date }: { date: string }) {
           approved += result.approved;
           skipped += result.skipped;
           failed += result.failed;
-        } catch {
+        } catch (batchError) {
           // A request can fail after the API has committed its approval. Keep
           // processing the remaining one-order batches and refresh the queue
           // to determine the final state instead of abandoning the pass.
           failed += batch.length;
+          requestError ||= batchError instanceof Error ? batchError.message : String(batchError);
         }
       }
       const duplicateNote = duplicates.length > 0
@@ -718,7 +720,7 @@ export function OrderReviewBulk({ date }: { date: string }) {
       const approvalMessage = approved > 0
         ? `${approved} selected order${approved === 1 ? "" : "s"} approved into live Orders and removed from the review queue.`
         : "No selected orders were approved. Blocked or incomplete work remains in Order Control.";
-      setNotice(`${approvalMessage}${skipped || failed ? ` ${skipped} skipped and ${failed} failed remain for review.` : ""}${firstBatchResult ? approvalFailureDetail(firstBatchResult) : ""}${duplicateNote}`);
+      setNotice(`${approvalMessage}${skipped || failed ? ` ${skipped} skipped and ${failed} failed remain for review.` : ""}${firstBatchResult ? approvalFailureDetail(firstBatchResult) : ""}${requestError ? ` Error: ${requestError}` : ""}${duplicateNote}`);
       setSelectedIds(new Set());
       setEditingId(undefined);
       setDraft(undefined);
