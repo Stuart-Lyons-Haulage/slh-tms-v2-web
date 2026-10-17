@@ -1,0 +1,139 @@
+services:
+  sql:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    platform: linux/amd64
+    restart: unless-stopped
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: "${SQL_EDITION:-Express}"
+      MSSQL_SA_PASSWORD: "${SQL_SA_PASSWORD}"
+    volumes:
+      - sql-data:/var/opt/mssql
+      - type: bind
+        source: "${SQL_BACKUP_HOST_PATH:-../../backup}"
+        target: /var/opt/mssql/backup
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q 'SELECT 1' >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  db-init:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    platform: linux/amd64
+    depends_on:
+      sql:
+        condition: service_healthy
+    environment:
+      SQL_SA_PASSWORD: "${SQL_SA_PASSWORD}"
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - >
+        /opt/mssql-tools18/bin/sqlcmd -S sql -U sa -P "$$SQL_SA_PASSWORD" -C
+        -Q "IF DB_ID(N'SLH_TMS_V2') IS NULL CREATE DATABASE [SLH_TMS_V2];"
+    restart: "no"
+
+  migration:
+    build:
+      context: "${API_BUILD_CONTEXT:-../../../API}"
+      dockerfile: Dockerfile
+    image: slh-tms-v2-api:local
+    restart: "no"
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__TmsDb: "Server=sql,1433;Database=SLH_TMS_V2;User Id=sa;Password=${SQL_SA_PASSWORD};Encrypt=True;TrustServerCertificate=True"
+      Database__ApplySchemaChangesOnStartup: "true"
+      Database__ApplyDeferredSchemaMigrations: "${APPLY_DEFERRED_SCHEMA_MIGRATIONS:-false}"
+      Database__MigrationOnly: "true"
+      Database__ExpectedDatabaseName: "SLH_TMS_V2"
+      Entra__TenantId: "${ENTRA_TENANT_ID}"
+      Entra__Audience: "${ENTRA_API_AUDIENCE}"
+      Entra__AllowedDomains__0: "${ENTRA_ALLOWED_DOMAIN_0:-lyonshaulage.com}"
+      Entra__AllowedDomains__1: "${ENTRA_ALLOWED_DOMAIN_1:-stuartlyonshaulage.co.uk}"
+
+  api:
+    build:
+      context: "${API_BUILD_CONTEXT:-../../../API}"
+      dockerfile: Dockerfile
+    image: slh-tms-v2-api:local
+    restart: unless-stopped
+    depends_on:
+      migration:
+        condition: service_completed_successfully
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__TmsDb: "Server=sql,1433;Database=SLH_TMS_V2;User Id=sa;Password=${SQL_SA_PASSWORD};Encrypt=True;TrustServerCertificate=True"
+      Database__ApplySchemaChangesOnStartup: "false"
+      Database__ApplyDeferredSchemaMigrations: "${APPLY_DEFERRED_SCHEMA_MIGRATIONS:-false}"
+      Database__MigrationOnly: "false"
+      Database__ExpectedDatabaseName: "SLH_TMS_V2"
+      Auth__Mode: Entra
+      Entra__TenantId: "${ENTRA_TENANT_ID}"
+      Entra__Audience: "${ENTRA_API_AUDIENCE}"
+      Entra__AllowedDomains__0: "${ENTRA_ALLOWED_DOMAIN_0:-lyonshaulage.com}"
+      Entra__AllowedDomains__1: "${ENTRA_ALLOWED_DOMAIN_1:-stuartlyonshaulage.co.uk}"
+      Archive__Enabled: "${ARCHIVE_ENABLED:-false}"
+      Archive__RootPath: /archive
+      Archive__AuditOutboxRetentionDays: "${ARCHIVE_OUTBOX_DAYS:-7}"
+      Archive__TelemetryRetentionDays: "${ARCHIVE_TELEMETRY_DAYS:-90}"
+      Archive__GeofenceRetentionDays: "${ARCHIVE_GEOFENCE_DAYS:-180}"
+      Archive__EtaRetentionDays: "${ARCHIVE_ETA_DAYS:-90}"
+      Archive__SyncReceiptRetentionDays: "${ARCHIVE_SYNC_DAYS:-30}"
+      Tracking__Dot__Enabled: "${ROADTECH_ENABLED:-false}"
+      Tracking__Dot__BaseUrl: "${ROADTECH_BASE_URL:-}"
+      Tracking__Dot__ApiKey: "${ROADTECH_API_KEY:-}"
+      Tracking__Dot__Username: "${ROADTECH_USERNAME:-}"
+      Tracking__Dot__Password: "${ROADTECH_PASSWORD:-}"
+      Tracking__Dot__CompanyCode: "${ROADTECH_COMPANY_CODE:-}"
+      Integrations__TachoMaster__Enabled: "${TACHOMASTER_ENABLED:-false}"
+      Integrations__TachoMaster__BaseUrl: "${TACHOMASTER_BASE_URL:-}"
+      Integrations__TachoMaster__ApiKey: "${TACHOMASTER_API_KEY:-}"
+      Integrations__TachoMaster__Username: "${TACHOMASTER_USERNAME:-}"
+      Integrations__TachoMaster__Password: "${TACHOMASTER_PASSWORD:-}"
+      Integrations__SageHr__Enabled: "${SAGEHR_ENABLED:-false}"
+      Integrations__SageHr__BaseUrl: "${SAGEHR_BASE_URL:-}"
+      Integrations__SageHr__ApiKey: "${SAGEHR_API_KEY:-}"
+      Integrations__Fleetio__Enabled: "${FLEETIO_ENABLED:-false}"
+      Integrations__Fleetio__BaseUrl: "${FLEETIO_BASE_URL:-https://secure.fleetio.com/api/v1}"
+      Integrations__Fleetio__ApiKey: "${FLEETIO_API_KEY:-}"
+      Integrations__Fleetio__AccountToken: "${FLEETIO_ACCOUNT_TOKEN:-}"
+      Integrations__Samsara__Enabled: "${SAMSARA_ENABLED:-false}"
+      Integrations__Samsara__BaseUrl: "${SAMSARA_BASE_URL:-https://api.samsara.com}"
+      Integrations__Samsara__ApiToken: "${SAMSARA_API_TOKEN:-}"
+      Integrations__Samsara__ExternalIdKey: "${SAMSARA_EXTERNAL_ID_KEY:-slhTmsRun}"
+      Integrations__Samsara__StopRadiusMeters: "${SAMSARA_STOP_RADIUS_METERS:-250}"
+      Integrations__InfoMailboxGraph__Enabled: "${INFO_MAILBOX_GRAPH_ENABLED:-false}"
+      Integrations__InfoMailboxGraph__TenantId: "${INFO_MAILBOX_TENANT_ID:-}"
+      Integrations__InfoMailboxGraph__ClientId: "${INFO_MAILBOX_CLIENT_ID:-}"
+      Integrations__InfoMailboxGraph__ClientSecret: "${INFO_MAILBOX_CLIENT_SECRET:-}"
+      Integrations__InfoMailboxGraph__Mailbox: "${INFO_MAILBOX_ADDRESS:-info@lyonshaulage.com}"
+      Integrations__InfoMailboxGraph__PollIntervalSeconds: "${INFO_MAILBOX_POLL_SECONDS:-60}"
+      Integrations__InfoMailboxGraph__InitialLookbackHours: "${INFO_MAILBOX_INITIAL_LOOKBACK_HOURS:-48}"
+      Integrations__InfoMailboxGraph__OverlapMinutes: "${INFO_MAILBOX_OVERLAP_MINUTES:-1440}"
+    volumes:
+      - type: bind
+        source: "${ARCHIVE_HOST_PATH:-../../archive}"
+        target: /archive
+
+  web:
+    build:
+      context: "${WEB_BUILD_CONTEXT:-../..}"
+      dockerfile: Dockerfile.standalone
+      args:
+        VITE_API_BASE_URL: /tms-api
+        VITE_ENTRA_TENANT_ID: "${ENTRA_TENANT_ID}"
+        VITE_ENTRA_CLIENT_ID: "${ENTRA_WEB_CLIENT_ID}"
+        VITE_ENTRA_API_SCOPE: "${ENTRA_API_SCOPE}"
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "0.0.0.0:${TMS_HTTP_PORT:-8080}:80"
+
+volumes:
+  sql-data:

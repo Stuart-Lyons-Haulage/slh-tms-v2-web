@@ -1,0 +1,322 @@
+import { useCallback, useEffect, useState } from 'react';
+import { request } from '../lib/api';
+import { intelligenceApi } from '../lib/intelligenceApi';
+import { useAccessToken } from '../lib/auth';
+import { useApi } from '../lib/useApi';
+
+type SyncResult = { provider: string; success: boolean; completedAtUtc: string; message: string };
+
+type SystemState = {
+  status: string;
+  generatedAtUtc?: string;
+  lastPlatformUpdateUtc?: string;
+  schedules: { dot: string; tachoMaster: string; sageHr: string; fleetio: string };
+  providers: Array<{ name: string; configured: boolean; state: string; lastUpdatedUtc?: string; ageMinutes?: number }>;
+};
+
+type RoadTechStatus = {
+  configured: boolean;
+  connected: boolean;
+  recordCount: number;
+  latestEventUtc?: string;
+  missingSettings: string[];
+  message: string;
+};
+
+type SamsaraStatus = {
+  configured: boolean;
+  connected: boolean;
+  vehicleCount: number;
+  driverCount: number;
+  assetSyncEnabled: boolean;
+  missingSettings: string[];
+  message: string;
+};
+
+type SamsaraSiteAddressStatus = {
+  configured: boolean;
+  addressSyncEnabled: boolean;
+  activeSites: number;
+  sitesWithReference: number;
+  sitesWithAddress: number;
+  sitesWithCoordinates: number;
+  eligibleSites: number;
+  alreadyMapped: number;
+  pending: number;
+  missingCoordinates: number;
+  missingAddress: number;
+  message: string;
+};
+
+type IntegrationRuntimeStatus = {
+  infoMailboxGraph?: {
+    enabled: boolean;
+    configured: boolean;
+    mailbox?: string;
+    lastAttemptUtc?: string;
+    lastSuccessUtc?: string;
+    lastError?: string;
+    lastFailureStage?: string;
+    inProgress?: boolean;
+    lastMessagesSeen?: number;
+    lastMessagesIngested?: number;
+  };
+};
+
+function roadTechState(status: RoadTechStatus) {
+  if (!status.configured) return { label: 'Setup incomplete', className: 'integration-state pending' };
+  if (!status.connected && status.recordCount === 0) return { label: 'Configured · no live records', className: 'integration-state pending' };
+  return { label: 'Connected', className: 'integration-state ready' };
+}
+
+function lastReceipt(value?: string) {
+  if (!value) return 'No receipt recorded';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString('en-GB');
+}
+
+export function AdminIntegrationSyncControls() {
+  const token = useAccessToken();
+  const [busy, setBusy] = useState<string>();
+  const [message, setMessage] = useState<string>();
+  const [state, setState] = useState<SystemState>();
+  const [roadTech, setRoadTech] = useState<RoadTechStatus>();
+  const [roadTechError, setRoadTechError] = useState<string>();
+  const [samsara, setSamsara] = useState<SamsaraStatus>();
+  const [samsaraSites, setSamsaraSites] = useState<SamsaraSiteAddressStatus>();
+  const [runtimeStatus, setRuntimeStatus] = useState<IntegrationRuntimeStatus>();
+  const feedHealth = useApi(useCallback(async () => intelligenceApi.freshness(await token()), [token]));
+
+  const loadState = async () => {
+    setRoadTechError(undefined);
+    try {
+      const accessToken = await token();
+      const [system, tracking, samsaraStatus, samsaraSiteStatus, runtime] = await Promise.all([
+        request<SystemState>('/api/v1/system-sync/state', accessToken),
+        request<RoadTechStatus>('/api/v1/integrations/roadtech/status', accessToken),
+        request<SamsaraStatus>('/api/v1/integrations/samsara/status', accessToken),
+        request<SamsaraSiteAddressStatus>('/api/v1/integrations/samsara/sites/address-sync/status', accessToken),
+        request<IntegrationRuntimeStatus>('/api/v1/integrations/status', accessToken),
+      ]);
+      setState(system);
+      setRoadTech(tracking);
+      setSamsara(samsaraStatus);
+      setSamsaraSites(samsaraSiteStatus);
+      setRuntimeStatus(runtime);
+    } catch (error) {
+      setRoadTechError(error instanceof Error ? error.message : 'RoadTech diagnostic check failed.');
+    }
+  };
+
+  useEffect(() => { void loadState(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const refresh = () => { void loadState(); void feedHealth.refresh(); };
+    const interval = window.setInterval(refresh, 60_000);
+    const onFocus = () => refresh();
+    const onVisibility = () => { if (document.visibilityState === 'visible') refresh(); };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [feedHealth.refresh]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const force = async (provider: 'tacho' | 'sage' | 'fleetio' | 'all') => {
+    setBusy(provider);
+    setMessage(undefined);
+    try {
+      const accessToken = await token();
+      const providers: Array<'tacho' | 'sage' | 'fleetio'> = provider === 'all' ? ['tacho', 'sage', 'fleetio'] : [provider];
+      const rows: SyncResult[] = [];
+      for (const item of providers) {
+        try {
+          rows.push(await request<SyncResult>(`/api/v1/system-sync/force/${item}`, accessToken, { method: 'POST' }, 120000));
+        } catch (error) {
+          rows.push({
+            provider: item,
+            success: false,
+            completedAtUtc: new Date().toISOString(),
+            message: error instanceof Error ? error.message : 'Force refresh failed.',
+          });
+        }
+      }
+      if (provider === 'all') {
+        try {
+          const graph = await request<{ message: string }>('/api/v1/health/intake/poll', accessToken, { method: 'POST' });
+          rows.push({ provider: 'Graph mailbox', success: true, completedAtUtc: new Date().toISOString(), message: graph.message });
+        } catch (error) {
+          rows.push({ provider: 'Graph mailbox', success: false, completedAtUtc: new Date().toISOString(), message: error instanceof Error ? error.message : 'Graph mailbox poll could not be queued.' });
+        }
+      }
+      setMessage(rows.map(item => `${item.provider}: ${item.message}`).join(' · '));
+      await loadState();
+      await feedHealth.refresh();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Force refresh failed.');
+    } finally {
+      setBusy(undefined);
+    }
+  };
+
+  const pollGraph = async () => {
+    setBusy('graph');
+    setMessage(undefined);
+    try {
+      const result = await request<{ message: string }>('/api/v1/health/intake/poll', await token(), { method: 'POST' });
+      setMessage(result.message);
+      await loadState();
+      await feedHealth.refresh();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Graph mailbox poll could not be queued.');
+    } finally {
+      setBusy(undefined);
+    }
+  };
+
+  const trackingState = roadTech ? roadTechState(roadTech) : undefined;
+
+  const syncSamsaraSiteAddresses = async () => {
+    if (!samsaraSites?.eligibleSites || !window.confirm(`Synchronise ${samsaraSites.eligibleSites} eligible Master Site address${samsaraSites.eligibleSites === 1 ? '' : 's'} to Samsara? Existing addresses will be updated, not duplicated.`)) return;
+    setBusy('samsara-sites');
+    setMessage(undefined);
+    try {
+      const result = await request<{ message: string; failed: number }>('/api/v1/integrations/samsara/sites/address-sync', await token(), { method: 'POST' }, 120000);
+      setMessage(result.message);
+      await loadState();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Samsara Master Site address synchronisation failed.');
+    } finally {
+      setBusy(undefined);
+    }
+  };
+
+  const syncSamsaraMasterData = async () => {
+    if (!samsara?.connected || !window.confirm('Synchronise active SLH Sites, Vehicles and Trailers to Samsara? Existing records will be updated, not duplicated.')) return;
+    setBusy('samsara-master-data');
+    setMessage(undefined);
+    try {
+      const result = await request<{ message: string }>('/api/v1/integrations/samsara/master-data/sync', await token(), { method: 'POST' }, 180000);
+      setMessage(result.message);
+      await loadState();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Samsara Master Data synchronisation failed.');
+    } finally {
+      setBusy(undefined);
+    }
+  };
+
+  return <section className="panel" style={{ marginBottom: 18 }}>
+    <div className="title-row admin-integration-heading">
+      <div>
+        <p className="eyebrow">Admin · API feeds</p>
+        <h2>API Feeds & Integrations</h2>
+        <p className="hint">This is the single TMS source for external API/feed health, connectivity and controlled refresh actions. Normal updates remain automatic.</p>
+      </div>
+      <div className="admin-integration-actions">
+        <button onClick={() => { void loadState(); void feedHealth.refresh(); }}>Check system state</button>
+        <button onClick={() => void pollGraph()} disabled={Boolean(busy)}>{busy === 'graph' ? 'Queueing mailbox poll…' : 'Poll Graph mailbox now'}</button>
+        <button onClick={() => void force('tacho')} disabled={Boolean(busy)}>{busy === 'tacho' ? 'Refreshing…' : 'Force TachoMaster'}</button>
+        <button onClick={() => void force('sage')} disabled={Boolean(busy)}>{busy === 'sage' ? 'Refreshing…' : 'Force Sage HR'}</button>
+        <button onClick={() => void force('fleetio')} disabled={Boolean(busy)}>{busy === 'fleetio' ? 'Refreshing…' : 'Force Fleetio'}</button>
+        <button className="primary" onClick={() => void force('all')} disabled={Boolean(busy)}>{busy === 'all' ? 'Refreshing all…' : 'Force refresh all systems'}</button>
+      </div>
+    </div>
+
+    <div className="admin-card" style={{ marginBottom: 14 }}>
+      <div className="title-row" style={{ marginBottom: 8 }}>
+        <div>
+          <p className="eyebrow">Authoritative feed health</p>
+          <h3>API and provider feeds</h3>
+        </div>
+        {feedHealth.data?.generatedAtUtc && <small>Checked {new Date(feedHealth.data.generatedAtUtc).toLocaleTimeString('en-GB')}</small>}
+      </div>
+      {feedHealth.error && <p className="notice inline-notice">Feed receipt health could not refresh: {feedHealth.error}</p>}
+      <div className="admin-grid">
+        {feedHealth.data?.sources.map((feed) => <article className="admin-card" key={feed.name}>
+          <span className={`integration-state ${feed.state === 'green' ? 'ready' : 'pending'}`}>{feed.state === 'green' ? 'Current' : feed.state === 'amber' ? 'Check' : 'Attention'}</span>
+          <h3>{feed.name}</h3>
+          <p>{feed.detail}</p>
+          <small>Last receipt: {lastReceipt(feed.lastUpdatedUtc)}{feed.cadence ? ` · ${feed.cadence}` : ''}</small>
+        </article>)}
+      </div>
+    </div>
+
+    <div className="admin-card" style={{ marginBottom: 14 }}>
+      <div className="title-row" style={{ marginBottom: 8 }}>
+        <div>
+          <p className="eyebrow">RoadTech / DOT diagnostics</p>
+          <h3>Tracking runtime status</h3>
+        </div>
+        {trackingState && <span className={trackingState.className}>{trackingState.label}</span>}
+      </div>
+      {!roadTech && !roadTechError && <p className="hint">Checking RoadTech runtime settings and live connectivity…</p>}
+      {roadTech && <>
+        <p>{roadTech.message}</p>
+        {!roadTech.configured && roadTech.missingSettings.length > 0 && <div className="notice inline-notice"><strong>Specific settings to amend:</strong> {roadTech.missingSettings.join(' · ')}</div>}
+        {roadTech.configured && !roadTech.connected && <div className="notice inline-notice"><strong>Configuration is present.</strong> RoadTech is not currently returning live vehicle records. This is a connectivity/credentials/provider-data issue rather than missing setup.</div>}
+        {roadTech.connected && <p className="hint"><strong>{roadTech.recordCount}</strong> live RoadTech vehicle record{roadTech.recordCount === 1 ? '' : 's'} returned{roadTech.latestEventUtc ? ` · latest event ${new Date(roadTech.latestEventUtc).toLocaleString('en-GB')}` : ''}.</p>}
+      </>}
+      {roadTechError && <p className="notice inline-notice"><strong>Diagnostic request failed:</strong> {roadTechError}</p>}
+    </div>
+
+
+    <div className="admin-grid" style={{ marginBottom: 14 }}>
+      <article className="admin-card">
+        <div className="title-row" style={{ marginBottom: 8 }}>
+          <div>
+            <p className="eyebrow">Samsara</p>
+            <h3>Routes / Dispatch</h3>
+          </div>
+          <span className={samsara?.connected ? 'integration-state ready' : 'integration-state pending'}>
+            {samsara?.connected ? 'Connected' : samsara?.configured ? 'Configured · check link' : 'Setup incomplete'}
+          </span>
+        </div>
+        <p>{samsara?.message || 'Checking Samsara API token and route access…'}</p>
+        {samsara && !samsara.configured && samsara.missingSettings.length > 0 &&
+          <div className="notice inline-notice"><strong>Specific settings to amend:</strong> {samsara.missingSettings.join(' · ')}</div>}
+        {samsara?.connected &&
+          <small>{samsara.vehicleCount} vehicles · {samsara.driverCount} drivers visible to the token</small>}
+        {samsaraSites && <>
+          <p className="hint" style={{ marginTop: 10 }}>{samsaraSites.message}</p>
+          <small>{samsaraSites.alreadyMapped} already mapped · {samsaraSites.pending} pending · {samsaraSites.missingCoordinates} need coordinates · {samsaraSites.missingAddress} need address text</small>
+          <div style={{ marginTop: 10 }}>
+            <button className="primary" onClick={() => void syncSamsaraMasterData()} disabled={Boolean(busy) || !samsara?.connected || !samsara.assetSyncEnabled}>
+              {busy === 'samsara-master-data' ? 'Synchronising Master Data…' : 'Sync Sites, Vehicles & Trailers'}
+            </button>{' '}
+            <button className="primary" onClick={() => void syncSamsaraSiteAddresses()} disabled={Boolean(busy) || !samsara?.connected || !samsaraSites.addressSyncEnabled || samsaraSites.eligibleSites === 0}>
+              {busy === 'samsara-sites' ? 'Synchronising sites…' : `Sync Master Sites to Samsara${samsaraSites.eligibleSites ? ` (${samsaraSites.eligibleSites})` : ''}`}
+            </button>
+          </div>
+        </>}
+      </article>
+
+      <article className="admin-card">
+        <div className="title-row" style={{ marginBottom: 8 }}>
+          <div>
+            <p className="eyebrow">Microsoft Graph</p>
+            <h3>Info mailbox intake</h3>
+          </div>
+          <span className={runtimeStatus?.infoMailboxGraph?.lastSuccessUtc ? 'integration-state ready' : 'integration-state pending'}>
+            {runtimeStatus?.infoMailboxGraph?.lastSuccessUtc
+              ? 'Polling'
+              : runtimeStatus?.infoMailboxGraph?.configured
+                ? 'Configured · awaiting poll'
+                : 'Setup incomplete'}
+          </span>
+        </div>
+        <p>{runtimeStatus?.infoMailboxGraph?.mailbox || 'Info mailbox'} · direct outbound Graph polling from the local API.</p>
+        {runtimeStatus?.infoMailboxGraph?.lastSuccessUtc &&
+          <small>Last success: {lastReceipt(runtimeStatus.infoMailboxGraph.lastSuccessUtc)} · {runtimeStatus.infoMailboxGraph.lastMessagesSeen ?? 0} seen · {runtimeStatus.infoMailboxGraph.lastMessagesIngested ?? 0} ingested</small>}
+        {runtimeStatus?.infoMailboxGraph?.lastError &&
+          <div className="notice inline-notice"><strong>Last Graph error:</strong> {runtimeStatus.infoMailboxGraph.lastError}{runtimeStatus.infoMailboxGraph.lastFailureStage ? ` · stage: ${runtimeStatus.infoMailboxGraph.lastFailureStage}` : ''}{runtimeStatus.infoMailboxGraph.inProgress ? ' · a retry is currently running' : ''}</div>}
+        {!runtimeStatus?.infoMailboxGraph?.lastError && runtimeStatus?.infoMailboxGraph?.inProgress && <p className="hint">A Graph mailbox poll is currently running; the next refresh will show its receipt.</p>}
+      </article>
+    </div>
+
+    <p className="hint">Automatic cadence: TachoMaster every 20 minutes · Sage HR 05:00 and 14:00 UK daily · Fleetio hourly · DOT/Falcon continuous. Status refreshes on screen every 60 seconds.</p>
+    {state && <p className="hint">Platform state: <strong>{state.status}</strong>{state.lastPlatformUpdateUtc ? ` · last update ${new Date(state.lastPlatformUpdateUtc).toLocaleString('en-GB')}` : ''}</p>}
+    {message && <p className="notice inline-notice">{message}</p>}
+  </section>;
+}

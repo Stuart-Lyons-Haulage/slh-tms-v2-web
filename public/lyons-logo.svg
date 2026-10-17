@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 120" role="img" aria-labelledby="title desc">
+  <title id="title">Lyons</title>
+  <desc id="desc">Lyons lime green and navy logo</desc>
+  <path fill="#99d332" d="M0 0h132L55 120H0z"/>
+  <path fill="#073a78" d="M132 0h108v120H55z"/>
+  <path fill="#fff" d="M132 0h8L63 120h-8z"/>
+  <text x="15" y="76" fill="#fff" font-family="Arial,Helvetica,sans-serif" font-size="35" font-weight="700" letter-spacing="-1">LYONS</text>
+</svg>

@@ -1,0 +1,309 @@
+import { readFileSync } from "node:fs";
+import { describe, expect, it } from "vitest";
+
+const source = readFileSync(new URL("./DriverDispatch.tsx", import.meta.url), "utf8");
+const operationalSource = readFileSync(new URL("./DriverDispatchOperational.tsx", import.meta.url), "utf8");
+const authoritativeSource = readFileSync(new URL("../components/dispatch/DispatchBoard.tsx", import.meta.url), "utf8");
+const rowSource = readFileSync(new URL("../components/dispatch/DispatchDriverRow.tsx", import.meta.url), "utf8");
+const apiSource = readFileSync(new URL("../components/dispatch/dispatchApi.ts", import.meta.url), "utf8");
+const stateSource = readFileSync(new URL("../components/dispatch/dispatchBoardState.ts", import.meta.url), "utf8");
+const filterSource = readFileSync(new URL("../components/dispatch/DispatchFilters.tsx", import.meta.url), "utf8");
+const calculatedStartsSource = readFileSync(new URL("./DispatchCalculatedStarts.tsx", import.meta.url), "utf8");
+const authoritativeCss = readFileSync(new URL("../authoritative-dispatch.css", import.meta.url), "utf8");
+const smartDispatchCss = readFileSync(new URL("../smart-dispatch.css", import.meta.url), "utf8");
+const loadPlanCss = readFileSync(new URL("../customer-load-plans.css", import.meta.url), "utf8");
+const availabilitySource = readFileSync(new URL("../components/DriverAvailabilityPanel.tsx", import.meta.url), "utf8");
+const plannerSource = readFileSync(new URL("./RunPlannerLive.tsx", import.meta.url), "utf8");
+const staffingSource = readFileSync(new URL("./Staffing.tsx", import.meta.url), "utf8");
+const timesheetSource = readFileSync(new URL("./DriverTimesheets.tsx", import.meta.url), "utf8");
+
+describe("Driver Dispatch UI contract", () => {
+  it("uses one Driver Availability decision in Staffing and Dispatch", () => {
+    expect(plannerSource).not.toContain("<DriverAvailabilityPanel");
+    expect(staffingSource).toContain("Import agency availability");
+    expect(staffingSource).toContain("Import confirmed availability");
+    expect(staffingSource).toContain("Employment type remains controlled by Master Data");
+    expect(authoritativeSource).not.toContain("<DriverAvailabilityPanel planningDate={planningDate}");
+    expect(apiSource).toContain("/api/v1/driver-availability?date=");
+    expect(apiSource).toContain("sharedAvailability?.employmentType");
+    expect(apiSource).toContain("sharedAvailability?.dispatchable === false");
+    expect(apiSource).toContain("const annotateAvailability = (items: DispatchDriverDto[]) => items.map(driver => {");
+    expect(apiSource).toContain("isBlocked: true");
+    expect(apiSource).not.toContain("items.filter(driver => {");
+    expect(apiSource).not.toContain("allocatedDriverIds.has(driver.driverId)");
+    expect(availabilitySource).toContain("Employment type is read-only here and remains controlled by Master Data.");
+    expect(availabilitySource).toContain("Booking confirmed");
+    expect(availabilitySource).toContain("Long-term placement");
+  });
+  it("keeps the staffing calendar and timesheet anomaly feed visible", () => {
+    expect(staffingSource).toContain("Availability calendar");
+    expect(staffingSource).toContain("Sage HR working patterns");
+    expect(staffingSource).toContain("STAFFING-CALENDAR");
+    expect(timesheetSource).toContain("staffingAnomalies");
+    expect(timesheetSource).toContain("confirmed agency availability");
+    expect(staffingSource).toContain("Driver requirements forecast");
+    expect(staffingSource).toContain("Management input · Operations action · Planner visibility");
+    expect(staffingSource).toContain("/api/v1/driver-forecast");
+  });
+  it("keeps status visible and puts the calculated Start column beside the driver", () => {
+    expect(source).toContain("<th>Status</th>");
+    expect(source).toContain("<th>Driver</th><th>Start</th><th>Type / skills</th>");
+    expect(source).toContain("No Run");
+    expect(source).toContain("Awaiting Dispatch");
+    expect(source).toContain("Sent Awaiting Response");
+    expect(source).toContain("Confirmed");
+    expect(source).not.toContain("<input type=\"time\"");
+  });
+
+  it("shows only unallocated runs in the legacy pool above the legacy driver table", () => {
+    expect(source).toContain("data-testid=\"built-runs-queue\"");
+    expect(source).toContain("Built runs ready to allocate");
+    expect(source).toContain("filter(load => !load.driverId)");
+    expect(source.indexOf("<BuiltRunsQueue loads={data.loads} />")).toBeLessThan(source.indexOf("dispatch-table-wrap"));
+  });
+
+  it("keeps a successful allocation visible against the driver instead of refreshing it away", () => {
+    expect(source).toContain("const applySavedAllocation = useCallback");
+    expect(source).toContain("assignedLoadId: saved.id");
+    expect(source).toContain("applySavedAllocation(saved, driver.driverId, previous?.id)");
+    expect(source).toContain("Run remains against this driver and is ready to dispatch");
+    const saveStart = source.indexOf("async function save()");
+    const dispatchStart = source.indexOf("async function prepareDispatch()", saveStart);
+    expect(source.slice(saveStart, dispatchStart)).not.toContain("await refresh()");
+  });
+
+  it("renders one authoritative Dispatch surface instead of mounting the legacy table underneath", () => {
+    expect(operationalSource).not.toContain("startVisiblePolling");
+    expect(operationalSource).not.toContain("60_000");
+    expect(operationalSource).not.toContain("refreshKey");
+    expect(operationalSource).toContain("<DispatchBoard");
+    expect(operationalSource).toContain('className="driver-dispatch-operational-page"');
+    expect(operationalSource).not.toContain("<DriverDispatch />");
+  });
+
+  it("keeps allocation, readiness and Samsara route export inside the authoritative board without a stale overlay lookup", () => {
+    expect(operationalSource).not.toContain("openDispatchPreview");
+    expect(operationalSource).not.toContain("does not currently have an allocated run");
+    expect(operationalSource).not.toContain("event.preventDefault()");
+    expect(operationalSource).not.toContain("event.stopPropagation()");
+    expect(authoritativeSource).not.toContain("getDriverDispatchRoute(effectiveSelection.runId");
+    expect(authoritativeSource).not.toContain("checkDispatchReadiness(effectiveSelection.runId");
+    expect(authoritativeSource).toContain("await syncSamsaraMappings(planningDate, access)");
+    expect(authoritativeSource).toContain("sendRunToSamsara(selection.runId, access)");
+    expect(authoritativeSource).toContain("onDownloadSamsaraCsv");
+    expect(authoritativeSource).toContain("Export to Samsara");
+    expect(authoritativeSource).not.toContain('className="samsara-dispatch-strip"');
+    expect(authoritativeSource).not.toContain("sendDriverMessage(");
+    expect(authoritativeSource).not.toContain("<DispatchMessageDialog");
+  });
+
+  it("keeps driver search, sync and customer exports on the routed Driver Dispatch surface", () => {
+    expect(operationalSource).not.toContain("CustomerLoadPlanActions");
+    expect(filterSource).toContain('aria-label="Search drivers"');
+    expect(authoritativeSource).toContain('"Refresh data"');
+    expect(authoritativeSource).toContain("DispatchSnapshotCache");
+    expect(authoritativeSource).toContain("refresh(true)");
+    expect(authoritativeSource).toContain("syncDispatchDrivers");
+    expect(authoritativeSource).toContain("filterDriversByDriverSearch");
+  });
+
+  it("uses one compact actionable driver filter row without duplicate dashboard panels", () => {
+    const labels = ["All people", "Employed", "Agency", "Casual", "Subbies", "Sage unmatched"];
+    labels.reduce((position, label) => {
+      const nextPosition = filterSource.indexOf(`label: "${label}"`);
+      expect(nextPosition).toBeGreaterThan(position);
+      return nextPosition;
+    }, -1);
+    expect(filterSource.indexOf("Unallocated<span>")).toBeGreaterThan(filterSource.indexOf('label: "Sage unmatched"'));
+    expect(filterSource).not.toContain("All drivers");
+    expect(filterSource).not.toContain("Skills mismatch");
+    expect(filterSource).not.toContain("Backloads");
+    expect(authoritativeSource).not.toContain("<ComplianceWarningBanner");
+    expect(authoritativeSource).not.toContain('className="smart-dispatch-summary"');
+    expect(smartDispatchCss).toContain(".smart-dispatch-filters button.warning:not(.active)");
+  });
+
+  it("keeps the authoritative Smart Dispatch toolbar visibly rendered in production", () => {
+    expect(authoritativeSource).toContain('className="smart-dispatch-header"');
+    expect(authoritativeSource).toContain("Planning date");
+    expect(authoritativeSource).toContain('"Refresh data"');
+    expect(authoritativeSource).not.toContain('>Refresh<');
+    expect(authoritativeSource).not.toContain('>Get Times<');
+    expect(authoritativeSource).toContain("Dispatch");
+    expect(authoritativeCss).toContain(".smart-dispatch-board > .smart-dispatch-header");
+    expect(authoritativeCss).toContain("display: flex !important");
+    expect(authoritativeCss).toContain("visibility: visible !important");
+    expect(authoritativeCss).toContain(".top-navigation-shell main > .driver-dispatch-operational-page");
+    expect(authoritativeCss).toContain("margin-top: -54px");
+  });
+
+  it("keeps available driver cards collapsible and colors allocation through Samsara handoff", () => {
+    expect(authoritativeSource).toContain('<details className="smart-dispatch-table-wrap dispatch-driver-pool dispatch-driver-pool-collapse" aria-label="Available drivers" open>');
+    expect(authoritativeSource).toContain('drivers={availableWorkforce}');
+    expect(authoritativeSource).toContain('allDrivers={snapshot.drivers}');
+    expect(rowSource).toContain('samsaraState ? "samsara-sent" : lockedToDriver ? "allocated"');
+    expect(authoritativeCss).toContain('tr.allocated { border-left-color: #dc9a18');
+    expect(authoritativeCss).toContain('tr.samsara-sent { border-left-color: #229268');
+  });
+
+  it("uses Routes wording and carries Driver Master/Sage duty and leave state into dispatch", () => {
+    expect(authoritativeSource).toContain('aria-label="Routes ready for driver allocation"');
+    expect(authoritativeSource).toContain("<strong>Routes</strong>");
+    expect(authoritativeSource).toContain("<th>Driver</th><th>Duty</th><th>Last location / fit</th><th>Skills</th><th>Route</th>");
+    expect(filterSource).toContain("All people");
+    expect(filterSource).toContain("Sage unmatched");
+    expect(filterSource).toContain("Unallocated");
+    expect(apiSource).toContain("const enrichedDrivers = drivers.map(driver => {");
+    expect(apiSource).toContain("authorityByDriver.get(driver.driverId)");
+    expect(apiSource).toContain("onLeave: authority?.onLeave === true");
+    expect(rowSource).toContain('const availabilityTone = driver.onLeave ? "on-leave"');
+    expect(rowSource).toContain("if (day >= 7) return \"red\"");
+    expect(rowSource).toContain("if (day >= 5) return \"amber\"");
+    expect(smartDispatchCss).toContain(".smart-dispatch-row.on-leave");
+  });
+
+  it("applies allocation responses locally without reloading the Dispatch board", () => {
+    const allocationStart = authoritativeSource.indexOf("async function prepareDispatch");
+    const allocationEnd = authoritativeSource.indexOf("async function refreshSamsaraStatus", allocationStart);
+    const allocationSource = authoritativeSource.slice(allocationStart, allocationEnd);
+    expect(allocationSource).toContain("const saved = await allocateDispatchRun");
+    expect(allocationSource).toContain("dispatchSnapshotCache.set");
+    expect(allocationSource).not.toContain("await refresh(true)");
+    expect(apiSource).toContain("return request<LegacyDispatchLoad>");
+  });
+
+  it("exposes Dispatch immediately for a selected row and allocates it before route export", () => {
+    expect(rowSource).toContain('action === "allocate" && selection.runId');
+    expect(rowSource).toContain('{busy ? "Allocating…" : "Dispatch"}');
+    expect(authoritativeSource).toContain("allocateDispatchRun(effectiveSelection.runId, driver.driverId, effectiveSelection, access)");
+    expect(authoritativeSource).not.toContain("lockDispatchPlan(");
+    expect(authoritativeSource).toContain("sendRunToSamsara(selection.runId, access)");
+  });
+
+  it("restores the run sidebar with first collection time, first collection, final delivery and fit suggestions", () => {
+    expect(authoritativeSource).toContain('className="smart-run-sidebar"');
+    expect(authoritativeSource).toContain("run.firstCollectionTimeUtc");
+    expect(authoritativeSource).toContain("run.collectionPoint.name");
+    expect(authoritativeSource).toContain("run.finalDeliveryPoint?.name");
+    expect(authoritativeSource).toContain("drivers.filter(driver => driver.suggestedRunId === run.runId)");
+    expect(apiSource).toContain("firstCollectionTimeUtc: collection?.plannedArrivalUtc || load.plannedStartUtc");
+    expect(apiSource).toContain("finalDeliveryPoint: delivery ?");
+    expect(authoritativeCss).toContain(".smart-dispatch-workspace");
+    expect(authoritativeCss).toContain(".smart-run-card-list");
+  });
+
+  it("uses previous-trailer continuity unless the run planner notes explicitly request a trailer swap", () => {
+    expect(stateSource).toContain("driver.previousTrailerId");
+    expect(stateSource).toContain("!assignedRun?.trailerSwapRequested");
+    expect(rowSource).toContain("!nextRun?.trailerSwapRequested");
+    expect(rowSource).toContain("Last used / continuity");
+    expect(rowSource).toContain("Planner note requests a trailer swap");
+    expect(apiSource).toContain("trailerSwapRequested");
+    expect(apiSource).toContain("swap\\s*trailer");
+  });
+
+  it("keeps Customer Load Plans closable above the app header", () => {
+    expect(loadPlanCss).toContain(".load-plan-modal-backdrop .load-plan-head-actions button:last-child");
+    expect(loadPlanCss).toContain("position: fixed");
+    expect(loadPlanCss).toContain("z-index: 1305");
+  });
+
+  it("keeps the complete API payload while showing only verified available drivers in the Dispatch pool", () => {
+    expect(authoritativeSource).toContain("const availableWorkforce = useMemo(() =>");
+    expect(authoritativeSource).toContain("isPotentiallyDispatchAvailable(driver, status)");
+    expect(authoritativeSource).toContain("isDispatchAvailable(driver, status, availableTime)");
+    expect(apiSource).not.toContain(".filter(driver => visibilityByDriver.has(driver.driverId))");
+  });
+
+  it("makes the Dispatch action available from the locally committed legacy allocation", () => {
+    expect(source).toContain('dispatchStatus: "Awaiting Dispatch"');
+    expect(source).toContain('driver.assignedLoadId === selected.id && effectiveStatus === "Awaiting Dispatch"');
+    expect(source).toContain('{busy ? "Preparing…" : "Dispatch"}</button>');
+  });
+
+  it("keeps all active drivers visible while only blocking proven current unavailability", () => {
+    expect(source).not.toContain("if (!driver.assignedLoadId && knownUnavailable(driver, status)) return false;");
+    expect(source).toContain("availability warnings shown");
+    expect(source).toContain("Visible for planning · allocation currently blocked");
+    expect(source).toContain("Allocated but unavailable · reassign this run");
+    expect(source).toContain('const tachoUnavailable = status?.availabilityStatus === "Unavailable";');
+    expect(source).not.toContain('status?.availabilityStatus === "Unavailable" || status?.weeklyRestStatus === "Overdue"');
+    expect(source).toContain("disabled={busy || driver.onLeave || tachoUnavailable || complianceBlocked || !vehicleId}");
+  });
+
+  it("continues to prevent a run already allocated to another driver being offered for duplicate allocation", () => {
+    expect(source).toContain(".filter(load => !load.driverId || load.id === driver.assignedLoadId)");
+    expect(source).toContain("allocated to me");
+    expect(source).toContain("unallocated");
+  });
+
+  it("allows an allocated run, vehicle and trailer to be edited after dispatch and explicitly unassigned", () => {
+    expect(source).not.toContain('const canEditAllocation = effectiveStatus !== "Sent Awaiting Response" && effectiveStatus !== "Confirmed";');
+    expect(source).toContain("async function unassign()");
+    expect(source).toContain('body: JSON.stringify({ driverId: null, vehicleId: null, trailerId: null })');
+    expect(source).toContain("Unassign run</button>");
+    expect(source).toContain("Save allocation");
+  });
+
+  it("prefers assistant/live vehicle evidence and marks yesterday continuity clearly", () => {
+    expect(source).toContain('initial?.vehicleId || driver.suggestedVehicleId || driver.previousVehicleId || ""');
+    expect(source).toContain('" · Assistant · in yesterday"');
+    expect(source).toContain("In yesterday · {driver.previousVehicleRegistration}");
+  });
+
+  it("uses Fleetio vehicle status as an allocation warning and dispatch guard", () => {
+    expect(source).toContain("function fleetioWarning(vehicle?: Vehicle)");
+    expect(source).toContain("Keep this vehicle selected and continue with the allocation?");
+    expect(source).toContain("Resolve or change the vehicle before dispatch.");
+    expect(source).toContain("⚠ Fleetio");
+  });
+
+  it("publishes calculated and projected Tacho evidence into the Start and Day columns", () => {
+    expect(calculatedStartsSource).toContain('dispatchStartsCalculatedEvent = "slh:dispatch-starts-calculated"');
+    expect(calculatedStartsSource).toContain("suggestedStartUtc?: string");
+    expect(calculatedStartsSource).toContain("earliestStartUtc?: string");
+    expect(calculatedStartsSource).toContain("projectedDayNumber?: number");
+    expect(calculatedStartsSource).toContain("earliestStartIsAssumption?: boolean");
+    expect(calculatedStartsSource).toContain("publishStarts(date, rows, statusResponse.drivers)");
+    expect(source).toContain("status?.projectedDayNumber || driver.dayNumber");
+    expect(source).toContain("calculatedStart?.suggestedStartUtc || status?.earliestStartUtc || initial?.plannedStartUtc");
+    expect(source).toContain("couldStartAssumption");
+    expect(source).toContain("Projected duty day: Day");
+  });
+
+  it("opens editable dispatch and free-form update previews", () => {
+    expect(source).toContain('type MessageMode = "initial" | "amendment" | "update"');
+    expect(source).toContain('mode: "initial"');
+    expect(source).toContain('mode: "update"');
+    expect(source).toContain("Free-form update text");
+    expect(source).toContain("Update text</button>");
+    expect(source).toContain("SEND UPDATE");
+    expect(source).toContain('dispatch: state.mode === "initial"');
+  });
+
+  it("verifies the allocation response contains the selected resources", () => {
+    expect(source).toContain("saved.driverId !== driver.driverId");
+    expect(source).toContain("saved.vehicleId !== vehicleId");
+    expect(source).toContain('(saved.trailerId || "") !== trailerId');
+  });
+
+  it("derives the dispatch message start from the first planned collection", () => {
+    expect(source).toContain("firstCollectionStop(latest)?.plannedArrivalUtc || latest.plannedStartUtc");
+    expect(source).not.toContain("/start-time");
+  });
+
+  it("bounds core Dispatch reads and the slower Tacho availability request", () => {
+    const smartDispatchSource = apiSource.slice(
+      apiSource.indexOf("export async function getSmartDispatch"),
+      apiSource.indexOf("export async function syncDispatchDrivers")
+    );
+    const tachoAvailabilitySource = apiSource.slice(
+      apiSource.indexOf("export async function getAvailableTimes"),
+      apiSource.indexOf("export async function syncSamsaraMappings")
+    );
+    expect(smartDispatchSource).toContain("DISPATCH_READ_TIMEOUT_MS");
+    expect(tachoAvailabilitySource).toContain("DISPATCH_TACHO_TIMEOUT_MS");
+    expect(apiSource).toContain("const DISPATCH_READ_TIMEOUT_MS = 60_000;");
+    expect(apiSource).toContain("const DISPATCH_TACHO_TIMEOUT_MS = 180_000;");
+  });
+});

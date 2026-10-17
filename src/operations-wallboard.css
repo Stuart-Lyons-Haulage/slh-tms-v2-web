@@ -1,0 +1,489 @@
+.ops-wallboard {
+  min-height: calc(100vh - 150px);
+  background: #0b1117;
+  color: #edf5f8;
+  margin: -18px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-sizing: border-box;
+}
+
+.ops-wallboard.tv {
+  width: 100vw;
+  height: 100dvh;
+  min-height: 100dvh;
+  max-height: 100dvh;
+  margin: 0;
+  padding: 14px;
+  overflow: hidden;
+}
+
+.ops-wallboard-header {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 16px;
+  border-bottom: 2px solid #263846;
+  padding-bottom: 10px;
+}
+
+.ops-wallboard-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.ops-wallboard-logo {
+  width: 76px;
+  height: 44px;
+  object-fit: cover;
+  flex: 0 0 auto;
+}
+
+.ops-wallboard-header p,
+.ops-wallboard-header h1 {
+  margin: 0;
+  letter-spacing: 0;
+}
+
+.ops-wallboard-header p {
+  color: #75d5ff;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.ops-wallboard-header h1 {
+  color: #fff;
+  font-size: 30px;
+  line-height: 1.05;
+}
+
+.ops-wallboard-header button {
+  background: #162331;
+  border-color: #3c5264;
+  color: #fff;
+}
+
+.ops-wallboard-clock {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.ops-wallboard-clock strong {
+  color: #fff;
+  font-size: 34px;
+  line-height: 1;
+}
+
+.ops-wallboard-clock span {
+  color: #a9bdca;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.ops-wallboard-summary {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ops-wallboard-summary article {
+  background: #121c26;
+  border: 1px solid #283b4a;
+  border-radius: 6px;
+  padding: 7px 9px;
+  min-height: 60px;
+}
+
+.ops-wallboard-summary article.green { border-left: 5px solid #30b566; }
+.ops-wallboard-summary article.amber { border-left: 5px solid #e2a421; }
+.ops-wallboard-summary article.red { border-left: 5px solid #e04f4f; }
+
+.ops-wallboard-summary span,
+.ops-wallboard-summary small {
+  display: block;
+  color: #9eb3c2;
+  font-size: 11px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.ops-wallboard-summary strong {
+  display: block;
+  color: #fff;
+  font-size: 23px;
+  line-height: 1.05;
+  margin: 3px 0;
+  white-space: nowrap;
+}
+
+.ops-wallboard-alert {
+  border: 1px solid #8a6518;
+  background: #2a2111;
+  color: #ffd27b;
+  border-radius: 6px;
+  padding: 10px 13px;
+  font-weight: 850;
+}
+
+.ops-wallboard-coverage {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  padding: 7px 11px;
+  border: 1px solid #2d5368;
+  border-radius: 6px;
+  background: #102431;
+  color: #c5d9e4;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.ops-wallboard-coverage strong { color: #75d5ff; }
+.ops-wallboard-coverage span { color: #edf5f8; }
+.ops-wallboard-coverage em { color: #ffd27b; font-style: normal; }
+
+.ops-board-layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  gap: 10px;
+}
+
+.ops-board-table {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  border: 1px solid #283b4a;
+  border-radius: 6px;
+  overflow-y: auto;
+  scroll-behavior: smooth;
+  background: #0f1821;
+  width: 76%;
+}
+
+.ops-attention-panel {
+  width: 24%;
+  min-width: 230px;
+  min-height: 0;
+  overflow: hidden;
+  background: #121c26;
+  border: 1px solid #283b4a;
+  border-radius: 6px;
+}
+
+.ops-attention-panel h2 {
+  margin: 0;
+  padding: 11px;
+  background: #1c2a36;
+  color: #fff;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.ops-attention-list {
+  padding: 8px;
+  overflow-y: auto;
+  max-height: 100%;
+}
+
+.ops-attention-card {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  min-height: 74px;
+  margin-bottom: 8px;
+  padding: 8px;
+  background: #101922;
+  border: 1px solid #283b4a;
+  border-left: 4px solid #ffc247;
+  border-radius: 4px;
+}
+
+.ops-attention-card.late,
+.ops-attention-card.risk { background: #321113; border-left-color: #ff4949; }
+.ops-attention-icon { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: #e2a421; color: #0b1117; font-weight: 950; }
+.ops-attention-card.late .ops-attention-icon,
+.ops-attention-card.risk .ops-attention-icon { background: #e04f4f; color: #fff; }
+.ops-attention-card div { min-width: 0; }
+.ops-attention-card b,
+.ops-attention-card strong,
+.ops-attention-card small,
+.ops-attention-card em { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ops-attention-card b { color: #fff; font-size: 12px; }
+.ops-attention-card strong { color: #fff; font-size: 12px; margin-top: 2px; }
+.ops-attention-card small { color: #ff9999; font-size: 10px; margin-top: 2px; }
+.ops-attention-card em { color: #75d5ff; font-size: 10px; font-style: normal; font-weight: 850; margin-top: 3px; }
+.ops-attention-value { text-align: right; }
+.ops-attention-value b { color: #ff7777; font-size: 15px; }
+.ops-attention-value small { color: #9eb3c2; font-size: 9px; }
+.ops-attention-clear { display: grid; gap: 6px; place-items: center; min-height: 130px; padding: 16px; border-radius: 4px; background: #12261d; color: #78d7a1; text-align: center; }
+.ops-attention-clear small { color: #9eb3c2; font-size: 11px; line-height: 1.35; }
+
+.ops-board-head,
+.ops-board-row {
+  display: grid;
+  grid-template-columns: 104px minmax(150px, .9fr) minmax(100px, .55fr) minmax(145px, .75fr) minmax(210px, 1.15fr) 104px minmax(150px, .8fr);
+  align-items: stretch;
+}
+
+.ops-board-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #1c2a36;
+  color: #9eb3c2;
+  font-size: 11px;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.ops-board-head span,
+.ops-board-row > span {
+  min-width: 0;
+  padding: 5px 8px;
+  border-right: 1px solid #243643;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.ops-board-head span:last-child,
+.ops-board-row > span:last-child {
+  border-right: 0;
+}
+
+.ops-board-row {
+  min-height: 58px;
+  border-top: 1px solid #243643;
+  background: #101922;
+}
+
+.ops-board-row.late,
+.ops-board-row.risk {
+  min-height: 72px;
+}
+
+.ops-board-row:nth-child(odd) {
+  background: #0d151d;
+}
+
+.ops-board-row.late {
+  background: #321113;
+  box-shadow: inset 8px 0 0 #ff4949;
+}
+
+.ops-board-row.risk {
+  background: #321113;
+  box-shadow: inset 8px 0 0 #ff4949;
+}
+
+.ops-board-row.onsite {
+  box-shadow: inset 6px 0 0 #75d5ff;
+}
+
+.ops-board-row.route {
+  box-shadow: inset 6px 0 0 #30b566;
+}
+
+.ops-board-row.complete {
+  opacity: .72;
+}
+
+.ops-board-row.present {
+  outline: 2px solid #75d5ff;
+  outline-offset: -2px;
+}
+
+.ops-board-row strong {
+  color: #fff;
+  font-size: 16px;
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ops-board-row small {
+  color: #9eb3c2;
+  font-size: 11px;
+  line-height: 1.25;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.time-cell {
+  color: #fff;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-weight: 950;
+}
+
+.time-cell strong {
+  font-size: 21px;
+}
+
+.time-cell.eta {
+  color: #75d5ff;
+}
+
+.ops-board-row.late .time-cell.eta,
+.ops-board-row.late .status-cell strong {
+  color: #ff7777;
+}
+
+.ops-board-row.risk .time-cell.eta,
+.ops-board-row.risk .status-cell strong {
+  color: #ff9999;
+}
+
+.run-cell strong,
+.route-cell strong {
+  white-space: normal;
+}
+
+.route-cell small {
+  white-space: nowrap;
+}
+
+.status-cell strong {
+  font-size: 16px;
+}
+
+.ops-progress-bar {
+  position: relative;
+  width: 100%;
+  height: 10px;
+  border-radius: 999px;
+  background: #283846;
+  overflow: hidden;
+  margin: 5px 0 2px;
+}
+
+.ops-progress-bar i {
+  display: block;
+  height: 100%;
+  min-width: 0;
+  border-radius: inherit;
+  background: #30b566;
+}
+
+.ops-progress-marker {
+  position: absolute;
+  top: 50%;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  border: 2px solid #8fa6b5;
+  background: #0f1821;
+  z-index: 1;
+}
+
+.ops-progress-marker.done {
+  background: #30b566;
+  border-color: #a0efbb;
+}
+
+.ops-progress-marker.onsite {
+  background: #75d5ff;
+  border-color: #d5f4ff;
+}
+
+.ops-board-row.risk .ops-progress-bar i { background: #ff4949; }
+.ops-board-row.late .ops-progress-bar i { background: #ff4949; }
+.ops-board-row.onsite .ops-progress-bar i { background: #75d5ff; }
+
+.ops-board-empty {
+  padding: 44px;
+  text-align: center;
+  color: #9eb3c2;
+  font-size: 20px;
+  font-weight: 850;
+}
+
+.ops-wallboard-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: #9eb3c2;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+@media (max-width: 1250px) {
+  .ops-wallboard:not(.tv) .ops-wallboard-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .ops-board-head,
+  .ops-board-row {
+    grid-template-columns: 92px minmax(140px, .9fr) minmax(90px, .55fr) minmax(130px, .75fr) minmax(190px, 1fr) 96px minmax(140px, .8fr);
+  }
+  .ops-board-layout { display: block; overflow-y: auto; }
+  .ops-board-table,
+  .ops-attention-panel { width: 100%; }
+  .ops-attention-panel { margin-top: 10px; }
+}
+
+@media (max-width: 760px) {
+  .ops-wallboard:not(.tv) {
+    margin: -16px;
+    padding: 12px;
+  }
+  .ops-wallboard-header {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+  .ops-wallboard-clock {
+    align-items: flex-start;
+  }
+  .ops-wallboard:not(.tv) .ops-wallboard-summary {
+    grid-template-columns: 1fr 1fr;
+  }
+  .ops-board-table {
+    overflow-x: auto;
+  }
+  .ops-board-head,
+  .ops-board-row {
+    min-width: 980px;
+  }
+  .ops-wallboard-footer {
+    flex-wrap: wrap;
+  }
+}
+
+/* A paired TV is a fixed viewport, not a responsive mobile page. These rules live
+   after the media queries so TV browser scaling cannot trigger the narrow-screen
+   min-width/margin rules and make the board jump or crop horizontally. */
+.ops-wallboard.tv .ops-wallboard-summary {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.ops-wallboard.tv .ops-board-table {
+  width: 100%;
+  overflow-x: hidden;
+  scroll-behavior: auto;
+}
+
+.ops-wallboard.tv .ops-board-head,
+.ops-wallboard.tv .ops-board-row {
+  width: 100%;
+  min-width: 0;
+}
+
+.ops-wallboard.tv .ops-wallboard-header {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+}
+
+.ops-wallboard.tv .ops-wallboard-clock {
+  align-items: flex-end;
+}

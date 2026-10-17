@@ -1,0 +1,18 @@
+.mobile-planner-handoff { display: none; }
+
+@media (max-width: 700px) {
+  .mobile-planner-handoff {
+    display: grid;
+    gap: 6px;
+    margin-top: 12px;
+    padding: 13px;
+    border: 1px solid #b9d9d6;
+    border-radius: 10px;
+    background: #f2faf7;
+  }
+  .mobile-planner-handoff strong { color: #073a5a; }
+  .mobile-planner-handoff span { color: #607685; font-size: .82rem; line-height: 1.4; }
+  .mobile-planner-handoff a { min-height: 44px; display: flex; align-items: center; justify-content: center; margin-top: 4px; border-radius: 8px; background: #006d6c; color: white; text-decoration: none; font-weight: 800; }
+  .planner-screen-switcher { display: grid !important; gap: 10px !important; }
+  .planner-screen-switcher .button-like { min-height: 44px; display: flex; align-items: center; justify-content: center; width: 100%; margin: 0; text-decoration: none; }
+}

@@ -1,0 +1,420 @@
+.smart-dispatch-table.authoritative {
+  min-width: 1460px;
+}
+
+.smart-dispatch-table.authoritative th:nth-child(1) { width: 13%; }
+.smart-dispatch-table.authoritative th:nth-child(2) { width: 6%; }
+.smart-dispatch-table.authoritative th:nth-child(3) { width: 16%; }
+.smart-dispatch-table.authoritative th:nth-child(4) { width: 8%; }
+.smart-dispatch-table.authoritative th:nth-child(5) { width: 11%; }
+.smart-dispatch-table.authoritative th:nth-child(6) { width: 10%; }
+.smart-dispatch-table.authoritative th:nth-child(7) { width: 9%; }
+.smart-dispatch-table.authoritative th:nth-child(8) { width: 11%; }
+.smart-dispatch-table.authoritative th:nth-child(9) { width: 8%; }
+.smart-dispatch-table.authoritative th:nth-child(10) { width: 8%; }
+
+.smart-date-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border: 1px solid rgba(255,255,255,.3);
+  border-radius: 9px;
+  font-size: .75rem;
+  font-weight: 700;
+}
+
+.smart-date-control input {
+  min-height: 30px;
+  border: 0;
+  border-radius: 6px;
+  padding: 4px 6px;
+}
+
+.smart-status-cell,
+.smart-dispatch-action-cell {
+  display: table-cell;
+}
+
+.smart-status-pill {
+  display: inline-block;
+  padding: 4px 7px;
+  border-radius: 999px;
+  font-size: .7rem;
+  font-weight: 800;
+  border: 1px solid #d5dee5;
+  background: #f5f7f9;
+  color: #425c70;
+}
+
+.smart-status-pill.ready { background: #eef7ff; border-color: #bed8ee; color: #245574; }
+.smart-status-pill.awaiting { background: #fff7e8; border-color: #efd09a; color: #714b08; }
+.smart-status-pill.confirmed { background: #edf9f2; border-color: #bfe2cd; color: #145c36; }
+
+.smart-status-cell small,
+.smart-dispatch-action-cell small {
+  display: block;
+  margin-top: 5px;
+}
+
+.smart-dispatch-action-cell .smart-action {
+  width: 100%;
+  margin-bottom: 5px;
+}
+
+.smart-action.ghost.dark {
+  background: #fff;
+  color: #29485f;
+  border-color: #cdd8e2;
+}
+
+.smart-dispatch-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(5, 26, 40, .56);
+}
+
+.smart-dispatch-modal {
+  width: min(820px, 96vw);
+  max-height: 92vh;
+  overflow: auto;
+  padding: 18px;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 24px 70px rgba(5, 26, 40, .28);
+}
+
+.smart-dispatch-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.smart-dispatch-modal-head .smart-eyebrow { color: #126244; }
+.smart-dispatch-modal-head h2 { margin: 3px 0 4px; color: #163e5a; }
+.smart-dispatch-modal-head p { margin: 0 0 12px; color: #5c7183; font-size: .86rem; }
+
+.smart-dispatch-modal textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  min-height: 330px;
+  padding: 12px;
+  border: 1px solid #cdd8e2;
+  border-radius: 9px;
+  font: inherit;
+  line-height: 1.45;
+}
+
+.smart-dispatch-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+/* Production guard: the authoritative Smart Dispatch toolbar must remain visible.
+   A later stylesheet must not be able to collapse the operational controls. */
+.smart-dispatch-board > .smart-dispatch-header {
+  display: flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  position: relative !important;
+  width: auto !important;
+  height: auto !important;
+  min-height: 56px !important;
+  overflow: visible !important;
+  clip: auto !important;
+  clip-path: none !important;
+}
+
+.smart-dispatch-board > .smart-dispatch-header .smart-dispatch-actions {
+  display: flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+.smart-dispatch-board > .smart-dispatch-header .smart-date-control,
+.smart-dispatch-board > .smart-dispatch-header .smart-action {
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+.smart-dispatch-workspace {
+  display: grid;
+  /* The planner's primary decision is driver-to-run allocation. Keep the
+     driver table in the left working area and the complete timed run board
+     visible alongside it. */
+  grid-template-columns: minmax(360px, 390px) minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 0 12px 12px;
+}
+
+.smart-dispatch-workspace .smart-dispatch-table-wrap {
+  grid-column: 1;
+  grid-row: 1;
+  margin: 0;
+  min-width: 0;
+}
+
+/* Local Dispatch reference layout: a workforce card pool on the left and
+   the route board alongside it. Keep the existing controls in each card so
+   allocation, compliance and lock behaviour remain unchanged. */
+.dispatch-driver-pool {
+  overflow: hidden;
+  border: 1px solid #cbd9e3;
+  border-radius: 11px;
+  background: #fff;
+}
+
+.dispatch-driver-pool-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  background: #143f63;
+  color: #fff;
+}
+
+.dispatch-driver-pool-heading div { display: grid; gap: 2px; }
+.dispatch-driver-pool-heading span {
+  color: #a6e3c2;
+  font-size: .68rem;
+  font-weight: 900;
+  letter-spacing: .14em;
+}
+.dispatch-driver-pool-heading strong { font-size: 1.1rem; }
+.dispatch-driver-pool-heading b {
+  min-width: 27px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.2);
+  text-align: center;
+}
+/* Allocation and handoff progress are visible on the driver card:
+   amber means assigned in the TMS; green means a Samsara route is confirmed. */
+.dispatch-driver-pool-collapse > summary { display: flex; list-style: none; cursor: pointer; }
+.dispatch-driver-pool-collapse > summary::-webkit-details-marker { display: none; }
+.dispatch-driver-pool-collapse > summary::after {
+  content: "⌄";
+  margin-left: auto;
+  font-size: 1.1rem;
+  transition: transform .15s ease;
+}
+.dispatch-driver-pool-collapse:not([open]) > summary::after { transform: rotate(-90deg); }
+.dispatch-driver-pool-collapse:not([open]) { position: sticky; top: 12px; }
+.dispatch-driver-pool .smart-dispatch-table tbody tr.available { border-left-color: #8796a3; }
+.dispatch-driver-pool .smart-dispatch-table tbody tr.allocated { border-left-color: #dc9a18; background: #fff8e8; }
+.dispatch-driver-pool .smart-dispatch-table tbody tr.samsara-sent { border-left-color: #229268; background: #f0fbf5; }
+
+.dispatch-driver-pool-help {
+  margin: 0;
+  padding: 10px 14px;
+  border-bottom: 1px solid #e1e8ee;
+  color: #607688;
+  font-size: .76rem;
+  line-height: 1.35;
+}
+
+/* Drivers are the workforce view. Route cards are the only allocation surface
+   at every viewport, including mobile, so the driver cards never offer a
+   second route/vehicle/trailer workflow. */
+.dispatch-driver-pool .smart-dispatch-table tbody tr td:nth-child(5),
+.dispatch-driver-pool .smart-dispatch-table tbody tr td:nth-child(6),
+.dispatch-driver-pool .smart-dispatch-table tbody tr td:nth-child(7),
+.dispatch-driver-pool .smart-dispatch-table tbody tr td:nth-child(10) { display: none; }
+
+/* On the wide Dispatch workbench, render each driver row as the same compact
+   card grid used by the local planner. The table semantics remain available
+   for accessibility. */
+@media (min-width: 1151px) {
+  .dispatch-driver-pool .smart-dispatch-table-wrap { overflow: visible; }
+  .dispatch-driver-pool .smart-dispatch-table { min-width: 0; display: block; }
+  .dispatch-driver-pool .smart-dispatch-table thead { display: none; }
+  .dispatch-driver-pool .smart-dispatch-table tbody {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 10px;
+  }
+  .dispatch-driver-pool .smart-dispatch-table tbody tr {
+    display: grid;
+    grid-template-columns: 1fr;
+    align-content: start;
+    min-width: 0;
+    border: 1px solid #cbd9e3;
+    border-left: 5px solid #229268;
+    border-radius: 10px;
+    background: #f8fbfd;
+    overflow: visible;
+  }
+  .dispatch-driver-pool .smart-dispatch-table tbody tr.on-leave { border-left-color: #c08a1a; }
+  .dispatch-driver-pool .smart-dispatch-table tbody tr.blocked { border-left-color: #b42318; }
+  .dispatch-driver-pool .smart-dispatch-table tbody tr td {
+    display: block;
+    min-width: 0!important;
+    width: auto!important;
+    border-top: 0;
+    padding: 6px 9px;
+  }
+  .dispatch-driver-pool .smart-dispatch-table tbody tr td:first-child {
+    padding-top: 10px;
+    border-bottom: 1px solid #dfe8ee;
+  }
+  .dispatch-driver-pool .smart-dispatch-table tbody tr td:nth-child(2),
+  .dispatch-driver-pool .smart-dispatch-table tbody tr td:nth-child(3),
+  .dispatch-driver-pool .smart-dispatch-table tbody tr td:nth-child(4) { background: #fff; }
+  .dispatch-driver-pool .smart-dispatch-table tbody tr td:nth-child(5) { margin-top: 3px; }
+  .dispatch-driver-pool .smart-dispatch-table tbody tr td:nth-child(8) { border-top: 1px solid #e1e8ee; }
+  .dispatch-driver-pool .smart-dispatch-table tbody tr td:nth-child(9) { padding-top: 2px; }
+  .dispatch-driver-pool .smart-dispatch-table tbody tr td:nth-child(10) { padding-bottom: 10px; }
+  .dispatch-driver-pool .smart-dispatch-table tbody tr.dispatch-group { display: none; }
+}
+
+.smart-run-sidebar {
+  grid-column: 2;
+  grid-row: 1;
+  position: sticky;
+  top: 12px;
+  max-height: calc(100vh - 150px);
+  overflow: auto;
+  border: 1px solid #d3dde6;
+  border-radius: 11px;
+  background: #fff;
+}
+
+.smart-run-sidebar-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 11px;
+  background: #123f63;
+  color: #fff;
+}
+
+.smart-run-sidebar-head span {
+  min-width: 24px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.16);
+  text-align: center;
+  font-size: .72rem;
+  font-weight: 800;
+}
+
+.smart-run-sidebar > p {
+  margin: 0;
+  padding: 9px 10px;
+  border-bottom: 1px solid #e1e7ec;
+  color: #617483;
+  font-size: .7rem;
+  line-height: 1.3;
+}
+
+.smart-run-card-list {
+  display: grid;
+  gap: 7px;
+  padding: 8px;
+}
+
+.smart-run-card {
+  border: 1px solid #d5dfe7;
+  border-radius: 9px;
+  padding: 8px;
+  background: #fafdff;
+}
+
+.smart-run-card.available { border-left: 4px solid #23885b; }
+.smart-run-card.allocated { border-left: 4px solid #5e7d93; background: #f4f7f9; }
+
+.smart-run-card-title {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  align-items: center;
+}
+
+.smart-run-card-title strong { color: #153f63; }
+.smart-run-card-title span {
+  font-size: .62rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: #547084;
+}
+
+.smart-run-time {
+  margin: 5px 0 6px;
+  color: #126244;
+  font-size: .9rem;
+  font-weight: 900;
+}
+
+.smart-run-route {
+  display: grid;
+  gap: 5px;
+}
+
+.smart-run-route span {
+  display: grid;
+  gap: 1px;
+  color: #314f63;
+  font-size: .7rem;
+  line-height: 1.2;
+}
+
+.smart-run-route b {
+  color: #78909f;
+  font-size: .58rem;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.smart-run-card small {
+  display: block;
+  margin-top: 6px;
+  color: #637987;
+  font-size: .66rem;
+}
+
+.smart-run-card .smart-run-fit { color: #17633b; font-weight: 750; }
+.smart-run-card .smart-run-warning { color: #8a5c00; font-weight: 750; }
+
+.smart-run-allocation-grid {
+  display: grid;
+  grid-template-columns: minmax(150px, 1.4fr) repeat(2, minmax(120px, 1fr)) minmax(90px, .7fr);
+  gap: 6px;
+  margin-top: 10px;
+}
+.smart-run-allocation-grid label,
+.smart-run-allocation-status { display: grid; gap: 3px; color: #637987; font-size: .68rem; font-weight: 800; }
+.smart-run-allocation-grid select { width: 100%; min-height: 32px; padding: 4px 6px; border: 1px solid #b9cad6; border-radius: 5px; background: #fff; color: #234154; }
+.smart-run-allocation-status { align-content: center; }
+.smart-run-allocation-status strong { color: #17633b; font-size: .82rem; }
+.smart-run-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.smart-run-actions .smart-action { min-height: 30px; padding: 5px 9px; font-size: .72rem; }
+
+@media (min-width: 901px) {
+  .top-navigation-shell main > .driver-dispatch-operational-page {
+    margin-top: -54px;
+  }
+}
+
+@media (max-width: 1150px) {
+  .smart-dispatch-workspace { grid-template-columns: 1fr; }
+  .smart-dispatch-workspace .smart-dispatch-table-wrap,
+  .smart-run-sidebar { grid-column: 1; grid-row: auto; }
+  .smart-run-sidebar { position: static; max-height: none; }
+  .smart-run-card-list { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+  .smart-run-allocation-grid { grid-template-columns: 1fr 1fr; }
+}

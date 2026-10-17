@@ -1,0 +1,67 @@
+.smart-run-card.allocated {
+  display: none;
+}
+
+.dispatch-resource-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(5, 38, 64, .48);
+}
+
+.dispatch-resource-modal {
+  width: min(560px, 96vw);
+  max-height: 88vh;
+  overflow: auto;
+  padding: 20px;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 20px 55px rgba(5, 38, 64, .28);
+}
+
+.dispatch-resource-modal header,
+.dispatch-resource-modal footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dispatch-resource-modal h3 {
+  margin: 2px 0 0;
+  color: #052640;
+  font-size: 24px;
+}
+
+.dispatch-resource-modal p {
+  color: #52697a;
+  line-height: 1.45;
+}
+
+.dispatch-resource-modal label {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0;
+  color: #17324a;
+  font-weight: 700;
+}
+
+.dispatch-resource-modal input,
+.dispatch-resource-modal select {
+  width: 100%;
+  min-height: 42px;
+  padding: 9px 11px;
+  border: 1px solid #cbd8e2;
+  border-radius: 8px;
+  background: #fff;
+  color: #17324a;
+  font: inherit;
+}
+
+.dispatch-resource-modal footer {
+  justify-content: flex-end;
+  margin-top: 18px;
+}

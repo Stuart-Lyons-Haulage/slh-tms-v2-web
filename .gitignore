@@ -1,0 +1,16 @@
+node_modules
+dist
+.env
+.env.local
+.env.*.local
+
+.env.standalone
+backup/
+
+# Host-specific standalone Compose override. Keep this local to the Mac/server.
+deploy/standalone/docker-compose.local.yml
+
+# macOS metadata
+.DS_Store
+**/.DS_Store
+deploy/standalone/docker-compose.host.yml

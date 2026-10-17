@@ -1,0 +1,39 @@
+.rollout-card.slh-status-moving,
+.vehicle-detail-panel.slh-status-moving {
+  background: #e9f7e8 !important;
+  border-color: #4eaa47 !important;
+}
+.rollout-card.slh-status-moving .condition-dot { background: #3f9d3a !important; box-shadow: 0 0 0 3px #d7efd4; }
+
+.rollout-card.slh-status-active-stationary,
+.vehicle-detail-panel.slh-status-active-stationary {
+  background: #fff7df !important;
+  border-color: #d89a17 !important;
+}
+.rollout-card.slh-status-active-stationary .condition-dot { background: #d89a17 !important; box-shadow: 0 0 0 3px #ffedba; }
+
+.rollout-card.slh-status-inactive,
+.vehicle-detail-panel.slh-status-inactive {
+  background: #f0f2f3 !important;
+  border-color: #a6b0b5 !important;
+}
+.rollout-card.slh-status-inactive .condition-dot { background: #8f9aa0 !important; box-shadow: 0 0 0 3px #e2e6e8; }
+
+.rollout-card.slh-status-vor,
+.vehicle-detail-panel.slh-status-vor {
+  background: #fff0f0 !important;
+  border-color: #c62828 !important;
+  box-shadow: 0 0 0 1px #c6282833 !important;
+}
+.rollout-card.slh-status-vor .condition-dot { background: #c62828 !important; box-shadow: 0 0 0 3px #ffd7d7; }
+.rollout-card.slh-status-vor.selected { outline-color: #c62828 !important; }
+
+option.slh-vor-option { color: #a51f1f; font-weight: 800; }
+
+.master-table tr.slh-vor-row td {
+  background: #fff0f0 !important;
+  color: #8f1f1f;
+}
+.master-table tr.slh-vor-row td:first-child {
+  border-left: 4px solid #c62828;
+}
