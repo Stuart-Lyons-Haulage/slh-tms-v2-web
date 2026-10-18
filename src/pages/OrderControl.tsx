@@ -285,7 +285,7 @@ function OrderIntakeCacheRecovery({ date }: { date: string }) {
       let job = started;
       while (!job.done) {
         setNotice(`Re-parsing… ${job.evidenceScanned} emails checked, ${job.eligibleOrders} matching orders found. You can leave this page.`);
-        await new Promise(resolve => window.setTimeout(resolve, 2500));
+        await new Promise(resolve => globalThis.setTimeout(resolve, 2500));
         job = await request<ReplayJobStatus>(`/api/v1/order-intake/replay-jobs/${encodeURIComponent(started.id)}`, await token());
       }
       saveReplayCheckpoint(date, undefined);
