@@ -126,3 +126,6 @@ button.ui-metric { text-align: left; cursor: pointer; font: inherit; }
 .work-pattern-editor label { display: grid; gap: 2px; font-size: 12px; font-weight: 700; color: var(--ui-muted); }
 .link-button { background: none; border: 0; padding: 0; color: var(--ui-brand); font-weight: 700; cursor: pointer; text-decoration: underline; font-size: 12px; min-height: 0; }
 .smart-day-source { font-weight: 600; opacity: .75; }
+.pallet-space-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.pallet-space-head h2 { margin: 0; font-size: 16px; }
+.pallet-fits-on { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 6px 0 10px; }
