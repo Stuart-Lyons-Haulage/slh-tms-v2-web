@@ -303,6 +303,12 @@ function amendmentPrompt(items: Array<{ row: ParsedRow; comparison: ApprovalComp
   return `${sections.join("\n\n")}\n\nOK = approve the amendment. Cancel = keep the existing live order unchanged.`;
 }
 
+function autoApprovalHint(payload: Payload) {
+  const decision = (payload as Record<string, unknown>).autoApproval as { mode?: string; eligible?: boolean } | undefined;
+  if (!decision || decision.mode !== "Trial") return "";
+  return decision.eligible ? "Trial: would auto-approve" : "";
+}
+
 function approvalFailureDetail(result: BulkApproveResponse) {
   const first = result.failedItems?.[0] ?? result.skippedItems?.[0];
   return first?.reason ? ` ${first.reason}` : "";
@@ -838,7 +844,7 @@ export function OrderReviewBulk({ date }: { date: string }) {
           <span><strong>{text(row.payload.customerCode) || "Customer missing"}</strong><small>{text(row.payload.sellerName) || "Collection site missing"} → {text(row.payload.stallNumber) || "Destination missing"}</small></span>
           <span className="bulk-order-pallets"><strong>{isBackhaul(row.payload) && palletCount(row.payload) <= 0 ? "—" : palletCount(row.payload)}</strong><small>{isBackhaul(row.payload) && palletCount(row.payload) <= 0 ? "backhaul" : "pallets"}</small></span>
           <span className="bulk-order-planning"><strong>{planningWindow(row.payload)}</strong><small>Collect {shortOperationalDate(row.payload.collectionDate)} · Deliver {shortOperationalDate(row.payload.deliveryDate || row.payload.collectionDate)}</small><small>{temperature(row.payload)} · {orderType(row.payload)}</small></span>
-          <span className={`bulk-order-status ${statusClass}`}>{statusText}</span>
+          <span className={`bulk-order-status ${statusClass}`}>{statusText}{autoApprovalHint(row.payload) && <small className="auto-approval-hint">{autoApprovalHint(row.payload)}</small>}</span>
           <div className="bulk-order-actions">
             {hasSourceIdentity && <button type="button" className="source-email-review-button" onClick={() => setSourceEmailStagingId(row.item.id)} disabled={busy || Boolean(busyId)}>Review source email</button>}
             {!isEditing && <button type="button" onClick={() => void beginEdit(row)} disabled={busy || Boolean(busyId)}>{rowBusy ? "Loading…" : "Edit"}</button>}

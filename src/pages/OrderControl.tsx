@@ -6,6 +6,8 @@ import { SILENT_API_REFRESH_EVENT } from "../lib/useApi";
 import { SourceEmailEvidenceDrawer } from "../components/SourceEmailEvidenceDrawer";
 import { JobsOperational } from "./JobsOperational";
 import { OrderReviewBulk } from "./OrderReviewBulk";
+import { OrderChangeAlerts } from "../components/OrderChangeAlerts";
+import { AutoApprovalFormats } from "../components/AutoApprovalFormats";
 import { UndatedOrderReviewQueue } from "./UndatedOrderReviewQueue";
 import { listRuns } from "../api/runs";
 import { tomorrowIsoDate } from "../lib/dateUtils";
@@ -510,7 +512,7 @@ export function OrderControl({ initialTab = "review" }: { initialTab?: OrderCont
       {repairNotice && <p className="notice inline-notice" style={{ marginBottom: 0 }}>{repairNotice}</p>}
     </section>
     <OrderReviewDateStrip selectedDate={selectedDate} onChange={updateDate} />
-    {tab === "review" ? <><OrderIntakeCacheRecovery date={selectedDate} /><UndatedOrderReviewQueue /><OrderReviewBulk date={selectedDate} /></> : <><ApprovedOrdersList date={selectedDate} token={token} /><JobsOperational date={selectedDate} /></>}
+    {tab === "review" ? <><OrderChangeAlerts /><OrderIntakeCacheRecovery date={selectedDate} /><UndatedOrderReviewQueue /><AutoApprovalFormats /><OrderReviewBulk date={selectedDate} /></> : <><ApprovedOrdersList date={selectedDate} token={token} /><JobsOperational date={selectedDate} /></>}
     {sourceEmailStagingId && <SourceEmailEvidenceDrawer stagingId={sourceEmailStagingId} onClose={closeSourceEmail} />}
   </>;
 }
