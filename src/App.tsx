@@ -19,13 +19,14 @@ const CustomerComms = lazy(() => import('./pages/CustomerComms').then(module => 
 const WarehousePlanning = lazy(() => import('./pages/WarehousePlanning').then(module => ({ default: module.WarehousePlanning })));
 
 import { apiScope, localTestAuthEnabled, useAccessToken } from './lib/auth';
-import { request } from './lib/api';
 import { connectPlanningEventStream } from './lib/planningEvents';
 import { isDesktopApp } from './lib/desktop';
 import { HeaderIntelligence } from './components/HeaderIntelligence';
 import { MobileDock } from './components/MobileDock';
 import { WorkingDateControl } from './components/WorkingDateControl';
 import { setWorkingDate } from './lib/workingDate';
+import { pendingReviewCounts } from './lib/pendingReviewCounts';
+import { startVisiblePolling } from './lib/visiblePolling';
 
 type NavItem = [string, string];
 type NavGroup = { label: string; items: NavItem[] };
@@ -131,9 +132,7 @@ function Shell() {
     // Counts only (a few bytes) rather than downloading the waiting orders themselves.
     const refreshPendingOrderReviews = async () => {
       try {
-        const today = new Date();
-        const iso = (offset: number) => new Date(today.getTime() + offset * 86_400_000).toISOString().slice(0, 10);
-        const counts = await request<Record<string, number>>(`/api/v1/staging/queue/date-counts?from=${iso(-7)}&to=${iso(14)}`, await accessToken());
+        const counts = await pendingReviewCounts(accessToken);
         if (stopped) return;
         const entries = Object.entries(counts).filter(([, count]) => count > 0).sort(([left], [right]) => left.localeCompare(right));
         setPendingOrderReviews(entries.reduce((sum, [, count]) => sum + count, 0));
@@ -146,14 +145,12 @@ function Shell() {
     };
 
     void refreshPendingOrderReviews();
-    const interval = window.setInterval(() => void refreshPendingOrderReviews(), 60000);
-    const onFocus = () => void refreshPendingOrderReviews();
-    window.addEventListener('focus', onFocus);
+    // Paused while the tab is hidden; Today shares the same cached counts.
+    const stop = startVisiblePolling(refreshPendingOrderReviews, 60000);
 
     return () => {
       stopped = true;
-      window.clearInterval(interval);
-      window.removeEventListener('focus', onFocus);
+      stop();
     };
   }, [accessToken, authenticated]);
 

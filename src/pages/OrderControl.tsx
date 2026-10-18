@@ -12,6 +12,7 @@ import { UndatedOrderReviewQueue } from "./UndatedOrderReviewQueue";
 import { listRuns } from "../api/runs";
 import { Orders as AddOrders } from "./Pages";
 import type { Load, TransportOrder } from "../lib/api";
+import { PastDatedOrders } from "../components/PastDatedOrders";
 
 type OrderControlTab = "review" | "live" | "add";
 type NwfRepairResponse = { repaired: number; message: string };
@@ -363,6 +364,8 @@ function OrderIntakeCacheRecovery({ date }: { date: string }) {
   </section>;
 }
 
+let lastNwfRepairCheck = 0;
+
 export function OrderControl({ initialTab = "review" }: { initialTab?: OrderControlTab }) {
   const token = useAccessToken();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -383,6 +386,9 @@ export function OrderControl({ initialTab = "review" }: { initialTab?: OrderCont
 
   useEffect(() => {
     let active = true;
+    // A write: it tells every open screen to refresh, so run it at most every 30 minutes.
+    if (Date.now() - lastNwfRepairCheck < 30 * 60_000) return;
+    lastNwfRepairCheck = Date.now();
     void (async () => {
       try {
         const result = await request<NwfRepairResponse>("/api/v1/staging/orders/repair-nwf-references", await token(), { method: "POST" });
@@ -418,7 +424,7 @@ export function OrderControl({ initialTab = "review" }: { initialTab?: OrderCont
     </div>
     {repairNotice && <p className="notice inline-notice">{repairNotice}</p>}
     {tab !== "add" && <OrderReviewDateStrip selectedDate={selectedDate} onChange={updateDate} />}
-    {tab === "add" ? <AddOrders /> : tab === "review" ? <><p className="hint" style={{ margin: "0 0 8px" }}>"Unusual: new delivery point / collection site" usually means a site name isn't in Master data yet. <a href="/admin/order-intake?tab=names">Fix site names</a> once and every waiting order is re-checked.</p><OrderChangeAlerts /><OrderIntakeCacheRecovery date={selectedDate} /><UndatedOrderReviewQueue /><OrderReviewBulk date={selectedDate} /></> : <><ApprovedOrdersList date={selectedDate} token={token} /><JobsOperational date={selectedDate} /></>}
+    {tab === "add" ? <AddOrders /> : tab === "review" ? <><p className="hint" style={{ margin: "0 0 8px" }}>"Unusual: new delivery point / collection site" usually means a site name isn't in Master data yet. <a href="/admin/order-intake?tab=names">Fix site names</a> once and every waiting order is re-checked.</p><OrderChangeAlerts /><PastDatedOrders onClosed={refreshVisibleReviewData} /><OrderIntakeCacheRecovery date={selectedDate} /><UndatedOrderReviewQueue /><OrderReviewBulk date={selectedDate} /></> : <><ApprovedOrdersList date={selectedDate} token={token} /><JobsOperational date={selectedDate} /></>}
     {sourceEmailStagingId && <SourceEmailEvidenceDrawer stagingId={sourceEmailStagingId} onClose={closeSourceEmail} />}
   </>;
 }
