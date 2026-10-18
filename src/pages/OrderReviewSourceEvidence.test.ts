@@ -33,12 +33,11 @@ describe("Order Review source email evidence", () => {
     expect(controlSource).toContain("SourceEmailEvidenceDrawer");
   });
 
-  it("replays older received evidence for a selected planning date without reusing an incompatible checkpoint", () => {
+  it("replays older received evidence for a selected planning date as a server job", () => {
     expect(controlSource).toContain('aria-label="Replay received from"');
-    expect(controlSource).toContain("const receivedFromUtc = `${receivedFromDate}T00:00:00Z`;");
+    expect(controlSource).toContain("receivedFromUtc: `${receivedFromDate}T00:00:00Z`");
     expect(controlSource).toContain("maximumPlanningDate: date");
-    expect(controlSource).toContain("checkpointReceivedFrom !== receivedFromUtc");
-    expect(controlSource).toContain("receivedFromUtc,");
+    expect(controlSource).toContain('"/api/v1/order-intake/replay-jobs"');
   });
 
   it("lets a planner approve one selectable order and shows the backend failure reason", () => {
