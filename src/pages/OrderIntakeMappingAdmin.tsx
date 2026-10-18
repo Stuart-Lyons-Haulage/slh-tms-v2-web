@@ -3,6 +3,7 @@ import { api, request, type Customer } from '../lib/api';
 import { useAccessToken } from '../lib/auth';
 import { useApi } from '../lib/useApi';
 import { AutoApprovalFormats } from '../components/AutoApprovalFormats';
+import { SiteNameFixes } from '../components/SiteNameFixes';
 
 type Mapping = {
   id: string;
@@ -50,7 +51,7 @@ function customerLabel(customer: Customer) { return `${customer.code} · ${custo
 export function OrderIntakeMappingAdmin() {
   const token = useAccessToken();
   const customers = useApi(useCallback(async () => api.customers(await token()), [token]));
-  const [mode, setMode] = useState<'formats' | 'mappings' | 'rules'>('formats');
+  const [mode, setMode] = useState<'formats' | 'names' | 'mappings' | 'rules'>(() => new URLSearchParams(window.location.search).get('tab') === 'names' ? 'names' : 'formats');
   const [mappings, setMappings] = useState<Mapping[]>([]);
   const [rules, setRules] = useState<RouteRule[]>([]);
   const [loading, setLoading] = useState(true);
@@ -168,15 +169,17 @@ export function OrderIntakeMappingAdmin() {
     <section className="panel" style={{ marginBottom: 18 }}>
       <div className="horizontal-tabs" role="tablist" aria-label="Intake mapping sections">
         <button role="tab" aria-selected={mode === 'formats'} className={mode === 'formats' ? 'primary' : ''} onClick={() => setMode('formats')}>Booking formats</button>
+        <button role="tab" aria-selected={mode === 'names'} className={mode === 'names' ? 'primary' : ''} onClick={() => setMode('names')}>Site names</button>
         <button role="tab" aria-selected={mode === 'mappings'} className={mode === 'mappings' ? 'primary' : ''} onClick={() => setMode('mappings')}>Email mappings <span>{mappings.filter(row => row.active).length}</span></button>
         <button role="tab" aria-selected={mode === 'rules'} className={mode === 'rules' ? 'primary' : ''} onClick={() => setMode('rules')}>Route rules <span>{rules.filter(row => row.active).length}</span></button>
       </div>
-      {mode !== 'formats' && <div className="form-grid" style={{ marginTop: 14 }}><label>Filter<input value={filter} onChange={event => setFilter(event.target.value)} placeholder="Customer, sender, site, depot…" /></label></div>}
+      {(mode === 'mappings' || mode === 'rules') && <div className="form-grid" style={{ marginTop: 14 }}><label>Filter<input value={filter} onChange={event => setFilter(event.target.value)} placeholder="Customer, sender, site, depot…" /></label></div>}
     </section>
 
     {message && <p className="notice inline-notice">{message}</p>}
     {mode === 'formats' && <AutoApprovalFormats />}
-    {loading && mode !== 'formats' && <div className="state">Loading intake rules…</div>}
+    {mode === 'names' && <SiteNameFixes />}
+    {loading && (mode === 'mappings' || mode === 'rules') && <div className="state">Loading intake rules…</div>}
 
     {!loading && mode === 'mappings' && <>
       <section className="panel" style={{ marginBottom: 18 }}><div className="title-row"><div><p className="eyebrow">Sender identity master</p><h2>Email mappings</h2><p className="hint">Maintain sender-to-customer identity in a controlled pop-out editor.</p></div><button className="primary" onClick={() => { setMappingId(undefined); setMappingDraft(emptyMapping); setMappingEditorOpen(true); }}>Add mapping</button></div></section>
