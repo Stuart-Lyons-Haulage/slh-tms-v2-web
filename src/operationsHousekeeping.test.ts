@@ -113,7 +113,7 @@ describe("operations housekeeping contract", () => {
     expect(dashboard).toContain("Needs you now");
     expect(dashboard).toContain("useWorkingDate");
     expect(dashboard).toContain("/api/v1/order-changes?open=true");
-    expect(dashboard).toContain("/api/v1/staging/queue/date-counts");
+    expect(dashboard).toContain("pendingReviewCounts");
     expect(dashboard).toContain('to: "/admin/integrations"');
     // Feed detail lives in System health only; Today just flags a feed that is down.
     expect(dashboard).not.toContain("Data freshness");

@@ -8,7 +8,7 @@ import { DriverTimesheets } from "./DriverTimesheets";
 import { DriverAssignments } from "./Pages";
 import { useWorkingDate, workingDateLabel } from "../lib/workingDate";
 import { todayIsoDate } from "../lib/dateUtils";
-import { getMasterDispatchData } from "../api/master";
+import { getMasterDrivers } from "../api/master";
 
 type ImportRow = { driverName: string; date: string; status: string; source: string; agencyName: string };
 type ImportIssue = { row: string; reason: string };
@@ -378,7 +378,7 @@ function DriverFiles() {
   const today = todayIsoDate();
   const [search, setSearch] = useState("");
   const [problemsOnly, setProblemsOnly] = useState(false);
-  const [state, setState] = useState<{ drivers: FileDriver[]; statuses: Record<string, FileStatus>; master: Awaited<ReturnType<typeof getMasterDispatchData>> | undefined; error?: string; loading: boolean }>({ drivers: [], statuses: {}, master: undefined, loading: true });
+  const [state, setState] = useState<{ drivers: FileDriver[]; statuses: Record<string, FileStatus>; master: { drivers: Awaited<ReturnType<typeof getMasterDrivers>> } | undefined; error?: string; loading: boolean }>({ drivers: [], statuses: {}, master: undefined, loading: true });
   const [patterns, setPatterns] = useState<PatternData>({ patterns: [], library: [] });
   const [editing, setEditing] = useState<string>();
   const [reload, setReload] = useState(0);
@@ -401,7 +401,7 @@ function DriverFiles() {
       const [dispatch, status, master] = await Promise.allSettled([
         request<{ drivers: FileDriver[] }>(`/api/v1/driver-dispatch?date=${encodeURIComponent(date)}`, accessToken, undefined, 60000),
         request<{ drivers: FileStatus[] }>(`/api/v1/driver-dispatch-status?date=${encodeURIComponent(date)}`, accessToken, undefined, 60000),
-        getMasterDispatchData(accessToken),
+        getMasterDrivers(accessToken).then(drivers => ({ drivers })),
       ]);
       if (!active) return;
       setState({

@@ -6,8 +6,10 @@ import { useAccessToken } from "../lib/auth";
 import { todayIsoDate } from "../lib/dateUtils";
 import { useApi } from "../lib/useApi";
 import { startVisiblePolling } from "../lib/visiblePolling";
+import { countsBetween, pendingReviewCounts } from "../lib/pendingReviewCounts";
+import type { PastDatedResponse } from "../components/PastDatedOrders";
 import { useWorkingDate, workingDateLabel, shiftIsoDate } from "../lib/workingDate";
-import { getMasterDispatchData, type MasterDriver } from "../api/master";
+import { getMasterDrivers, type MasterDriver } from "../api/master";
 
 /**
  * Today: what needs someone now, worst first, each line opening the exact screen.
@@ -58,13 +60,14 @@ export function DashboardOperational() {
 
   const readiness = useApi(useCallback(async () => intelligenceApi.readiness(date, await token()), [date, token]));
   const pallets = useApi(useCallback(async () => request<PalletSummary>(`/api/v1/planning-control/pallets?date=${encodeURIComponent(date)}`, await token(), undefined, 40000), [date, token]));
-  const reviewCounts = useApi(useCallback(async () => request<Record<string, number>>(`/api/v1/staging/queue/date-counts?from=${encodeURIComponent(shiftIsoDate(today, -3))}&to=${encodeURIComponent(shiftIsoDate(today, 10))}`, await token()), [today, token]));
+  const reviewCounts = useApi(useCallback(async () => countsBetween(await pendingReviewCounts(token), shiftIsoDate(today, -3), shiftIsoDate(today, 10)), [today, token]));
   const changes = useApi(useCallback(async () => request<OrderChange[]>("/api/v1/order-changes?open=true", await token()), [token]));
   const forecast = useApi(useCallback(async () => request<ForecastDay[]>(`/api/v1/driver-forecast?from=${date}&to=${date}`, await token(), undefined, 30000), [date, token]));
   const messages = useApi(useCallback(async () => api.customerCommunications(await token(), "PendingReview", undefined, 100), [token]));
   const sync = useApi(useCallback(async () => request<SyncState>("/api/v1/system-sync/state", await token(), undefined, 30000), [token]));
   const compliance = useApi(useCallback(async () => request<ComplianceSummary>(`/api/v1/daily-compliance/report?date=${encodeURIComponent(today)}`, await token(), undefined, 90000), [today, token]));
-  const master = useApi(useCallback(async () => getMasterDispatchData(await token()), [token]));
+  const master = useApi(useCallback(async () => ({ drivers: await getMasterDrivers(await token()) }), [token]));
+  const pastDated = useApi(useCallback(async () => request<PastDatedResponse>("/api/v1/staging/queue/past-dated", await token()), [token]));
   const comms = useApi(useCallback(async () => request<CommsSchedule>("/api/v1/customer-load-plans/schedule", await token(), undefined, 60000), [token]));
 
   const { refresh: refreshReadiness } = readiness;
@@ -77,9 +80,10 @@ export function DashboardOperational() {
   const { refresh: refreshCompliance } = compliance;
   const { refresh: refreshMaster } = master;
   const { refresh: refreshComms } = comms;
+  const { refresh: refreshPastDated } = pastDated;
   const refreshFast = useCallback(() => Promise.allSettled([refreshReadiness(), refreshPallets(), refreshReviewCounts(), refreshChanges(), refreshMessages(), refreshSync()]).then(() => undefined),
     [refreshReadiness, refreshPallets, refreshReviewCounts, refreshChanges, refreshMessages, refreshSync]);
-  const refreshSlow = useCallback(() => Promise.allSettled([refreshForecast(), refreshCompliance(), refreshMaster(), refreshComms()]).then(() => undefined), [refreshForecast, refreshCompliance, refreshMaster, refreshComms]);
+  const refreshSlow = useCallback(() => Promise.allSettled([refreshForecast(), refreshCompliance(), refreshMaster(), refreshComms(), refreshPastDated()]).then(() => undefined), [refreshForecast, refreshCompliance, refreshMaster, refreshComms, refreshPastDated]);
   useEffect(() => startVisiblePolling(refreshFast, 60_000), [refreshFast]);
   useEffect(() => startVisiblePolling(refreshSlow, 300_000), [refreshSlow]);
 
@@ -98,7 +102,9 @@ export function DashboardOperational() {
     const otherDates = Object.entries(counts).filter(([day, count]) => day !== date && count);
     const elsewhere = otherDates.reduce((sum, [, count]) => sum + (count || 0), 0);
     add({ key: "review", tone: "amber", count: forDate, title: `${words(forDate, "order")} waiting for review`, detail: `For ${workingDateLabel(date)}. Approve them to get them into the plan.`, to: `/staging${dateQuery}`, action: "Review orders" });
-    add({ key: "review-other", tone: "grey", count: elsewhere, title: `${words(elsewhere, "order")} waiting on other dates`, detail: otherDates.slice(0, 5).map(([day, count]) => `${workingDateLabel(day)}: ${count}`).join(" · "), to: "/staging", action: "Review orders" });
+    const stale = pastDated.data?.count || 0;
+    add({ key: "review-past", tone: "amber", count: stale, title: `${words(stale, "order")} waiting for dates already gone`, detail: "They can't be planned any more. Approve any that still need invoicing, close the rest in one click.", to: "/staging", action: "Open Orders" });
+        add({ key: "review-other", tone: "grey", count: elsewhere, title: `${words(elsewhere, "order")} waiting on other dates`, detail: otherDates.slice(0, 5).map(([day, count]) => `${workingDateLabel(day)}: ${count}`).join(" · "), to: "/staging", action: "Review orders" });
 
     const summary = pallets.data?.summary;
     if (summary) {
@@ -141,7 +147,7 @@ export function DashboardOperational() {
     add({ key: "feeds-slow", tone: "grey", count: slow.length, title: `${words(slow.length, "data feed")} running late`, detail: slow.map(feed => feed.name).join(", "), to: "/admin/integrations", action: "Open System health" });
 
     return list.sort((a, b) => toneRank[a.tone] - toneRank[b.tone]);
-  }, [comms.data, changes.data, compliance.data, date, forecast.data, master.data, messages.data, pallets.data, readiness.data, reviewCounts.data, sync.data, today]);
+  }, [comms.data, pastDated.data, changes.data, compliance.data, date, forecast.data, master.data, messages.data, pallets.data, readiness.data, reviewCounts.data, sync.data, today]);
 
   const checks: Array<[string, { error?: string }]> = [["Runs", readiness], ["Pallet Order", pallets], ["Orders", reviewCounts], ["Order changes", changes], ["Driver cover", forecast], ["Customer messages", messages], ["Data feeds", sync]];
   const failedChecks = checks.filter(([, item]) => item.error).map(([name]) => name);
