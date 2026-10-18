@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
+import { SouthboundCollections } from "./BookingReservations";
 import { request } from "../lib/api";
 import { useAccessToken } from "../lib/auth";
 import { signalPlanningChange, subscribePlanningChanges } from "../lib/planningEvents";
 import { useApi } from "../lib/useApi";
 import { startVisiblePolling } from "../lib/visiblePolling";
 import { planningDeliveryLocation } from "../lib/planningLocations";
-import { tomorrowIsoDate } from "../lib/dateUtils";
+import { useWorkingDate } from "../lib/workingDate";
 
 type Allocation = { loadId: string; loadReference?: string; pallets: number; updatedAtUtc: string; updatedBy?: string };
 type SourceLine = { sourceLineId: string; sourcePalletType?: string; palletType?: string; loadUnitType?: string; palletColourKey?: string; orderedPallets: number; plannedPallets: number; outstandingPallets: number };
@@ -18,7 +19,6 @@ type RegionData = { date: string; destinations: string[]; destinationRegions: Re
 type ViewMode = "toPlan" | "planned" | "summary";
 type PalletTone = "standard" | "euro" | "traycrate" | "trolley" | "mixed" | "unknown";
 
-function planningDate() { return tomorrowIsoDate(); }
 function ukDate(value: string) { return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(`${value}T12:00:00`)); }
 function fmtTime(value?: string) { if (!value) return "—"; const d = new Date(value); return Number.isNaN(d.getTime()) ? value : d.toLocaleString("en-GB", { hour: "2-digit", minute: "2-digit" }); }
 function palletTone(colourKey?: string, loadUnitType?: string, palletType?: string): PalletTone { const clean = `${colourKey || ""} ${loadUnitType || ""} ${palletType || ""}`.toLowerCase(); if (clean.includes("tray") || clean.includes("crate")) return "traycrate"; if (clean.includes("trolley") || clean.includes("dolly")) return "trolley"; if (clean.includes("euro")) return "euro"; if (clean.includes("standard") || clean.includes("std")) return "standard"; if (clean.includes("mixed")) return "mixed"; return "unknown"; }
@@ -30,13 +30,21 @@ export function planningCollectionGroup(order: { planningGroup?: string; collect
 
 export function PalletPlanningControl() {
   const token = useAccessToken();
-  const [date, setDate] = useState(planningDate());
+  const [date] = useWorkingDate();
+  const [params, setParams] = useSearchParams();
+  const tab = params.get("tab") === "southbound" ? "southbound" : "pallets";
+  function openTab(next: "pallets" | "southbound") {
+    const updated = new URLSearchParams(params);
+    if (next === "pallets") updated.delete("tab"); else updated.set("tab", next);
+    setParams(updated, { replace: true });
+  }
   const [selectedCell, setSelectedCell] = useState<{ group: string; destination: string }>();
   const [message, setMessage] = useState<string>();
   const [busyKey, setBusyKey] = useState<string>();
   const [allocationDrafts, setAllocationDrafts] = useState<Record<string, { loadId: string; pallets: string }>>({});
   const control = useApi(useCallback(async () => request<PlanningControlData>(`/api/v1/planning-control/pallets?date=${encodeURIComponent(date)}`, await token()), [date, token]));
   const regions = useApi(useCallback(async () => request<RegionData>(`/api/v1/planning-control/regions?date=${encodeURIComponent(date)}`, await token()), [date, token]));
+  useEffect(() => { setSelectedCell(undefined); }, [date]);
   const refreshControl = control.refresh;
   const refreshRegions = regions.refresh;
 
@@ -49,6 +57,7 @@ export function PalletPlanningControl() {
   const data = control.data;
   const orders = useMemo(() => data?.orders || [], [data?.orders]);
   const orderById = useMemo(() => new Map(orders.map(order => [order.id, order])), [orders]);
+  const southboundOrders = useMemo(() => orders.filter(order => order.planningGroup === "Southbound collections" || palletTone(order.palletColourKey, order.loadUnitType, order.palletType) === "traycrate"), [orders]);
   const planningGroups = useMemo(() => [...new Set(orders.map(planningCollectionGroup).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [orders]);
   const liveDestinations = useMemo(() => [...new Set(orders.map(order => planningDeliveryLocation(order)).filter(Boolean))], [orders]);
   const orderedDestinations = useMemo(() => {
@@ -139,7 +148,12 @@ export function PalletPlanningControl() {
     </tbody></table></div></section>;
   }
 
-  return <section className="pallet-control-page"><div className="title-row pallet-control-header"><div><p className="eyebrow">Planner second screen · live quantity control</p><h1>Pallet Control</h1><p className="intro">Collections run down the left and Site Master delivery points run directly above their columns. AM/PM is now shown inside Orders to Plan only.</p></div><div className="title-actions"><label>Planning date <input type="date" value={date} onChange={event => { setDate(event.target.value); setSelectedCell(undefined); }} /></label><button onClick={() => { void refreshControl(); void refreshRegions(); }} disabled={control.loading}>Refresh</button><Link className="button-like primary" to="/">Open planner</Link></div></div>
+  return <section className="pallet-control-page"><div className="title-row pallet-control-header"><div><h1>Pallet Control</h1><p className="intro">What is ordered, planned and still to plan, by collection and delivery point. Click a number to put it on a run.</p></div><div className="title-actions"><button onClick={() => { void refreshControl(); void refreshRegions(); }} disabled={control.loading}>Refresh</button><Link className="button-like" to="/">Open planner</Link></div></div>
+    <div className="ui-tabs" role="tablist" aria-label="Pallet Order view">
+      <button type="button" role="tab" aria-selected={tab === "pallets"} onClick={() => openTab("pallets")}>Pallets</button>
+      <button type="button" role="tab" aria-selected={tab === "southbound"} onClick={() => openTab("southbound")}>Southbound collections{southboundOrders.some(order => order.outstandingPallets > 0) && <span className="ui-tab-count">{southboundOrders.filter(order => order.outstandingPallets > 0).length}</span>}</button>
+    </div>
+    {tab === "southbound" ? <SouthboundCollections date={date} confirmedOrders={southboundOrders} /> : <>
     <div className="pallet-control-legend"><span><i style={{ background: toneBackground("standard"), borderColor: toneBorder("standard") }} />Standard</span><span><i style={{ background: toneBackground("euro"), borderColor: toneBorder("euro") }} />Euro</span><span><i style={{ background: toneBackground("traycrate"), borderColor: toneBorder("traycrate") }} />Trays / Crates</span><span><i style={{ background: toneBackground("trolley"), borderColor: toneBorder("trolley") }} />Trolleys</span><span><i style={{ background: toneBackground("mixed"), borderColor: toneBorder("mixed") }} />Mixed</span><small>{ukDate(date)} · {data?.summary.orders || 0} orders · {data?.summary.runs || 0} runs{regions.data?.unmatchedDestinations ? ` · ${regions.data.unmatchedDestinations} destination${regions.data.unmatchedDestinations === 1 ? "" : "s"} need Site Master matching` : ""} · instant event updates · 30s reconciliation · updated {fmtTime(data?.generatedAtUtc)}</small></div>
     {regions.data?.unmatchedDestinationNames?.length ? <p className="notice inline-notice">Site Master review required: {regions.data.unmatchedDestinationNames.join(", ")}. Open <Link to="/master-data">Master Data → Sites</Link> and add an alias or a new site record. Orders remain available to plan until matched.</p> : null}
     {message && <p className="notice inline-notice">{message}</p>}{control.error && <p className="notice inline-notice">{control.error}</p>}
@@ -147,6 +161,7 @@ export function PalletPlanningControl() {
     {data && <div className="pallet-control-mini-metrics"><article><span>To plan (load units)</span><strong>{data.summary.outstanding}</strong></article><article><span>Planned (load units)</span><strong>{data.summary.planned}</strong></article><article className={data.summary.overplanned ? "attention" : ""}><span>Over-planned (load units)</span><strong>{data.summary.overplanned}</strong></article><article><span>Late additions (orders)</span><strong>{data.summary.lateAdditions}</strong></article></div>}
     {data && data.summary.orders === 0 && <div className="state">No approved load-unit orders are available for {ukDate(date)}.</div>}{data && <div className="pallet-control-stack">{matrix("toPlan", "To Plan", data.summary.outstanding)}{matrix("planned", "Planned", data.summary.planned)}{matrix("summary", "Pallet Summary", data.summary.ordered)}</div>}
     {selectedCell && data && <section className="panel pallet-control-detail"><div className="title-row"><div><p className="eyebrow">Orders to Plan</p><h2>Collect: {selectedCell.group} · Deliver: {destinationLabel(selectedCell.destination)}</h2><p className="hint">AM/PM appears below as an order grouping only. Partial and split allocations remain in To plan until the outstanding balance reaches zero.</p></div><button onClick={() => setSelectedCell(undefined)}>Close</button></div><div className="pallet-control-order-list">{groupedSelectedOrders.map(([section, orders]) => <div key={section} className="pallet-control-order-section"><h3>{section}</h3>{orders.map(order => { const draft = currentDraft(order); return <article key={order.id} className="pallet-control-order"><div><strong>{order.reference}</strong><small>Collect: {order.collection}</small><small>{order.outstandingPallets} {palletLabel(order)} to plan · ordered {order.orderedPallets} · planned {order.plannedPallets}</small><small>Deliver: {destinationLabel(planningDeliveryLocation(order))}</small><small>{order.customerCode} · {order.temperature || "No temp"}{order.runsOvernight ? " · Overnight" : ""}{order.lateAddition ? " · NEW AFTER PLANNING STARTED" : ""}</small></div><div className="pallet-control-order-quantities"><span><small>Collect</small><strong>{order.collection}</strong></span><span><small>Pallets</small><strong>{order.outstandingPallets}</strong></span><span><small>Deliver</small><strong>{destinationLabel(planningDeliveryLocation(order))}</strong></span></div><div className="pallet-control-allocation"><select value={draft.loadId} onChange={event => selectRun(order, event.target.value)}><option value="">Select run</option>{data.runs.map(run => <option key={run.id} value={run.id}>{run.reference} · {run.status}{run.capacityStatus ? ` · ${run.capacityStatus}` : ""}{run.capacityUtilisationPercent != null ? ` ${run.capacityUtilisationPercent.toFixed(1)}%` : ""}</option>)}</select><input aria-label="Allocated load units" type="number" min="0" step="1" value={draft.pallets} onChange={event => setAllocationDrafts(current => ({ ...current, [order.id]: { ...draft, pallets: event.target.value } }))} /><button type="button" className="primary" disabled={busyKey === order.id || !draft.loadId} onClick={() => void saveAllocation(order)}>{busyKey === order.id ? "Saving…" : "Save"}</button></div></article>; })}</div>)}</div></section>}
+    </>}
   </section>;
 }
 

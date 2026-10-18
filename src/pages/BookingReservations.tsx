@@ -1,41 +1,86 @@
 import { useCallback, useMemo, useState } from 'react';
 import { api, type BookingCandidateOrder, type BookingReservation } from '../lib/api';
 import { useAccessToken } from '../lib/auth';
-import { formatDateLong, todayIsoDate } from '../lib/dateUtils';
+import { formatDateLong } from '../lib/dateUtils';
 import { useApi } from '../lib/useApi';
 
 const dateLabel = (value?: string) => value ? formatDateLong(value) : 'TBC';
 
-export function BookingReservations() {
+export type SouthboundOrder = { id: string; reference: string; customerCode: string; collection: string; destination: string; orderedPallets: number; plannedPallets: number; outstandingPallets: number; loadUnitType?: string; palletType?: string; allocations: Array<{ loadReference?: string }> };
+
+/**
+ * Crates, trays and IFCO collected southbound on the way back from a delivery.
+ * NWF's crate and tray spreadsheet is imported automatically as bookings; each booking
+ * stays here until it is matched to a confirmed order, then the order is planned on a run.
+ */
+export function SouthboundCollections({ date, confirmedOrders }: { date: string; confirmedOrders: SouthboundOrder[] }) {
   const token = useAccessToken();
-  const today = todayIsoDate();
-  const [from, setFrom] = useState(today);
-  const [to, setTo] = useState(today);
-  const [customer, setCustomer] = useState('');
-  const [status, setStatus] = useState('');
+  const [range, setRange] = useState<'day' | 'week'>('day');
+  const [status, setStatus] = useState('open');
   const [selected, setSelected] = useState<BookingReservation>();
   const [matchReservation, setMatchReservation] = useState<BookingReservation>();
-  const rows = useApi(useCallback(async () => api.bookingReservations({ from, to, status, customerCode: customer }, await token()), [customer, from, status, to, token]));
-  const counts = useMemo(() => ({ pre: rows.data?.filter(row => /preorder|awaiting|amended/i.test(row.status)).length || 0, allocated: rows.data?.filter(row => /assigned/i.test(row.status)).length || 0, unassigned: rows.data?.filter(row => row.assignedUnits < row.reservedUnits && !/cancel/i.test(row.status)).length || 0 }), [rows.data]);
+  const to = range === 'day' ? date : addDaysIso(date, 6);
+  const rows = useApi(useCallback(async () => api.bookingReservations({ from: date, to, status: status === 'open' || status === 'all' ? '' : status }, await token()), [date, status, to, token]));
+  const visible = useMemo(() => (rows.data || []).filter(row => status !== 'open' || (!/cancel/i.test(row.status) && row.assignedUnits < row.reservedUnits)), [rows.data, status]);
+  const waiting = (rows.data || []).filter(row => !/cancel/i.test(row.status) && row.assignedUnits < row.reservedUnits);
+  const unitsWaiting = waiting.reduce((sum, row) => sum + Math.max(0, row.reservedUnits - row.assignedUnits), 0);
+  const toPlan = confirmedOrders.filter(order => order.outstandingPallets > 0);
 
   async function cancel() {
     if (!selected || !window.confirm(`Cancel booking ${selected.collectionReference || selected.stableBookingKey}?`)) return;
-    await api.cancelBookingReservation(selected.id, 'Cancelled by planner in Booking & Capacity', await token());
+    await api.cancelBookingReservation(selected.id, 'Cancelled by planner in Southbound collections', await token());
     setSelected(undefined); await rows.refresh();
   }
 
-  const rangeLabel = from === to ? dateLabel(from) : `${dateLabel(from)} to ${dateLabel(to)}`;
-  return <section>
-    <div className="title-row"><div><p className="eyebrow">Planner control / retained capacity</p><h1>Booking &amp; Capacity</h1><p className="intro">Crate, tray and IFCO reservations stay visible until they are automatically matched to a confirmed order, amended, cancelled or dispatched. Ordinary NWF pallet orders are excluded.</p></div></div>
-    <div className="panel" style={{ display: 'flex', gap: 12, alignItems: 'end', flexWrap: 'wrap' }}><div style={{ flexBasis: '100%' }}><strong>Operational date window</strong><p className="hint" style={{ margin: '4px 0 0' }}>Only reservations whose collection date falls within this window are shown. Dates are UK operational dates.</p></div><label>From<input aria-label="Operational date from" type="date" value={from} onChange={event => { const value = event.target.value; setFrom(value); if (value > to) setTo(value); }} /></label><label>To<input aria-label="Operational date to" type="date" min={from} value={to} onChange={event => setTo(event.target.value)} /></label><button type="button" onClick={() => { setFrom(today); setTo(today); }}>Today</button><label>Customer<input value={customer} onChange={event => setCustomer(event.target.value.toUpperCase())} placeholder="NWF" /></label><label>Status<select value={status} onChange={event => setStatus(event.target.value)}><option value="">All statuses</option>{['PreOrder', 'AwaitingDetails', 'Amended', 'PartiallyAssigned', 'Assigned', 'Cancelled'].map(value => <option key={value}>{value}</option>)}</select></label><button type="button" onClick={() => void rows.refresh()}>Refresh</button></div>
-    <div className="panel" style={{ marginTop: 12 }}><strong>Showing: {rangeLabel}</strong><p className="hint" style={{ margin: '4px 0 0' }}>This date filter is applied to the retained booking list and its matching-order workflow.</p></div>
-    <div className="metrics"><article className="metric"><span>Reservations</span><strong>{rows.data?.length || 0}</strong><small>{rangeLabel}</small></article><article className="metric"><span>Pre-order / amended</span><strong>{counts.pre}</strong><small>Needs customer detail or review</small></article><article className="metric"><span>Partly/unassigned</span><strong>{counts.unassigned}</strong><small>Capacity not yet matched to orders</small></article><article className="metric"><span>Fully allocated</span><strong>{counts.allocated}</strong><small>Ready to follow through planning</small></article></div>
-    {rows.loading && <div className="state">Loading retained bookings…</div>}{rows.error && <p className="notice">{rows.error}</p>}
-    {!rows.loading && !rows.error && !rows.data?.length && <div className="state">No retained bookings match this period.</div>}
-    {!!rows.data?.length && <div className="panel" style={{ overflowX: 'auto' }}><table><thead><tr><th>Collection</th><th>Reference</th><th>Route</th><th>Capacity</th><th>Status</th><th>Revision</th><th /></tr></thead><tbody>{rows.data.map(row => <tr key={row.id}><td><strong>{dateLabel(row.collectionDate)}</strong><br/><small>{row.bookingType}</small></td><td><strong>{row.collectionReference || 'No collection ref'}</strong><br/><small>{row.customerCode} · {row.cratePurchaseOrder || row.transportPurchaseOrder || 'PO TBC'}</small></td><td>{row.collectionDepot || 'Collection TBC'}<br/><small>→ {row.deliverySite || 'Destination TBC'}</small></td><td><strong>{row.assignedUnits}/{row.reservedUnits}</strong><br/><small>{row.unitType}</small></td><td><span className={`status ${row.status.toLowerCase()}`}>{row.status}</span></td><td>v{row.revisionNumber}</td><td><button type="button" onClick={() => setSelected(row)}>Inspect</button> <button type="button" onClick={() => setMatchReservation(row)}>Match order</button></td></tr>)}</tbody></table></div>}
+  return <section className="ui-page southbound-page">
+    <div className="ui-grid">
+      <div className={`ui-metric ${waiting.length ? 'amber' : 'green'}`}><span>Bookings waiting for an order</span><strong>{waiting.length}</strong><small>{Math.round(unitsWaiting)} units not yet confirmed</small></div>
+      <div className={`ui-metric ${toPlan.length ? 'amber' : 'green'}`}><span>Confirmed, still to plan</span><strong>{toPlan.length}</strong><small>{toPlan.reduce((sum, order) => sum + order.outstandingPallets, 0)} units to put on a run</small></div>
+      <div className="ui-metric"><span>On runs</span><strong>{confirmedOrders.filter(order => order.plannedPallets > 0).length}</strong><small>collected on the way back</small></div>
+    </div>
+
+    <section className="ui-card">
+      <div className="ui-card-head"><h2>Confirmed collections for {formatDateLong(date)}</h2></div>
+      {confirmedOrders.length === 0 ? <div className="ui-empty">No confirmed crate or tray collections for this date.</div> : <div className="ui-table-wrap"><table className="ui-table"><thead><tr><th>Collect from</th><th>Take to</th><th>Units</th><th>Run</th><th>Reference</th></tr></thead><tbody>
+        {confirmedOrders.map(order => <tr key={order.id}>
+          <td><strong>{order.collection}</strong><br /><small>{order.customerCode}</small></td>
+          <td>{order.destination}</td>
+          <td><strong>{order.orderedPallets}</strong> {order.loadUnitType && order.loadUnitType !== 'Pallet' ? order.loadUnitType : order.palletType || 'units'}</td>
+          <td>{order.outstandingPallets > 0 ? <span className="ui-chip amber">{order.outstandingPallets} to plan</span> : <span className="ui-chip green">{order.allocations.map(item => item.loadReference).filter(Boolean).join(', ') || 'Planned'}</span>}</td>
+          <td><small>{order.reference}</small></td>
+        </tr>)}
+      </tbody></table></div>}
+    </section>
+
+    <section className="ui-card">
+      <div className="ui-card-head">
+        <h2>Bookings from the NWF crate and tray sheet</h2>
+        <div className="ui-page-actions">
+          <div className="ui-seg" role="group" aria-label="Date range">
+            <button type="button" aria-pressed={range === 'day'} onClick={() => setRange('day')}>This day</button>
+            <button type="button" aria-pressed={range === 'week'} onClick={() => setRange('week')}>Next 7 days</button>
+          </div>
+          <select aria-label="Booking status" value={status} onChange={event => setStatus(event.target.value)}>
+            <option value="open">Waiting for an order</option>
+            <option value="all">All bookings</option>
+            {['PreOrder', 'AwaitingDetails', 'Amended', 'PartiallyAssigned', 'Assigned', 'Cancelled'].map(value => <option key={value} value={value}>{value}</option>)}
+          </select>
+          <button type="button" onClick={() => void rows.refresh()}>Refresh</button>
+        </div>
+      </div>
+      <p className="hint">Imported automatically when NWF send the crate and tray spreadsheet. A booking matches itself to the order when it is confirmed; use Match only if it did not.</p>
+      {rows.error && <p className="ui-error">{rows.error}</p>}
+      {rows.loading && !rows.data ? <div className="ui-empty">Loading bookings…</div> : visible.length === 0 ? <div className="ui-empty">{status === 'open' ? 'Every booking in this period is matched to an order.' : 'No bookings in this period.'}</div> : <div className="ui-table-wrap"><table className="ui-table"><thead><tr><th>Collection</th><th>Reference</th><th>Route</th><th>Matched</th><th>Status</th><th /></tr></thead><tbody>{visible.map(row => <tr key={row.id}><td><strong>{dateLabel(row.collectionDate)}</strong><br /><small>{row.bookingType}</small></td><td><strong>{row.collectionReference || 'No collection ref'}</strong><br /><small>{row.customerCode} · {row.cratePurchaseOrder || row.transportPurchaseOrder || 'PO TBC'}</small></td><td>{row.collectionDepot || 'Collection TBC'}<br /><small>→ {row.deliverySite || 'Destination TBC'}</small></td><td><strong>{row.assignedUnits}/{row.reservedUnits}</strong><br /><small>{row.unitType}</small></td><td><span className={`ui-chip ${/cancel/i.test(row.status) ? '' : row.assignedUnits >= row.reservedUnits ? 'green' : /amended|awaiting/i.test(row.status) ? 'amber' : 'blue'}`}>{row.status}</span>{row.revisionNumber > 1 && <small> v{row.revisionNumber}</small>}</td><td><button type="button" onClick={() => setSelected(row)}>Details</button> {row.assignedUnits < row.reservedUnits && !/cancel/i.test(row.status) && <button type="button" onClick={() => setMatchReservation(row)}>Match</button>}</td></tr>)}</tbody></table></div>}
+    </section>
     {selected && <ReservationDrawer reservation={selected} onClose={() => setSelected(undefined)} onCancel={cancel} onUpdated={async () => { setSelected(undefined); await rows.refresh(); }} />}
     {matchReservation && <ReservationMatchPanel reservation={matchReservation} onClose={() => setMatchReservation(undefined)} onMatched={async () => { setMatchReservation(undefined); await rows.refresh(); }} />}
   </section>;
+}
+
+function addDaysIso(value: string, days: number) {
+  const date = new Date(`${value}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
 }
 
 function ReservationDrawer({ reservation, onClose, onCancel, onUpdated }: { reservation: BookingReservation; onClose: () => void; onCancel: () => Promise<void>; onUpdated: () => Promise<void> }) {

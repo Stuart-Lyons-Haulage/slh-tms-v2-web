@@ -19,7 +19,8 @@ describe("mailbox intake health and review performance", () => {
 
   it("uses one retained Order Control date for review and approved jobs", () => {
     const control = source("./pages/OrderControl.tsx");
-    expect(control).toContain('searchParams.get("date") || tomorrowIsoDate()');
+    // The date is the one shared working date in the header, not a per-page value.
+    expect(control).toContain("const [selectedDate, setWorkingDate] = useWorkingDate();");
     expect(control).toContain("<OrderReviewBulk date={selectedDate} />");
     expect(control).toContain("<JobsOperational date={selectedDate} />");
     expect(control).not.toContain("Info mailbox → load review → live planning");

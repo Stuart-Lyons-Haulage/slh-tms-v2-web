@@ -1,8 +1,9 @@
 import { useCallback, useMemo, useState } from "react";
+import { useWorkingDate } from "../lib/workingDate";
+import { useSearchParams } from "react-router-dom";
 import { api, request, type Driver } from "../lib/api";
 import { useAccessToken } from "../lib/auth";
 import { useApi } from "../lib/useApi";
-import { todayIsoDate } from "../lib/dateUtils";
 
 type ComplianceRow = {
   assetType: "Vehicle" | "Trailer";
@@ -23,6 +24,7 @@ type ComplianceRow = {
   fleetioFailedItems?: number;
   status: "Compliant" | "Paper evidence required" | "Review" | "Non-compliant";
   reason: string;
+  officeAction?: string;
 };
 
 type ComplianceReport = {
@@ -49,8 +51,6 @@ type ComplianceReport = {
   rows: ComplianceRow[];
 };
 
-// today() replaced with timezone-safe todayIsoDate from dateUtils
-const today = todayIsoDate;
 const fmtTime = (value?: string) => value
   ? new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(value))
   : "—";
@@ -68,19 +68,31 @@ function canonicalEmploymentType(driver?: Driver, fallback = "Employed") {
   return "Employed";
 }
 
-function statusDot(status: ComplianceRow["status"]) {
-  if (status === "Compliant") return "🟢";
-  if (status === "Non-compliant") return "🔴";
-  return "🟠";
+function tone(status: ComplianceRow["status"]) {
+  if (status === "Compliant") return "green";
+  if (status === "Non-compliant") return "red";
+  return "amber";
 }
+
+const statusText: Record<ComplianceRow["status"], string> = {
+  "Compliant": "Checked",
+  "Non-compliant": "Not checked",
+  "Review": "Check evidence",
+  "Paper evidence required": "Paper check needed",
+};
+
+type View = "attention" | "red" | "all";
 
 export function DailyCompliance() {
   const token = useAccessToken();
-  const [date, setDate] = useState(today());
+  const [date] = useWorkingDate();
+  const [params] = useSearchParams();
+  const [view, setView] = useState<View>(() => params.get("status") === "red" ? "red" : params.get("status") === "all" ? "all" : "attention");
   const [assetType, setAssetType] = useState("all");
-  const [status, setStatus] = useState("all");
   const [employment, setEmployment] = useState("all");
   const [search, setSearch] = useState("");
+  const [busyKey, setBusyKey] = useState<string>();
+  const [actionError, setActionError] = useState<string>();
   const report = useApi(useCallback(async () => request<ComplianceReport>(`/api/v1/daily-compliance/report?date=${date}`, await token(), undefined, 90000), [date, token]));
   const drivers = useApi(useCallback(async () => api.drivers(await token()), [token]));
 
@@ -95,104 +107,107 @@ export function DailyCompliance() {
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase();
     return canonicalRows.filter(row => {
+      if (view === "attention" && row.status === "Compliant") return false;
+      if (view === "red" && row.status !== "Non-compliant") return false;
       if (assetType !== "all" && row.assetType !== assetType) return false;
-      if (status !== "all" && row.status !== status) return false;
       if (employment !== "all" && row.employmentType !== employment) return false;
       if (q && !`${row.assetName} ${row.driverName} ${row.runReference}`.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [canonicalRows, assetType, status, employment, search]);
+  }, [canonicalRows, view, assetType, employment, search]);
 
-  const filteredSummary = useMemo(() => ({
-    total: rows.length,
-    green: rows.filter(row => row.status === "Compliant").length,
-    amber: rows.filter(row => row.status === "Review" || row.status === "Paper evidence required").length,
-    red: rows.filter(row => row.status === "Non-compliant").length,
-  }), [rows]);
+  const counts = useMemo(() => ({
+    total: canonicalRows.length,
+    green: canonicalRows.filter(row => row.status === "Compliant").length,
+    amber: canonicalRows.filter(row => row.status === "Review" || row.status === "Paper evidence required").length,
+    red: canonicalRows.filter(row => row.status === "Non-compliant").length,
+  }), [canonicalRows]);
+
+  async function record(row: ComplianceRow, kind: "Chased" | "PaperCheck") {
+    const note = kind === "PaperCheck" ? window.prompt(`Paper walkround check for ${row.assetName} (${row.driverName}). Add a note if needed:`, "") : window.prompt(`How did you chase ${row.driverName}? (e.g. rang, texted)`, "Rang driver");
+    if (note === null) return;
+    const key = `${row.assetType}-${row.assetId}-${row.driverId}`;
+    setBusyKey(key); setActionError(undefined);
+    try {
+      await request("/api/v1/daily-compliance/checks", await token(), { method: "POST", body: JSON.stringify({ date, assetType: row.assetType, assetId: row.assetId, driverId: row.driverId, kind, note: note || null }) });
+      await report.refresh();
+    } catch (exception) { setActionError(exception instanceof Error ? exception.message : "Could not record that."); }
+    finally { setBusyKey(undefined); }
+  }
 
   function exportFiltered() {
-    const header = ["Date", "Asset Type", "Asset", "Run", "Driver", "Employment Type", "Tacho Start", "Pre-use Other Work Minutes", "First Movement", "Fleetio Form", "Fleetio Submitted", "Fleetio User", "Fleetio Driver Match", "Failed Items", "Status", "Reason"];
+    const header = ["Date", "Asset Type", "Asset", "Run", "Driver", "Employment Type", "Tacho Start", "Pre-use Other Work Minutes", "First Movement", "Fleetio Form", "Fleetio Submitted", "Fleetio User", "Fleetio Driver Match", "Failed Items", "Status", "Reason", "Office action"];
     const lines = [header.map(csvCell).join(",")];
     rows.forEach(row => lines.push([
       date, row.assetType, row.assetName, row.runReference, row.driverName, row.employmentType,
       row.tachoDutyStartUtc || "", row.tachoPreUseOtherWorkMinutes ?? "", row.firstMovementUtc || "",
       row.fleetioForm || "", row.fleetioSubmittedAtUtc || "", row.fleetioUser || "",
       row.fleetioDriverMatched == null ? "" : row.fleetioDriverMatched ? "Yes" : "No",
-      row.fleetioFailedItems ?? "", row.status, row.reason,
+      row.fleetioFailedItems ?? "", row.status, row.reason, row.officeAction || "",
     ].map(csvCell).join(",")));
     const blob = new Blob([lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `daily-compliance-${date}.csv`;
+    link.download = `vehicle-checks-${date}.csv`;
     document.body.appendChild(link);
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
   }
 
-  return <section>
-    <div className="title-row">
+  return <section className="ui-page">
+    <div className="ui-page-head">
       <div>
-        <p className="eyebrow">Daily roadworthiness control</p>
-        <h1>Daily compliance</h1>
-        <p className="intro">Fleetio walkround evidence for every vehicle and trailer used, reconciled to the actual driver, Tacho pre-use other-work and first DOT/Falcon movement. Driver Type is taken from the canonical TMS Driver Master so Casual, Employed and Agency remain distinct.</p>
+        <h1>Vehicle checks</h1>
+        <p>Every vehicle and trailer used, matched to the driver's Fleetio walkround. Chase anything missing, or record a paper check.</p>
       </div>
-      <button className="primary" type="button" onClick={exportFiltered} disabled={!rows.length}>Export filtered CSV</button>
+      <button type="button" onClick={exportFiltered} disabled={!rows.length}>Export CSV</button>
     </div>
 
-    <div className="panel" style={{ display: "flex", gap: 12, alignItems: "end", flexWrap: "wrap" }}>
-      <label>Date<input type="date" value={date} onChange={event => setDate(event.target.value)} /></label>
+    {report.data && <div className="ui-grid">
+      <button type="button" className={`ui-metric ${counts.red ? "red" : "green"}`} onClick={() => setView("red")}><span>Not checked</span><strong>{counts.red}</strong><small>no walkround, or defects reported</small></button>
+      <button type="button" className={`ui-metric ${counts.amber ? "amber" : "green"}`} onClick={() => setView("attention")}><span>To confirm</span><strong>{counts.amber}</strong><small>paper check or a different name on Fleetio</small></button>
+      <button type="button" className="ui-metric green" onClick={() => setView("all")}><span>Checked</span><strong>{counts.green}</strong><small>of {counts.total} used</small></button>
+    </div>}
+
+    <div className="ui-filters">
+      <div className="ui-seg" role="group" aria-label="Show">
+        {([["attention", "Needs attention"], ["red", "Not checked"], ["all", "All"]] as const).map(([key, label]) => <button key={key} type="button" aria-pressed={view === key} onClick={() => setView(key)}>{label}</button>)}
+      </div>
       <label>Asset<select value={assetType} onChange={event => setAssetType(event.target.value)}><option value="all">Vehicles & trailers</option><option value="Vehicle">Vehicles</option><option value="Trailer">Trailers</option></select></label>
-      <label>Status<select value={status} onChange={event => setStatus(event.target.value)}><option value="all">All statuses</option><option value="Compliant">Compliant</option><option value="Paper evidence required">Agency / paper</option><option value="Review">Review</option><option value="Non-compliant">Non-compliant</option></select></label>
-      <label>Employment<select value={employment} onChange={event => setEmployment(event.target.value)}><option value="all">All drivers</option><option value="Employed">Employed</option><option value="Casual">Casual</option><option value="Agency">Agency</option><option value="Subcontractor">Subcontractor</option></select></label>
-      <label style={{ minWidth: 240 }}>Driver / asset / run<input value={search} onChange={event => setSearch(event.target.value)} placeholder="Start typing…" /></label>
+      <label>Driver type<select value={employment} onChange={event => setEmployment(event.target.value)}><option value="all">All drivers</option><option value="Employed">Employed</option><option value="Casual">Casual</option><option value="Agency">Agency</option><option value="Subcontractor">Subcontractor</option></select></label>
+      <label>Search<input value={search} onChange={event => setSearch(event.target.value)} placeholder="Driver, vehicle or run" /></label>
     </div>
 
-    {(report.loading || drivers.loading) && !report.data && <div className="state">Reconciling Fleetio, TachoMaster, DOT/Falcon, the Driver Master and the TMS plan…</div>}
-    {report.error && <p className="notice">{report.error}</p>}
-    {drivers.error && <p className="notice inline-notice">Driver Master classification could not refresh: {drivers.error}</p>}
+    {(report.loading || drivers.loading) && !report.data && <div className="ui-empty">Matching Fleetio checks to Tacho and tracking…</div>}
+    {report.error && <p className="ui-error">{report.error}</p>}
+    {actionError && <p className="ui-error">{actionError}</p>}
 
-    {report.data && <>
-      <div className="metrics">
-        <article className="metric"><span>Assets in this view</span><strong>{filteredSummary.total}</strong><small>{report.data.summary.vehicles} vehicle duties · {report.data.summary.trailers} trailer duties today</small></article>
-        <article className="metric"><span>Compliant</span><strong>🟢 {filteredSummary.green}</strong><small>Fleetio walkround passed · Tacho other-work shown as supporting evidence</small></article>
-        <article className="metric"><span>Paper / review</span><strong>🟠 {filteredSummary.amber}</strong><small>Agency paper exception or incomplete electronic evidence</small></article>
-        <article className="metric"><span>Action required</span><strong>🔴 {filteredSummary.red}</strong><small>Driver compliance gap or failed Fleetio inspection item</small></article>
-      </div>
+    {report.data && <section className="ui-card">
+      {rows.length === 0 ? <div className="ui-empty">{view === "all" ? "No vehicles or trailers used on this date." : "Nothing needs attention. Every vehicle used has a walkround check."}</div> : <div className="ui-table-wrap"><table className="ui-table">
+        <thead><tr><th>Status</th><th>Vehicle / trailer</th><th>Driver</th><th>Fleetio walkround</th><th>Started</th><th /></tr></thead>
+        <tbody>{rows.map(row => {
+          const key = `${row.assetType}-${row.assetId}-${row.driverId}`;
+          return <tr key={`${key}-${row.tachoDutyStartUtc || row.runReference}`}>
+            <td><span className={`ui-chip ${tone(row.status)}`}>{statusText[row.status]}</span><br /><small>{row.reason}</small>{row.officeAction && <><br /><small><strong>{row.officeAction}</strong></small></>}</td>
+            <td><strong>{row.assetName}</strong><br /><small>{row.assetType}{row.runReference ? ` · ${row.runReference}` : ""}</small></td>
+            <td><strong>{row.driverName}</strong><br /><small>{row.employmentType}</small></td>
+            <td>{row.fleetioInspectionId ? <><strong>{row.fleetioForm || "Inspection"}</strong>{row.fleetioDriverMatched === false && <span className="ui-chip amber">different name</span>}<br /><small>{fmtTime(row.fleetioSubmittedAtUtc)} · {row.fleetioUser || "user not known"}{row.fleetioFailedItems ? ` · ${row.fleetioFailedItems} defect${row.fleetioFailedItems === 1 ? "" : "s"}` : ""}</small></> : <span className="ui-chip red">None found</span>}</td>
+            <td><small>Tacho {fmtTime(row.tachoDutyStartUtc)}<br />Moved {fmtTime(row.firstMovementUtc)}</small></td>
+            <td>{row.status !== "Compliant" && <div className="ui-page-actions">
+              <button type="button" disabled={busyKey === key} onClick={() => void record(row, "Chased")}>Chased</button>
+              {!row.fleetioFailedItems && <button type="button" disabled={busyKey === key} onClick={() => void record(row, "PaperCheck")}>Paper check seen</button>}
+            </div>}</td>
+          </tr>;
+        })}</tbody>
+      </table></div>}
+    </section>}
 
-      <div className="panel">
-        <strong>SLH compliance rule</strong>
-        <p style={{ marginBottom: 0 }}>{report.data.policy.note}</p>
-      </div>
-
-      <div className="panel" style={{ overflowX: "auto" }}>
-        <table>
-          <thead><tr><th></th><th>Asset</th><th>Driver</th><th>Run</th><th>Tacho start</th><th>Tacho pre-use evidence</th><th>Fleetio walkround</th><th>First movement</th><th>Status</th></tr></thead>
-          <tbody>{rows.map(row => <tr key={`${row.assetType}-${row.assetId}-${row.driverId}-${row.tachoDutyStartUtc || row.runReference}`}>
-            <td style={{ fontSize: 18 }}>{statusDot(row.status)}</td>
-            <td><strong>{row.assetName}</strong><br/><small>{row.assetType}</small></td>
-            <td><strong>{row.driverName}</strong><br/><small>{row.employmentType}</small></td>
-            <td>{row.runReference}</td>
-            <td>{fmtTime(row.tachoDutyStartUtc)}</td>
-            <td><strong>{row.tachoPreUseOtherWorkMinutes == null ? "—" : `${row.tachoPreUseOtherWorkMinutes} min`}</strong><br/><small>{row.tachoPreUseOtherWorkMinutes == null ? "No measurable other-work returned" : "Supporting Tacho evidence · not the pass/fail test"}</small></td>
-            <td>{row.fleetioInspectionId ? <><strong>{row.fleetioDriverMatched ? "✓" : "⚠"} {row.fleetioForm || "Inspection"}</strong><br/><small>{fmtTime(row.fleetioSubmittedAtUtc)} · {row.fleetioUser || "User unavailable"}{row.fleetioFailedItems ? ` · ${row.fleetioFailedItems} failed item(s)` : " · no failed items"}</small></> : <strong>Not found</strong>}</td>
-            <td>{fmtTime(row.firstMovementUtc)}</td>
-            <td><strong>{row.status}</strong><br/><small>{row.reason}</small></td>
-          </tr>)}</tbody>
-        </table>
-        {!report.loading && rows.length === 0 && <p>No operated assets match the selected filters.</p>}
-      </div>
-
-      <div className="panel">
-        <h2>Source confidence</h2>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 10 }}>
-          <div><strong>TachoMaster</strong><br/><small>{report.data.sourceStatus.tachoMaster}</small></div>
-          <div><strong>Fleetio</strong><br/><small>{report.data.sourceStatus.fleetio}</small></div>
-          <div><strong>DOT / Falcon</strong><br/><small>{report.data.sourceStatus.dotFalcon}</small></div>
-          <div><strong>TMS</strong><br/><small>{report.data.sourceStatus.tms}</small></div>
-        </div>
-      </div>
-    </>}
+    {report.data && <details className="ui-card">
+      <summary><strong>Rules and data sources</strong></summary>
+      <p className="hint">{report.data.policy.note}</p>
+      <p className="hint">TachoMaster: {report.data.sourceStatus.tachoMaster}<br />Fleetio: {report.data.sourceStatus.fleetio}<br />Tracking: {report.data.sourceStatus.dotFalcon}</p>
+    </details>}
   </section>;
 }

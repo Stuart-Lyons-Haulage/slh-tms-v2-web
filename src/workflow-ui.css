@@ -1,0 +1,124 @@
+/*
+ * Shared building blocks for the workflow screens: header working date, page header,
+ * status chips, cards, tabs. Every newer page uses these instead of inline styles so
+ * green / amber / red / grey mean the same thing everywhere.
+ */
+:root {
+  --ui-ink: #102a43;
+  --ui-muted: #5b7083;
+  --ui-line: #dbe3ea;
+  --ui-surface: #ffffff;
+  --ui-soft: #f5f8fb;
+  --ui-brand: #0d3b66;
+  --ui-green: #127a46;
+  --ui-green-bg: #e6f6ed;
+  --ui-amber: #9a6700;
+  --ui-amber-bg: #fff4d6;
+  --ui-red: #b42318;
+  --ui-red-bg: #fde8e7;
+  --ui-grey: #52606d;
+  --ui-grey-bg: #eef2f5;
+  --ui-blue: #1d4ed8;
+  --ui-blue-bg: #e8efff;
+}
+
+/* Header working date */
+.header-context:has(.working-date) { border-left: 0; padding-left: 8px; display: flex; }
+.working-date { display: inline-flex; align-items: center; gap: 4px; color: #fff; }
+.working-date button { background: rgba(255,255,255,.1); color: #fff; border: 1px solid rgba(255,255,255,.22); border-radius: 6px; padding: 4px 9px; font-size: 12px; font-weight: 700; cursor: pointer; min-height: 0; }
+.working-date button:hover { background: rgba(255,255,255,.2); }
+.working-date .working-date-step { padding: 4px 8px; font-size: 15px; line-height: 1; }
+.working-date .working-date-quick.on { background: #f4b942; border-color: #f4b942; color: var(--ui-ink); }
+.working-date-pick { position: relative; display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 6px; background: rgba(255,255,255,.16); font-weight: 800; font-size: 13px; cursor: pointer; white-space: nowrap; }
+.working-date-pick input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
+@media (max-width: 600px) {
+  .top-app-header:has(.working-date) { grid-template-columns: 44px auto minmax(0, 1fr) !important; }
+  .top-app-header:has(.working-date) .brand { justify-self: start; }
+  .header-context:has(.working-date) { display: flex !important; min-width: 0; grid-column: 3; grid-row: 1; justify-self: end; }
+  .working-date .working-date-quick, .working-date .working-date-step { display: none; }
+  .working-date-pick { font-size: 12px; padding: 4px 8px; }
+  .ui-attention a { grid-template-columns: 6px 1fr; }
+  .ui-attention .ui-go { display: none; }
+}
+
+/* Page header */
+.ui-page { display: grid; gap: 14px; }
+.ui-page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.ui-page-head h1 { margin: 0; font-size: 22px; color: var(--ui-ink); }
+.ui-page-head p { margin: 3px 0 0; color: var(--ui-muted); font-size: 13px; max-width: 70ch; }
+.ui-page-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+/* Tabs */
+.ui-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--ui-line); overflow-x: auto; }
+.ui-tabs button { background: none; border: 0; border-bottom: 3px solid transparent; border-radius: 0; padding: 9px 12px; font-weight: 700; color: var(--ui-muted); cursor: pointer; white-space: nowrap; }
+.ui-tabs button[aria-selected="true"] { color: var(--ui-ink); border-bottom-color: var(--ui-brand); }
+.ui-tabs .ui-tab-count { margin-left: 6px; display: inline-flex; min-width: 20px; height: 20px; padding: 0 6px; align-items: center; justify-content: center; border-radius: 999px; background: var(--ui-grey-bg); font-size: 11px; }
+
+/* Status chips */
+.ui-chip { display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 800; white-space: nowrap; background: var(--ui-grey-bg); color: var(--ui-grey); }
+.ui-chip::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.ui-chip.green { background: var(--ui-green-bg); color: var(--ui-green); }
+.ui-chip.amber { background: var(--ui-amber-bg); color: var(--ui-amber); }
+.ui-chip.red { background: var(--ui-red-bg); color: var(--ui-red); }
+.ui-chip.blue { background: var(--ui-blue-bg); color: var(--ui-blue); }
+
+/* Cards and metrics */
+.ui-card { background: var(--ui-surface); border: 1px solid var(--ui-line); border-radius: 12px; padding: 14px; box-shadow: 0 1px 2px rgba(16,42,67,.04); }
+.ui-card h2 { margin: 0 0 8px; font-size: 16px; color: var(--ui-ink); }
+.ui-card-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 10px; }
+.ui-card-head h2 { margin: 0; }
+.ui-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+.ui-metric { display: grid; gap: 2px; padding: 12px 14px; border-radius: 12px; background: var(--ui-surface); border: 1px solid var(--ui-line); color: var(--ui-ink); text-decoration: none; }
+.ui-metric span { font-size: 12px; font-weight: 700; color: var(--ui-muted); text-transform: uppercase; letter-spacing: .03em; }
+.ui-metric strong { font-size: 26px; line-height: 1.1; }
+.ui-metric small { color: var(--ui-muted); }
+.ui-metric.red { border-color: #f3b4ae; background: var(--ui-red-bg); }
+.ui-metric.amber { border-color: #f2d48a; background: var(--ui-amber-bg); }
+.ui-metric.green { border-color: #a9dcbf; }
+.ui-empty { padding: 18px; text-align: center; color: var(--ui-muted); background: var(--ui-soft); border-radius: 10px; }
+.ui-error { padding: 10px 12px; border-radius: 8px; background: var(--ui-red-bg); color: var(--ui-red); font-weight: 700; }
+
+/* Tables */
+.ui-table-wrap { overflow-x: auto; }
+.ui-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.ui-table th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .03em; color: var(--ui-muted); padding: 8px; border-bottom: 1px solid var(--ui-line); background: var(--ui-soft); position: sticky; top: 0; }
+.ui-table td { padding: 8px; border-bottom: 1px solid var(--ui-line); vertical-align: top; }
+.ui-table tr:hover td { background: #fafcfe; }
+.ui-filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: end; }
+.ui-filters label { display: grid; gap: 2px; font-size: 12px; font-weight: 700; color: var(--ui-muted); }
+.ui-seg { display: inline-flex; border: 1px solid var(--ui-line); border-radius: 8px; overflow: hidden; }
+.ui-seg button { border: 0; border-radius: 0; background: var(--ui-surface); padding: 6px 11px; font-weight: 700; cursor: pointer; }
+.ui-seg button[aria-pressed="true"] { background: var(--ui-brand); color: #fff; }
+
+/* Attention list (Today) */
+.ui-attention { display: grid; gap: 8px; }
+.ui-attention a { display: grid; grid-template-columns: 6px 1fr auto; gap: 12px; align-items: center; padding: 12px 14px 12px 0; border-radius: 12px; background: var(--ui-surface); border: 1px solid var(--ui-line); text-decoration: none; color: var(--ui-ink); overflow: hidden; }
+.ui-attention a::before { content: ""; align-self: stretch; background: var(--ui-grey); }
+.ui-attention a.red::before { background: var(--ui-red); }
+.ui-attention a.amber::before { background: #e2a400; }
+.ui-attention a.green::before { background: var(--ui-green); }
+.ui-attention a:hover { border-color: #b9c7d4; box-shadow: 0 2px 8px rgba(16,42,67,.08); }
+.ui-attention strong { display: block; font-size: 15px; }
+.ui-attention small { color: var(--ui-muted); }
+.ui-attention b { font-size: 22px; font-weight: 900; min-width: 44px; text-align: right; }
+.ui-attention .ui-go { color: var(--ui-brand); font-weight: 800; white-space: nowrap; }
+.ui-attention-row { display: flex; align-items: center; gap: 14px; }
+
+/* Drivers: cover cards */
+.forecast-cards { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(178px, 1fr)); }
+.forecast-card { display: grid; gap: 8px; align-content: start; }
+.forecast-card.short { border-color: #f3b4ae; }
+.forecast-card.selected { box-shadow: 0 0 0 2px var(--ui-brand); }
+.forecast-card .forecast-card-head { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+.forecast-need-have { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.forecast-need-have div { background: var(--ui-soft); border-radius: 8px; padding: 6px 8px; display: grid; }
+.forecast-need-have span { font-size: 11px; text-transform: uppercase; color: var(--ui-muted); font-weight: 700; }
+.forecast-need-have b { font-size: 24px; color: var(--ui-ink); }
+.forecast-inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.forecast-inputs label { display: grid; gap: 2px; font-size: 11px; font-weight: 700; color: var(--ui-muted); }
+.forecast-inputs input { width: 100%; box-sizing: border-box; }
+.forecast-card .forecast-suggestion-button { font-size: 12px; text-align: left; }
+.staffing-page .staffing-import-panel { margin: 10px 0; padding: 12px; border: 1px dashed var(--ui-line); border-radius: 10px; background: var(--ui-soft); }
+.staffing-page details.ui-card > summary { cursor: pointer; }
+.checkbox-label { display: flex !important; align-items: center; gap: 6px; }
+button.ui-metric { text-align: left; cursor: pointer; font: inherit; }

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useWorkingDate } from "../lib/workingDate";
 import { useSearchParams } from "react-router-dom";
 import { request } from "../lib/api";
 import { useAccessToken } from "../lib/auth";
@@ -7,13 +8,12 @@ import { SourceEmailEvidenceDrawer } from "../components/SourceEmailEvidenceDraw
 import { JobsOperational } from "./JobsOperational";
 import { OrderReviewBulk } from "./OrderReviewBulk";
 import { OrderChangeAlerts } from "../components/OrderChangeAlerts";
-import { AutoApprovalFormats } from "../components/AutoApprovalFormats";
 import { UndatedOrderReviewQueue } from "./UndatedOrderReviewQueue";
 import { listRuns } from "../api/runs";
-import { tomorrowIsoDate } from "../lib/dateUtils";
+import { Orders as AddOrders } from "./Pages";
 import type { Load, TransportOrder } from "../lib/api";
 
-type OrderControlTab = "review" | "live";
+type OrderControlTab = "review" | "live" | "add";
 type NwfRepairResponse = { repaired: number; message: string };
 type CachedEmailRecord = {
   evidenceId: string;
@@ -366,13 +366,20 @@ function OrderIntakeCacheRecovery({ date }: { date: string }) {
 export function OrderControl({ initialTab = "review" }: { initialTab?: OrderControlTab }) {
   const token = useAccessToken();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [tab, setTab] = useState<OrderControlTab>(initialTab);
+  const requestedTab = searchParams.get("tab");
+  const [tab, setTabState] = useState<OrderControlTab>(requestedTab === "add" || requestedTab === "live" ? requestedTab : initialTab);
+  function setTab(next: OrderControlTab) {
+    setTabState(next);
+    const params = new URLSearchParams(searchParams);
+    if (next === "review") params.delete("tab"); else params.set("tab", next);
+    setSearchParams(params, { replace: true });
+  }
   const [repairNotice, setRepairNotice] = useState<string>();
   const reviewId = searchParams.get("reviewId")?.trim() || undefined;
   const sourceEmailStagingId = searchParams.get("sourceEmail") === "1" ? reviewId : undefined;
-  const selectedDate = searchParams.get("date") || tomorrowIsoDate();
+  const [selectedDate, setWorkingDate] = useWorkingDate();
 
-  useEffect(() => { if (reviewId) setTab("review"); }, [reviewId]);
+  useEffect(() => { if (reviewId) setTabState("review"); }, [reviewId]);
 
   useEffect(() => {
     let active = true;
@@ -388,10 +395,7 @@ export function OrderControl({ initialTab = "review" }: { initialTab?: OrderCont
   }, [token]);
 
   function updateDate(nextDate: string) {
-    const next = new URLSearchParams(searchParams);
-    if (nextDate) next.set("date", nextDate);
-    else next.delete("date");
-    setSearchParams(next, { replace: true });
+    if (nextDate) setWorkingDate(nextDate);
   }
 
   function closeSourceEmail() {
@@ -401,24 +405,20 @@ export function OrderControl({ initialTab = "review" }: { initialTab?: OrderCont
   }
 
   return <>
-    <section className="panel" style={{ marginBottom: 18 }}>
-      <div className="title-row" style={{ alignItems: "end", gap: 16 }}>
-        <div>
-          <p className="eyebrow">Order control</p>
-          <h1>Manage imported jobs</h1>
-        </div>
-        <div className="title-actions" style={{ alignItems: "center", gap: 8 }}>
-          <label className="dashboard-date">Date <input type="date" value={selectedDate} onChange={(event) => updateDate(event.target.value)} /></label>
-          <div role="tablist" aria-label="Order control view" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button type="button" className={tab === "review" ? "primary" : ""} onClick={() => setTab("review")} role="tab" aria-selected={tab === "review"}>Waiting for review</button>
-            <button type="button" className={tab === "live" ? "primary" : ""} onClick={() => setTab("live")} role="tab" aria-selected={tab === "live"}>Approved / promoted orders</button>
-          </div>
-        </div>
+    <section className="ui-page-head" style={{ marginBottom: 10 }}>
+      <div>
+        <h1>Orders</h1>
+        <p>Check what came in from the mailbox, approve it into the plan, and add anything that arrived another way.</p>
       </div>
-      {repairNotice && <p className="notice inline-notice" style={{ marginBottom: 0 }}>{repairNotice}</p>}
     </section>
-    <OrderReviewDateStrip selectedDate={selectedDate} onChange={updateDate} />
-    {tab === "review" ? <><OrderChangeAlerts /><OrderIntakeCacheRecovery date={selectedDate} /><UndatedOrderReviewQueue /><AutoApprovalFormats /><OrderReviewBulk date={selectedDate} /></> : <><ApprovedOrdersList date={selectedDate} token={token} /><JobsOperational date={selectedDate} /></>}
+    <div className="ui-tabs" role="tablist" aria-label="Orders view" style={{ marginBottom: 12 }}>
+      <button type="button" role="tab" aria-selected={tab === "review"} onClick={() => setTab("review")}>Waiting for review</button>
+      <button type="button" role="tab" aria-selected={tab === "live"} onClick={() => setTab("live")}>Approved orders</button>
+      <button type="button" role="tab" aria-selected={tab === "add"} onClick={() => setTab("add")}>Add orders</button>
+    </div>
+    {repairNotice && <p className="notice inline-notice">{repairNotice}</p>}
+    {tab !== "add" && <OrderReviewDateStrip selectedDate={selectedDate} onChange={updateDate} />}
+    {tab === "add" ? <AddOrders /> : tab === "review" ? <><OrderChangeAlerts /><OrderIntakeCacheRecovery date={selectedDate} /><UndatedOrderReviewQueue /><OrderReviewBulk date={selectedDate} /></> : <><ApprovedOrdersList date={selectedDate} token={token} /><JobsOperational date={selectedDate} /></>}
     {sourceEmailStagingId && <SourceEmailEvidenceDrawer stagingId={sourceEmailStagingId} onClose={closeSourceEmail} />}
   </>;
 }
