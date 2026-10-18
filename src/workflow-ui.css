@@ -122,3 +122,7 @@
 .staffing-page details.ui-card > summary { cursor: pointer; }
 .checkbox-label { display: flex !important; align-items: center; gap: 6px; }
 button.ui-metric { text-align: left; cursor: pointer; font: inherit; }
+.work-pattern-editor { display: grid; gap: 6px; min-width: 240px; padding: 8px; border: 1px solid var(--ui-line); border-radius: 8px; background: var(--ui-soft); }
+.work-pattern-editor label { display: grid; gap: 2px; font-size: 12px; font-weight: 700; color: var(--ui-muted); }
+.link-button { background: none; border: 0; padding: 0; color: var(--ui-brand); font-weight: 700; cursor: pointer; text-decoration: underline; font-size: 12px; min-height: 0; }
+.smart-day-source { font-weight: 600; opacity: .75; }
