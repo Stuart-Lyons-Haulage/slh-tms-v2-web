@@ -22,6 +22,7 @@ type ComplianceSummary = { summary: { green: number; amber: number; red: number 
 type Feed = { name: string; configured: boolean; state: string; ageMinutes?: number | null };
 type SyncState = { providers: Feed[] };
 type ForecastDay = { date: string; dayRequired: number; nightRequired: number; availableDrivers: number; shortfall: number; agencyConfirmed: number; plannedRunCount: number };
+type CommsSchedule = { emailsWaitingOverTenMinutes: number; customers: Array<{ customerCode: string; customerName: string; loadPlan: boolean; loadPlanHold?: string }> };
 type PalletSummary = { summary: { ordered: number; planned: number; outstanding: number; overplanned: number; orders: number; runs: number } };
 
 const toneRank: Record<Tone, number> = { red: 0, amber: 1, grey: 2, green: 3 };
@@ -64,6 +65,7 @@ export function DashboardOperational() {
   const sync = useApi(useCallback(async () => request<SyncState>("/api/v1/system-sync/state", await token(), undefined, 30000), [token]));
   const compliance = useApi(useCallback(async () => request<ComplianceSummary>(`/api/v1/daily-compliance/report?date=${encodeURIComponent(today)}`, await token(), undefined, 90000), [today, token]));
   const master = useApi(useCallback(async () => getMasterDispatchData(await token()), [token]));
+  const comms = useApi(useCallback(async () => request<CommsSchedule>("/api/v1/customer-load-plans/schedule", await token(), undefined, 60000), [token]));
 
   const { refresh: refreshReadiness } = readiness;
   const { refresh: refreshPallets } = pallets;
@@ -74,9 +76,10 @@ export function DashboardOperational() {
   const { refresh: refreshForecast } = forecast;
   const { refresh: refreshCompliance } = compliance;
   const { refresh: refreshMaster } = master;
+  const { refresh: refreshComms } = comms;
   const refreshFast = useCallback(() => Promise.allSettled([refreshReadiness(), refreshPallets(), refreshReviewCounts(), refreshChanges(), refreshMessages(), refreshSync()]).then(() => undefined),
     [refreshReadiness, refreshPallets, refreshReviewCounts, refreshChanges, refreshMessages, refreshSync]);
-  const refreshSlow = useCallback(() => Promise.allSettled([refreshForecast(), refreshCompliance(), refreshMaster()]).then(() => undefined), [refreshForecast, refreshCompliance, refreshMaster]);
+  const refreshSlow = useCallback(() => Promise.allSettled([refreshForecast(), refreshCompliance(), refreshMaster(), refreshComms()]).then(() => undefined), [refreshForecast, refreshCompliance, refreshMaster, refreshComms]);
   useEffect(() => startVisiblePolling(refreshFast, 60_000), [refreshFast]);
   useEffect(() => startVisiblePolling(refreshSlow, 300_000), [refreshSlow]);
 
@@ -123,6 +126,11 @@ export function DashboardOperational() {
     add({ key: "docs-expired", tone: "red", count: expiries.expired, title: `${words(expiries.expired, "driver document")} expired`, detail: "Licence, CPC or tacho card. The driver cannot be used until renewed.", to: "/staffing?tab=files", action: "Open Drivers" });
     add({ key: "docs-due", tone: "amber", count: expiries.due, title: `${words(expiries.due, "driver document")} due in 30 days`, detail: "Licence, CPC or tacho card renewals.", to: "/staffing?tab=files", action: "Open Drivers" });
 
+    const held = (comms.data?.customers || []).filter(item => item.loadPlan && item.loadPlanHold);
+    add({ key: "plans-held", tone: "amber", count: held.length, title: `${words(held.length, "load plan")} waiting to send`, detail: held.slice(0, 3).map(item => `${item.customerName}: ${item.loadPlanHold?.replace(/^Held: /, "")}`).join(" · "), to: "/customer-comms", action: "Open Customer Comms" });
+    const stuck = comms.data?.emailsWaitingOverTenMinutes || 0;
+    add({ key: "emails-stuck", tone: "red", count: stuck, title: `${words(stuck, "customer email")} not going out`, detail: "Queued over 10 minutes ago. Check the info@ send flow is switched on.", to: "/customer-comms", action: "Open Customer Comms" });
+
     const waiting = messages.data?.length || 0;
     add({ key: "messages", tone: "amber", count: waiting, title: `${words(waiting, "customer message")} to answer`, detail: "Requests and questions from the info mailbox that are not orders.", to: "/customer-comms", action: "Open Customer Comms" });
 
@@ -133,7 +141,7 @@ export function DashboardOperational() {
     add({ key: "feeds-slow", tone: "grey", count: slow.length, title: `${words(slow.length, "data feed")} running late`, detail: slow.map(feed => feed.name).join(", "), to: "/admin/integrations", action: "Open System health" });
 
     return list.sort((a, b) => toneRank[a.tone] - toneRank[b.tone]);
-  }, [changes.data, compliance.data, date, forecast.data, master.data, messages.data, pallets.data, readiness.data, reviewCounts.data, sync.data, today]);
+  }, [comms.data, changes.data, compliance.data, date, forecast.data, master.data, messages.data, pallets.data, readiness.data, reviewCounts.data, sync.data, today]);
 
   const failures = [readiness, pallets, reviewCounts, changes, forecast, messages, sync].filter(item => item.error).length;
   const loading = [readiness, pallets, reviewCounts, changes].some(item => item.loading && !item.data);

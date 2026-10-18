@@ -1,6 +1,7 @@
 import { CustomerDeliveryTimesActions } from "../components/CustomerDeliveryTimesActions";
 import { CustomerLoadPlanActions } from "../components/CustomerLoadPlanActions";
 import { CustomerMessagesPanel } from "../components/CustomerMessagesPanel";
+import { CustomerCommsSchedule } from "../components/CustomerCommsSchedule";
 import { useWorkingDate } from "../lib/workingDate";
 import "../customer-comms.css";
 
@@ -23,6 +24,7 @@ export function CustomerComms() {
         <CustomerDeliveryTimesActions date={date} />
       </div>
     </header>
+    <CustomerCommsSchedule />
     <CustomerMessagesPanel />
   </div>;
 }
