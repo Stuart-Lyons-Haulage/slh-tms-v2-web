@@ -3,6 +3,7 @@ import { request } from '../lib/api';
 import { intelligenceApi } from '../lib/intelligenceApi';
 import { useAccessToken } from '../lib/auth';
 import { useApi } from '../lib/useApi';
+import { PlanningWipe } from './PlanningWipe';
 
 type SyncResult = { provider: string; success: boolean; completedAtUtc: string; message: string };
 
@@ -266,6 +267,7 @@ export function AdminIntegrationSyncControls() {
         <p className="hint">{graph?.mailbox || 'info@'}: read every few minutes.{graph?.lastSuccessUtc ? ` Last read ${lastReceipt(graph.lastSuccessUtc)}, ${graph.lastMessagesSeen ?? 0} seen, ${graph.lastMessagesIngested ?? 0} new.` : ''}</p>
       </article>
     </div>
+    <PlanningWipe />
     {state && <p className="hint">Platform {state.status}{state.lastPlatformUpdateUtc ? ` · last update ${new Date(state.lastPlatformUpdateUtc).toLocaleString('en-GB')}` : ''}. Automatic: TachoMaster every 20 minutes · Sage HR 05:00 and 14:00 · Fleetio hourly · tracking continuous.</p>}
   </section>;
 }
