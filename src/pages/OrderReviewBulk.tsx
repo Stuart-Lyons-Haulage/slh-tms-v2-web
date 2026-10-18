@@ -84,6 +84,18 @@ type BulkApproveItemResult = {
   reason: string;
 };
 
+type BulkApprovalJob = {
+  id: string;
+  total: number;
+  processed: number;
+  approved: number;
+  skipped: number;
+  failed: number;
+  done: boolean;
+  skippedItems?: BulkApproveItemResult[];
+  failedItems?: BulkApproveItemResult[];
+};
+
 type BulkApproveResponse = {
   date: string;
   requested: number;
@@ -123,7 +135,6 @@ const queuePageSize = 100;
 // Approval promotes each order synchronously on the API. Keep each request
 // comfortably below the App Service/gateway timeout so a slow order cannot
 // discard the result of every order behind it.
-const approvalBatchSize = 10;
 
 async function compareStagedOrder(stagingId: string, accessToken: string): Promise<ComparisonResult> {
   let lastError: unknown;
@@ -641,10 +652,15 @@ export function OrderReviewBulk({ date }: { date: string }) {
     setBusy(true);
     setNotice(undefined);
     try {
-      const approvalChecks = await Promise.all(rowsToApprove.map(async (row) => ({
-        row,
-        comparisonResult: await compareStagedOrder(row.item.id, await token()),
-      })));
+      // Check duplicates a few at a time: 100 simultaneous requests from a phone
+      // overload the connection and the API.
+      setNotice(`Checking ${rowsToApprove.length} order${rowsToApprove.length === 1 ? "" : "s"} against live orders…`);
+      const authToken = await token();
+      const approvalChecks: Array<{ row: ParsedRow; comparisonResult: Awaited<ReturnType<typeof compareStagedOrder>> }> = [];
+      for (let offset = 0; offset < rowsToApprove.length; offset += 6) {
+        const slice = rowsToApprove.slice(offset, offset + 6);
+        approvalChecks.push(...await Promise.all(slice.map(async row => ({ row, comparisonResult: await compareStagedOrder(row.item.id, authToken) }))));
+      }
 
       const duplicates = approvalChecks.filter(({ comparisonResult }) => comparisonResult.comparison?.classification === "Exact duplicate");
       const amendments = approvalChecks
@@ -691,34 +707,27 @@ export function OrderReviewBulk({ date }: { date: string }) {
       let failed = 0;
       let firstBatchResult: BulkApproveResponse | undefined;
       let requestError: string | undefined;
-      for (let offset = 0; offset < approvable.length; offset += approvalBatchSize) {
-        const batch = approvable.slice(offset, offset + approvalBatchSize);
-        setNotice(`Approving orders ${offset + 1}–${Math.min(offset + batch.length, approvable.length)} of ${approvable.length}…`);
-        try {
-          const result = await request<BulkApproveResponse>(
-            "/api/v1/staging/orders/bulk-approve",
-            await token(),
-            {
-              method: "POST",
-              body: JSON.stringify({
-                date,
-                ids: batch.map(({ row }) => row.item.id),
-                acknowledgeReviewFlags: true,
-              }),
-            },
-            120000,
-          );
-          firstBatchResult ||= result;
-          approved += result.approved;
-          skipped += result.skipped;
-          failed += result.failed;
-        } catch (batchError) {
-          // A request can fail after the API has committed its approval. Keep
-          // processing the remaining one-order batches and refresh the queue
-          // to determine the final state instead of abandoning the pass.
-          failed += batch.length;
-          requestError ||= batchError instanceof Error ? batchError.message : String(batchError);
+      try {
+        // The server approves the selection as a background job; this screen only
+        // polls for progress, so a long approval can never time out mid-way.
+        const ids = approvable.map(({ row }) => row.item.id);
+        const started = await request<BulkApprovalJob>("/api/v1/staging/orders/bulk-approve-jobs", await token(), {
+          method: "POST",
+          body: JSON.stringify({ date, ids, acknowledgeReviewFlags: true }),
+        });
+        let job = started;
+        while (!job.done) {
+          setNotice(`Approving ${job.processed} of ${job.total}… you can leave this page; approval carries on.`);
+          await new Promise(resolve => window.setTimeout(resolve, 2000));
+          job = await request<BulkApprovalJob>(`/api/v1/staging/orders/bulk-approve-jobs/${encodeURIComponent(started.id)}`, await token());
         }
+        approved = job.approved;
+        skipped = job.skipped;
+        failed = job.failed;
+        firstBatchResult = { date, requested: job.total, approved: job.approved, skipped: job.skipped, failed: job.failed, missing: 0, skippedItems: job.skippedItems, failedItems: job.failedItems, message: "" };
+      } catch (jobError) {
+        requestError = jobError instanceof Error ? jobError.message : String(jobError);
+        failed = approvable.length - approved - skipped;
       }
       const duplicateNote = duplicates.length > 0
         ? ` ${duplicates.length} exact duplicate staging entr${duplicates.length === 1 ? "y was" : "ies were"} deleted; live orders were left unchanged.`
