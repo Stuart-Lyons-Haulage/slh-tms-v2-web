@@ -7,7 +7,6 @@ import { E2eHarness } from './E2eHarness';
 import { DataIntegrityBoundary } from './components/DataIntegrityBoundary';
 import { DispatchCalculatedStartsPortal } from './pages/DispatchCalculatedStartsPortal';
 import { cacheLocationForRoute, isPublicTvLink, isTvRoute } from './tvBootstrap';
-import { installOperationalUiEnhancements } from './operationalUiEnhancements';
 import { installPollingPolicy } from './lib/pollingPolicy';
 import { installPerformanceTelemetry } from './lib/performanceTelemetry';
 import './styles.css';
@@ -40,7 +39,6 @@ installPerformanceTelemetry();
 if (window.location.pathname === '/' || window.location.pathname === '/tracking' || window.location.pathname === '/planner') {
   void import('azure-maps-control/dist/atlas.min.css');
 }
-installOperationalUiEnhancements();
 
 const clientId = import.meta.env.VITE_ENTRA_CLIENT_ID;
 const tenantId = import.meta.env.VITE_ENTRA_TENANT_ID;
