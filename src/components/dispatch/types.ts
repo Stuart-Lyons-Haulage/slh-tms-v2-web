@@ -232,6 +232,11 @@ export interface DispatchDriverStatusDto {
   /** 6 after a full 45h weekly rest, 5 after a reduced one (from Tacho). */
   cycleLength?: number;
   cycleNote?: string;
+  /** Sage HR work pattern name; source is "Sage HR", "Sage HR (entered)" or "Tacho" when none is recorded. */
+  workPatternName?: string;
+  workPatternSource?: string;
+  patternRestDay?: boolean;
+  tachoDayNumber?: number;
   lastWeeklyRestType?: string;
   earliestStartUtc?: string;
   earliestStartSource?: string;
