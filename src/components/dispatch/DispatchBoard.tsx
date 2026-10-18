@@ -81,7 +81,7 @@ function RouteSidebar({ runs, owners, allocatedRunIds, drivers, allDrivers, vehi
       <strong>Routes</strong>
       <span>{runs.length}</span>
     </div>
-    <p>First collection → final delivery. Best-fit suggestions use the driver’s last known position plus first collection proximity, skills and continuity.</p>
+    <p>Furthest first. Suggestions weigh distance to the first collection, skills, driver type (trampers for nights out; day and night drivers must get back in shift) and who has had the fewest long runs in the last 2 weeks.</p>
     <div className="smart-run-card-list">
       {runs.map(run => {
         const ownerId = owners[run.runId];
@@ -102,7 +102,7 @@ function RouteSidebar({ runs, owners, allocatedRunIds, drivers, allDrivers, vehi
             <strong>{run.reference}</strong>
             <span>{allocated ? "Dispatched" : owner ? "Selected" : run.isBackload ? "Backload" : "Available"}</span>
           </div>
-          <div className="smart-run-time">{runTime(run.firstCollectionTimeUtc)}</div>
+          <div className="smart-run-time">{runTime(run.firstCollectionTimeUtc)}{run.furthestMiles != null && <small> · {run.furthestMiles} mi out</small>}{run.spanHours != null && <small> · ~{run.spanHours}h</small>}{run.needsNightOut && <small className="smart-run-nightout"> · night out</small>}{run.isNightRun && <small> · night run</small>}</div>
           <div className="smart-run-route">
             <span><b>Collect</b>{run.collectionPoint.name}</span>
             <span><b>Deliver</b>{run.finalDeliveryPoint?.name || "Final stop not set"}</span>

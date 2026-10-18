@@ -214,7 +214,9 @@ export function DispatchDriverRow({
     </td>
 
     <td>
-      <span className={`smart-day ${dayTone(driver)}`} title={driver.availabilityDayCount ? "Tacho duty day / confirmed staffing availability days this week" : "Tacho duty day / Sage and Driver Master contracted working days"}>Day {status?.projectedDayNumber || driver.dayNumber || driver.tachoData.currentDutyDay}{(driver.availabilityDayCount || driver.contractedDays.length) > 0 ? ` of ${driver.availabilityDayCount || driver.contractedDays.length}` : ""}</span>
+      <span className={`smart-day ${dayTone(driver)}`} title={driver.availabilityDayCount ? "Tacho duty day / confirmed staffing availability days this week" : "Tacho duty day / Sage and Driver Master contracted working days"}>Day {status?.projectedDayNumber || driver.dayNumber || driver.tachoData.currentDutyDay}{(status?.cycleLength || driver.availabilityDayCount || driver.contractedDays.length) > 0 ? ` of ${status?.cycleLength || driver.availabilityDayCount || driver.contractedDays.length}` : ""}</span>
+      {status?.cycleNote && <small className="smart-inline-warning">{status.cycleNote}</small>}
+      {driver.workingStyle && <small className="smart-working-style">{driver.workingStyle === "HalfTramper" ? "Half tramper" : driver.workingStyle}{driver.recentLongRuns ? ` · ${driver.recentLongRuns} long run${driver.recentLongRuns === 1 ? "" : "s"} / 2 wks` : ""}</small>}
       {driver.onLeave && <small className="smart-inline-error">{driver.leaveType || "Sage HR leave"}{driver.partDayLeave ? " · part day" : ""}</small>}
       {!driver.onLeave && driver.needsReturn && <small className="smart-inline-warning">{(driver.dayNumber || driver.tachoData.currentDutyDay) >= 5 ? "Return priority" : "Return soon"}</small>}
     </td>
