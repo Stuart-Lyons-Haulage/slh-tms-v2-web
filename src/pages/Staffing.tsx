@@ -337,7 +337,7 @@ function DriverForecast() {
         const needed = row.dayRequired + row.nightRequired;
         const short = row.shortfall > 0;
         return <article key={row.date} className={`ui-card forecast-card ${short ? "short" : "ok"} ${row.date === workingDate ? "selected" : ""}`}>
-          <header><strong>{workingDateLabel(row.date)}</strong><span className={`ui-chip ${short ? "red" : "green"}`}>{short ? `${row.shortfall} short` : row.shortfall < 0 ? `${Math.abs(row.shortfall)} spare` : "Covered"}</span></header>
+          <div className="forecast-card-head"><strong>{workingDateLabel(row.date)}</strong><span className={`ui-chip ${short ? "red" : "green"}`}>{short ? `${row.shortfall} short` : row.shortfall < 0 ? `${Math.abs(row.shortfall)} spare` : "Covered"}</span></div>
           <div className="forecast-need-have"><div><span>Need</span><b>{needed}</b></div><div><span>Have</span><b>{row.availableDrivers}</b></div></div>
           <small>{row.employedAvailable} employed · {row.agencyAvailable} agency · {row.casualAvailable} casual</small>
           <div className="forecast-inputs">

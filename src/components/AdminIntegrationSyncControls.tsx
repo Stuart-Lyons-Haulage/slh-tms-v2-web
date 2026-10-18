@@ -248,7 +248,7 @@ export function AdminIntegrationSyncControls() {
       <article className="ui-card">
         <div className="ui-card-head"><h2>Samsara</h2><span className={`ui-chip ${samsara?.connected ? 'green' : 'amber'}`}>{samsara?.connected ? 'Connected' : samsara?.configured ? 'Check link' : 'Not set up'}</span></div>
         <p className="hint">Routes sent to drivers, and live ETAs back.{samsara?.connected ? ` ${samsara.vehicleCount} vehicles · ${samsara.driverCount} drivers visible.` : ''}</p>
-        {samsara && !samsara.configured && samsara.missingSettings.length > 0 && <p className="ui-error">Missing settings: {samsara.missingSettings.join(' · ')}</p>}
+        {samsara && !samsara.configured && (samsara.missingSettings ?? []).length > 0 && <p className="ui-error">Missing settings: {samsara.missingSettings.join(' · ')}</p>}
         {samsaraSites && <p className="hint">Sites: {samsaraSites.alreadyMapped} in Samsara · {samsaraSites.pending} to send · {samsaraSites.missingCoordinates} need a map location · {samsaraSites.missingAddress} need an address.</p>}
         <div className="ui-page-actions">
           <button type="button" onClick={() => void syncSamsaraMasterData()} disabled={Boolean(busy) || !samsara?.connected || !samsara.assetSyncEnabled}>{busy === 'samsara-master-data' ? 'Sending…' : 'Send sites, vehicles & trailers'}</button>
@@ -258,7 +258,7 @@ export function AdminIntegrationSyncControls() {
       <article className="ui-card">
         <div className="ui-card-head"><h2>Vehicle tracking (RoadTech / DOT)</h2>{trackingState && <span className={`ui-chip ${trackingState.className.includes('ready') ? 'green' : 'amber'}`}>{trackingState.label}</span>}</div>
         {roadTech ? <p className="hint">{roadTech.connected ? `${roadTech.recordCount} vehicles reporting${roadTech.latestEventUtc ? `, latest ${new Date(roadTech.latestEventUtc).toLocaleString('en-GB')}` : ''}.` : roadTech.message}</p> : !roadTechError && <p className="hint">Checking…</p>}
-        {roadTech && !roadTech.configured && roadTech.missingSettings.length > 0 && <p className="ui-error">Missing settings: {roadTech.missingSettings.join(' · ')}</p>}
+        {roadTech && !roadTech.configured && (roadTech.missingSettings ?? []).length > 0 && <p className="ui-error">Missing settings: {roadTech.missingSettings.join(' · ')}</p>}
         {roadTechError && <p className="ui-error">{roadTechError}</p>}
       </article>
       <article className="ui-card">

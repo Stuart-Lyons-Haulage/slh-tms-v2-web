@@ -148,7 +148,7 @@ export function PalletPlanningControl() {
     </tbody></table></div></section>;
   }
 
-  return <section className="pallet-control-page"><div className="title-row pallet-control-header"><div><p className="eyebrow">Planner second screen · live quantity control</p><h1>Pallet Control</h1><p className="intro">Collections run down the left and Site Master delivery points run directly above their columns. AM/PM is now shown inside Orders to Plan only.</p></div><div className="title-actions"><button onClick={() => { void refreshControl(); void refreshRegions(); }} disabled={control.loading}>Refresh</button><Link className="button-like primary" to="/">Open planner</Link></div></div>
+  return <section className="pallet-control-page"><div className="title-row pallet-control-header"><div><h1>Pallet Control</h1><p className="intro">What is ordered, planned and still to plan, by collection and delivery point. Click a number to put it on a run.</p></div><div className="title-actions"><button onClick={() => { void refreshControl(); void refreshRegions(); }} disabled={control.loading}>Refresh</button><Link className="button-like" to="/">Open planner</Link></div></div>
     <div className="ui-tabs" role="tablist" aria-label="Pallet Order view">
       <button type="button" role="tab" aria-selected={tab === "pallets"} onClick={() => openTab("pallets")}>Pallets</button>
       <button type="button" role="tab" aria-selected={tab === "southbound"} onClick={() => openTab("southbound")}>Southbound collections{southboundOrders.some(order => order.outstandingPallets > 0) && <span className="ui-tab-count">{southboundOrders.filter(order => order.outstandingPallets > 0).length}</span>}</button>

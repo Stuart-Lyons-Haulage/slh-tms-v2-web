@@ -32,8 +32,13 @@
 .working-date-pick { position: relative; display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 6px; background: rgba(255,255,255,.16); font-weight: 800; font-size: 13px; cursor: pointer; white-space: nowrap; }
 .working-date-pick input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
 @media (max-width: 600px) {
-  .header-context:has(.working-date) { display: flex !important; }
-  .working-date .working-date-quick { display: none; }
+  .top-app-header:has(.working-date) { grid-template-columns: 44px auto minmax(0, 1fr) !important; }
+  .top-app-header:has(.working-date) .brand { justify-self: start; }
+  .header-context:has(.working-date) { display: flex !important; min-width: 0; grid-column: 3; grid-row: 1; justify-self: end; }
+  .working-date .working-date-quick, .working-date .working-date-step { display: none; }
+  .working-date-pick { font-size: 12px; padding: 4px 8px; }
+  .ui-attention a { grid-template-columns: 6px 1fr; }
+  .ui-attention .ui-go { display: none; }
 }
 
 /* Page header */
@@ -95,16 +100,16 @@
 .ui-attention a:hover { border-color: #b9c7d4; box-shadow: 0 2px 8px rgba(16,42,67,.08); }
 .ui-attention strong { display: block; font-size: 15px; }
 .ui-attention small { color: var(--ui-muted); }
-.ui-attention b { font-size: 22px; font-weight: 900; }
+.ui-attention b { font-size: 22px; font-weight: 900; min-width: 44px; text-align: right; }
 .ui-attention .ui-go { color: var(--ui-brand); font-weight: 800; white-space: nowrap; }
 .ui-attention-row { display: flex; align-items: center; gap: 14px; }
 
 /* Drivers: cover cards */
-.forecast-cards { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); }
+.forecast-cards { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(178px, 1fr)); }
 .forecast-card { display: grid; gap: 8px; align-content: start; }
 .forecast-card.short { border-color: #f3b4ae; }
 .forecast-card.selected { box-shadow: 0 0 0 2px var(--ui-brand); }
-.forecast-card header { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+.forecast-card .forecast-card-head { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
 .forecast-need-have { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .forecast-need-have div { background: var(--ui-soft); border-radius: 8px; padding: 6px 8px; display: grid; }
 .forecast-need-have span { font-size: 11px; text-transform: uppercase; color: var(--ui-muted); font-weight: 700; }
