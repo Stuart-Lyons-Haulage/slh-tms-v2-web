@@ -1,3 +1,4 @@
+import { runMetrics, sortRunsForDispatch } from "./dispatchRunFit";
 import { apiBaseUrl, request } from "../../lib/api";
 import type {
   DispatchAllocationSelection,
@@ -82,6 +83,9 @@ type DriverDispatchAuthority = DispatchEquipmentWorkbench & {
     skills?: string;
     coding?: string;
     dayNumber: number;
+    workingStyle?: string;
+    recentLongRuns?: number;
+    recentFurthestMiles?: number;
     onLeave: boolean;
     leaveType?: string;
     leaveDetails?: string;
@@ -217,6 +221,7 @@ function runDetail(run: DispatchRunDto, equipment: DispatchEquipmentWorkbench): 
   const trailerSwapRequested = /(?:trailer\s*(?:swap|change)|swap\s*trailer|change\s*trailer|drop\s*trailer|pick\s*up\s*(?:a\s*)?(?:different|new)\s*trailer)/i.test(notes);
   return {
     ...run,
+    ...runMetrics(load),
     firstCollectionTimeUtc: collection?.plannedArrivalUtc || load.plannedStartUtc,
     finalDeliveryPoint: delivery ? {
       name: cleanStopName(delivery.name) || delivery.name,
@@ -348,6 +353,9 @@ export async function getSmartDispatch(
     return {
       ...driver,
       dayNumber: authority?.dayNumber ?? driver.tachoData.currentDutyDay,
+      workingStyle: authority?.workingStyle,
+      recentLongRuns: authority?.recentLongRuns,
+      recentFurthestMiles: authority?.recentFurthestMiles,
       onLeave: authority?.onLeave === true,
       leaveType: authority?.leaveType,
       leaveDetails: authority?.leaveDetails,
@@ -446,7 +454,7 @@ export async function getSmartDispatch(
 
   return {
     drivers: annotateAvailability(enrichedDrivers),
-    runs: runs.map(run => runDetail(run, equipment)),
+    runs: sortRunsForDispatch(runs.map(run => runDetail(run, equipment))),
     equipment,
     availableTimes: [],
     statuses: Object.fromEntries(statusResponse.drivers.map(status => [status.driverId, status])),

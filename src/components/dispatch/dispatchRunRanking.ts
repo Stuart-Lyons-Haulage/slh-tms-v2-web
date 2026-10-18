@@ -1,5 +1,6 @@
 import { canDriverTakeRun, dispatchSkills, missingSkills } from "./dispatchRules";
 import type { DispatchDriverDto, DispatchRunDto } from "./types";
+import { fairnessAdjustment, workingStyleFit } from "./dispatchRunFit";
 
 export function driverRunDistanceMiles(driver: DispatchDriverDto, run: DispatchRunDto): number | undefined {
   const point = driver.trackingData.lastKnownPosition;
@@ -24,12 +25,19 @@ export function rankDriversForRun(run: DispatchRunDto, drivers: DispatchDriverDt
     .map(driver => {
       const distance = driverRunDistanceMiles(driver, run);
       const missing = missingSkills(driver, run);
-      const score = Math.min(100,
+      const fit = workingStyleFit(driver, run);
+      const fairness = fairnessAdjustment(driver, run);
+      const base = Math.min(100,
         (distance == null ? 12 : Math.max(0, Math.round(45 - distance * 0.65))) +
         (missing.length === 0 ? (run.requiredSkills ? 25 : 15) : 0) +
         (driver.needsReturn && (run.isBackload || run.isSouthbound) ? 25 : !driver.needsReturn && !run.isBackload ? 10 : 0) +
         (driver.tachoData.breakCompliance ? 10 : 0));
+      // A driver whose type cannot do this run stays visible but drops to the bottom.
+      const score = fit.ok ? Math.max(0, Math.min(100, base + fairness.score)) : 0;
       const reasons = [
+        ...(fit.ok ? [] : [fit.reason || "Driver type does not suit this run"]),
+        ...(fit.warning ? [fit.warning] : []),
+        ...(fairness.reason ? [fairness.reason] : []),
         distance == null ? "Live distance unavailable" : `${distance.toFixed(1)}mi to collection`,
         missing.length === 0 ? (run.requiredSkills ? "Required skills matched" : "No specialist skills required") : `Missing ${missing.map(skill => dispatchSkills.find(item => item.skill === skill)?.label || skill).join(", ")}`,
         driver.needsReturn && (run.isBackload || run.isSouthbound) ? "Supports return/backload positioning" : "Available for normal route work",
