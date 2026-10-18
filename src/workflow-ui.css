@@ -129,3 +129,5 @@ button.ui-metric { text-align: left; cursor: pointer; font: inherit; }
 .pallet-space-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
 .pallet-space-head h2 { margin: 0; font-size: 16px; }
 .pallet-fits-on { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 6px 0 10px; }
+.comms-cell { display: grid; gap: 4px; justify-items: start; margin-bottom: 6px; }
+.comms-auto { font-size: 12px; color: var(--ui-muted); font-weight: 600; }

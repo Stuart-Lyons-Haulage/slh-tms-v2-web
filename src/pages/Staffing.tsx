@@ -119,9 +119,10 @@ function addDays(value: string, amount: number) {
   return date.toISOString().slice(0, 10);
 }
 
-function monday(value: string) {
+/** SLH weeks run Wednesday to Tuesday (same as timesheets and the agency roster). */
+function weekStartWednesday(value: string) {
   const date = new Date(`${value}T12:00:00`);
-  const offset = (date.getDay() + 6) % 7;
+  const offset = (date.getDay() - 3 + 7) % 7;
   date.setDate(date.getDate() - offset);
   return date.toISOString().slice(0, 10);
 }
@@ -181,7 +182,7 @@ function AvailabilitySection() {
   const [importBusy, setImportBusy] = useState(false);
   const [importMessage, setImportMessage] = useState<string>();
   const [filter, setFilter] = useState<CalendarFilter>("all");
-  const [weekStart, setWeekStart] = useState(() => monday(planningDate));
+  const [weekStart, setWeekStart] = useState(() => weekStartWednesday(planningDate));
   const [calendar, setCalendar] = useState<Record<string, DriverAvailabilitySnapshot>>({});
   const [calendarBusy, setCalendarBusy] = useState(false);
   const [calendarReload, setCalendarReload] = useState(0);
@@ -193,7 +194,7 @@ function AvailabilitySection() {
     } catch (exception) { setError(exception instanceof Error ? exception.message : "Availability could not be loaded."); }
   }, [planningDate, token]);
   useEffect(() => { void refresh(); }, [refresh]);
-  useEffect(() => { setWeekStart(monday(planningDate)); }, [planningDate]);
+  useEffect(() => { setWeekStart(weekStartWednesday(planningDate)); }, [planningDate]);
   useEffect(() => {
     let cancelled = false;
     setCalendarBusy(true);
@@ -291,13 +292,13 @@ function AvailabilitySection() {
 function DriverForecast() {
   const token = useAccessToken();
   const [workingDate] = useWorkingDate();
-  const [from, setFrom] = useState(() => monday(workingDate));
+  const [from, setFrom] = useState(() => weekStartWednesday(workingDate));
   const [rows, setRows] = useState<ForecastDay[]>([]);
   const [dirty, setDirty] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string>();
   const to = addDays(from, 6);
-  useEffect(() => { setFrom(monday(workingDate)); }, [workingDate]);
+  useEffect(() => { setFrom(weekStartWednesday(workingDate)); }, [workingDate]);
   const load = useCallback(async () => {
     setBusy(true);
     try { setRows(await request<ForecastDay[]>(`/api/v1/driver-forecast?from=${from}&to=${to}`, await token(), undefined, 30000)); setDirty({}); setMessage(undefined); }

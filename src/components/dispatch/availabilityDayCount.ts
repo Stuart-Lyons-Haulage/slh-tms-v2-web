@@ -58,7 +58,8 @@ export function availabilityDayCount(item: DriverAvailabilityItem | undefined, p
   if (!from || !through || !Number.isFinite(utcDay(planningDate))) return undefined;
 
   const selectedDay = utcDay(planningDate);
-  const weekStart = selectedDay - ((new Date(selectedDay).getUTCDay() + 6) % 7) * 86_400_000;
+  // SLH weeks run Wednesday to Tuesday.
+  const weekStart = selectedDay - ((new Date(selectedDay).getUTCDay() - 3 + 7) % 7) * 86_400_000;
   const usualDays = usualDayIndexes(item.usualDays);
   let count = 0;
   for (let offset = 0; offset < 7; offset++) {
