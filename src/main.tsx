@@ -1,11 +1,10 @@
-import { StrictMode } from 'react';
+import { StrictMode, Suspense, lazy } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MsalProvider } from '@azure/msal-react';
 import { PublicClientApplication } from '@azure/msal-browser';
 import { App } from './App';
-import { E2eHarness } from './E2eHarness';
+const E2eHarness = lazy(() => import('./E2eHarness').then(m => ({ default: m.E2eHarness })));
 import { DataIntegrityBoundary } from './components/DataIntegrityBoundary';
-import { DispatchCalculatedStartsPortal } from './pages/DispatchCalculatedStartsPortal';
 import { cacheLocationForRoute, isPublicTvLink, isTvRoute } from './tvBootstrap';
 import { installPollingPolicy } from './lib/pollingPolicy';
 import { installPerformanceTelemetry } from './lib/performanceTelemetry';
@@ -79,7 +78,7 @@ function installLocalTestBanner() {
 function renderApp() {
   const root = document.getElementById('root');
   if (!root) throw new Error('TMS root element is missing.');
-  const content = e2eAuth ? <E2eHarness /> : <><App /><DispatchCalculatedStartsPortal /></>;
+  const content = e2eAuth ? <Suspense fallback={null}><E2eHarness /></Suspense> : <App />;
   createRoot(root).render(<StrictMode><MsalProvider instance={msal}><DataIntegrityBoundary>{content}</DataIntegrityBoundary></MsalProvider></StrictMode>);
   installLocalTestBanner();
 }
