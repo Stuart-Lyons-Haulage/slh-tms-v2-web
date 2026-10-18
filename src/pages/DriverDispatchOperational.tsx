@@ -5,14 +5,10 @@ import { DispatchBoard } from "../components/dispatch/DispatchBoard";
 import { DispatchResourceQuickAdd } from "../components/dispatch/DispatchResourceQuickAdd";
 import "../authoritative-dispatch.css";
 import "../dispatch-resource-quick-add.css";
-import { tomorrowIsoDate } from "../lib/dateUtils";
-
-function currentDispatchDate() {
-  return new URLSearchParams(window.location.search).get("date") || tomorrowIsoDate();
-}
+import { useWorkingDate } from "../lib/workingDate";
 
 export function DriverDispatchOperational() {
-  const [dispatchDate, setDispatchDate] = useState(currentDispatchDate);
+  const [dispatchDate] = useWorkingDate();
   const [dispatchRevision, setDispatchRevision] = useState(0);
 
   useEffect(() => {
@@ -27,7 +23,6 @@ export function DriverDispatchOperational() {
     <DispatchBoard
       key={`${dispatchDate}-${dispatchRevision}`}
       planningDate={dispatchDate}
-      onPlanningDateChange={setDispatchDate}
       extraActions={<>
         <DispatchResourceQuickAdd onSaved={() => setDispatchRevision(value => value + 1)} />
       </>}

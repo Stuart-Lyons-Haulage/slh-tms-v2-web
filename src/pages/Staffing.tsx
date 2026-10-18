@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import * as XLSX from "xlsx";
 import { request } from "../lib/api";
 import { useAccessToken } from "../lib/auth";
 import type { DriverAvailabilityItem, DriverAvailabilitySnapshot } from "../components/dispatch/types";
 import { DriverTimesheets } from "./DriverTimesheets";
 import { DriverAssignments } from "./Pages";
+import { useWorkingDate, workingDateLabel } from "../lib/workingDate";
+import { todayIsoDate } from "../lib/dateUtils";
+import { getMasterDispatchData } from "../api/master";
 
 type ImportRow = { driverName: string; date: string; status: string; source: string; agencyName: string };
 type ImportIssue = { row: string; reason: string };
@@ -135,17 +139,48 @@ function calendarState(driver: DriverAvailabilityItem | undefined) {
   return { label: driver.employmentType === "Employed" ? "PATTERN" : "—", className: "pattern" };
 }
 
+type Section = "cover" | "availability" | "files" | "timesheets" | "history";
+const sections: Array<[Section, string]> = [["cover", "Cover"], ["availability", "Availability"], ["files", "Driver files"], ["timesheets", "Timesheets"], ["history", "Run history"]];
+
+/**
+ * Drivers: who we need, who we have, each driver's file, timesheets and run history.
+ * Employment type remains controlled by Master Data.
+ */
 export function Staffing() {
+  const [params, setParams] = useSearchParams();
+  const requested = params.get("tab");
+  const section: Section = sections.some(([key]) => key === requested) ? requested as Section : "cover";
+  function open(next: Section) {
+    const updated = new URLSearchParams(params);
+    if (next === "cover") updated.delete("tab"); else updated.set("tab", next);
+    setParams(updated, { replace: true });
+  }
+  return <section className="ui-page staffing-page">
+    <div className="ui-page-head"><div><h1>Drivers</h1><p>Who we need, who we have, and each driver's file. Employment type remains controlled by Master Data.</p></div></div>
+    <div className="ui-tabs" role="tablist" aria-label="Driver sections">
+      {sections.map(([key, label]) => <button key={key} type="button" role="tab" aria-selected={section === key} onClick={() => open(key)}>{label}</button>)}
+    </div>
+    {section === "cover" && <DriverForecast />}
+    {section === "availability" && <AvailabilitySection />}
+    {section === "files" && <DriverFiles />}
+    {section === "timesheets" && <DriverTimesheets embedded />}
+    {section === "history" && <DriverAssignments embedded />}
+  </section>;
+}
+
+type CalendarFilter = "all" | "Employed" | "Agency";
+
+function AvailabilitySection() {
   const token = useAccessToken();
-  const [planningDate, setPlanningDate] = useState(new Date().toISOString().slice(0, 10));
+  const [planningDate] = useWorkingDate();
   const [snapshot, setSnapshot] = useState<DriverAvailabilitySnapshot>();
   const [error, setError] = useState<string>();
+  const [importOpen, setImportOpen] = useState(false);
   const [importRows, setImportRows] = useState<ImportRow[]>([]);
   const [importIssues, setImportIssues] = useState<ImportIssue[]>([]);
   const [importBusy, setImportBusy] = useState(false);
   const [importMessage, setImportMessage] = useState<string>();
-  const [section, setSection] = useState<"forecast" | "timesheets" | "availability" | "history">("forecast");
-  const [availabilityTab, setAvailabilityTab] = useState<"staff" | "agency">("staff");
+  const [filter, setFilter] = useState<CalendarFilter>("all");
   const [weekStart, setWeekStart] = useState(() => monday(planningDate));
   const [calendar, setCalendar] = useState<Record<string, DriverAvailabilitySnapshot>>({});
   const [calendarBusy, setCalendarBusy] = useState(false);
@@ -155,7 +190,7 @@ export function Staffing() {
     try {
       setSnapshot(await request<DriverAvailabilitySnapshot>(`/api/v1/driver-availability?date=${encodeURIComponent(planningDate)}`, await token()));
       setError(undefined);
-    } catch (exception) { setError(exception instanceof Error ? exception.message : "Staffing could not be loaded."); }
+    } catch (exception) { setError(exception instanceof Error ? exception.message : "Availability could not be loaded."); }
   }, [planningDate, token]);
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => { setWeekStart(monday(planningDate)); }, [planningDate]);
@@ -171,7 +206,8 @@ export function Staffing() {
     return () => { cancelled = true; };
   }, [weekStart, token, calendarReload]);
 
-  const byGroup = useMemo(() => new Map(groups.map(group => [group, (snapshot?.drivers.filter(driver => driver.group === group && (availabilityTab === "staff" ? driver.employmentType === "Employed" : ["Agency", "Casual"].includes(driver.employmentType))) || []).sort((left, right) => Number(right.dispatchable) - Number(left.dispatchable) || Number(right.availabilityConfirmed) - Number(left.availabilityConfirmed) || left.displayName.localeCompare(right.displayName))])), [availabilityTab, snapshot]);
+  const inFilter = useCallback((driver: DriverAvailabilityItem) => filter === "all" || (filter === "Employed" ? driver.employmentType === "Employed" : ["Agency", "Casual"].includes(driver.employmentType)), [filter]);
+  const byGroup = useMemo(() => new Map(groups.map(group => [group, (snapshot?.drivers.filter(driver => driver.group === group && inFilter(driver)) || []).sort((left, right) => Number(right.dispatchable) - Number(left.dispatchable) || Number(right.availabilityConfirmed) - Number(left.availabilityConfirmed) || left.displayName.localeCompare(right.displayName))])), [inFilter, snapshot]);
   const matchedRows = useMemo(() => importRows.map(row => ({ ...row, driver: snapshot?.drivers.find(driver => normaliseDriverName(driver.displayName) === normaliseDriverName(row.driverName)) })), [importRows, snapshot]);
   const unmatchedRows = matchedRows.filter(row => !row.driver);
   const creatableRows = unmatchedRows.filter(row => isLikelyDriverName(row.driverName));
@@ -179,7 +215,7 @@ export function Staffing() {
   async function importAvailability() {
     if (!snapshot || !importRows.length) return;
     setImportBusy(true); setImportMessage(undefined);
-    let created = 0; let skipped = 0; let newDrivers = 0;
+    let created = 0; let newDrivers = 0;
     try {
       const uniqueRows = [...new Map(importRows.map(row => [`${normaliseDriverName(row.driverName)}|${row.date}`, row])).values()];
       const createdDrivers = new Map<string, string>();
@@ -196,7 +232,7 @@ export function Staffing() {
             if (added.created) newDrivers++;
           }
         }
-        if (!driverId || !["Agency", "Casual"].includes(row.driver?.employmentType || "Agency")) { skipped++; reviewRows++; continue; }
+        if (!driverId || !["Agency", "Casual"].includes(row.driver?.employmentType || "Agency")) { reviewRows++; continue; }
         try {
           await request("/api/v1/driver-availability", await token(), { method: "POST", body: JSON.stringify({ driverId, ...dayWindow(row.date), confirmed: true, longTermPlacement: false, placementEndDate: null, usualDays: null, notes: `Imported from ${row.source}`, bookingReference: row.source }) });
           created++;
@@ -210,68 +246,207 @@ export function Staffing() {
     finally { setImportBusy(false); }
   }
 
-  return <section className="staffing-page">
-    <div className="page-heading"><div><p className="eyebrow">Workforce control</p><h1>Staffing</h1><p>Timesheets, availability and driver history in one operational workspace. Employment type remains controlled by Master Data. Agency availability imports are matched against Driver Master and then feed the availability used by timesheet and dispatch views.</p></div></div>
-    <div className="staffing-section-tabs" role="tablist" aria-label="Staffing sections">
-      <button className={section === "forecast" ? "active" : ""} onClick={() => setSection("forecast")}>Driver Forecast</button>
-      <button className={section === "timesheets" ? "active" : ""} onClick={() => setSection("timesheets")}>Timesheets</button>
-      <button className={section === "availability" ? "active" : ""} onClick={() => setSection("availability")}>Availability</button>
-      <button className={section === "history" ? "active" : ""} onClick={() => setSection("history")}>Driver History</button>
-    </div>
-    {section === "forecast" && <DriverForecast />}
-    {section === "timesheets" && <DriverTimesheets embedded />}
-    {section === "history" && <DriverAssignments embedded />}
-    {section === "availability" && <>
-    <div className="staffing-availability-tabs" role="tablist" aria-label="Availability workforce tabs"><button className={availabilityTab === "staff" ? "active" : ""} onClick={() => setAvailabilityTab("staff")}>Staff</button><button className={availabilityTab === "agency" ? "active" : ""} onClick={() => setAvailabilityTab("agency")}>Agency</button></div>
-    {availabilityTab === "agency" && <div className="panel staffing-import-panel"><div className="title-row"><div><h2>Import agency availability</h2><p className="hint">Upload agency spreadsheets here. Matched rows feed the Agency availability calendar; manual calendar adjustments remain available after import.</p></div><label>Planning date<input type="date" value={planningDate} onChange={event => setPlanningDate(event.target.value)} /></label></div>
-      <input type="file" accept=".xlsx,.xls,.xlsm,.csv" multiple onChange={async event => { const files = Array.from(event.target.files || []); const results = await Promise.all(files.map(parseAgencyWorkbook)); const parsed = results.reduce((all, result) => ({ rows: all.rows.concat(result.rows), issues: all.issues.concat(result.issues) }), { rows: [] as ImportRow[], issues: [] as ImportIssue[] }); setImportRows(parsed.rows); setImportIssues(parsed.issues); setImportMessage(undefined); }} />
-      {importRows.length > 0 && <><p><strong>{importRows.length}</strong> confirmed day{importRows.length === 1 ? "" : "s"} ready · <strong>{unmatchedRows.length}</strong> names not matched to Driver Master · <strong>{creatableRows.length}</strong> eligible for provisional Agency creation.</p><button className="primary" type="button" disabled={importBusy || (!matchedRows.some(row => row.driver) && creatableRows.length === 0)} onClick={() => void importAvailability()}>{importBusy ? "Importing…" : "Import confirmed availability and update Master Data"}</button></>}
-      {importIssues.length > 0 && <details><summary>{importIssues.length} import issue{importIssues.length === 1 ? "" : "s"}</summary><ul>{importIssues.slice(0, 100).map(issue => <li key={`${issue.row}-${issue.reason}`}>{issue.row}: {issue.reason}</li>)}</ul></details>}
-      {importMessage && <p className="notice inline-notice">{importMessage}</p>}
+  const summary = snapshot?.summary;
+  return <>
+    {error && <p className="ui-error">{error}</p>}
+    {summary && <div className="ui-grid">
+      <div className="ui-metric"><span>Employed available</span><strong>{summary.employedAvailable}</strong><small>{workingDateLabel(planningDate)}</small></div>
+      <div className="ui-metric"><span>Agency confirmed</span><strong>{summary.agencyConfirmed + summary.casualConfirmed}</strong><small>{summary.agencyUnconfirmed + summary.casualUnconfirmed} not confirmed</small></div>
+      <div className={`ui-metric ${summary.surplusShortfall < 0 ? "red" : "green"}`}><span>Needed</span><strong>{summary.driversRequired}</strong><small>{summary.surplusShortfall < 0 ? `${Math.abs(summary.surplusShortfall)} short` : `${summary.surplusShortfall} spare`}</small></div>
+      {snapshot.classificationMismatchCount > 0 && <div className="ui-metric amber"><span>Master data to check</span><strong>{snapshot.classificationMismatchCount}</strong><small>employment type differs from the source</small></div>}
     </div>}
-    {error && <p className="notice inline-notice">{error}</p>}
-    {snapshot && <><div className="driver-availability-summary staffing-summary">{[`${snapshot.summary.employedAvailable} employed available`, `${snapshot.summary.agencyConfirmed} agency confirmed`, `${snapshot.summary.casualConfirmed} casual confirmed`, `${snapshot.summary.driversRequired} drivers required`, `${snapshot.summary.surplusShortfall < 0 ? Math.abs(snapshot.summary.surplusShortfall) + " shortfall" : snapshot.summary.surplusShortfall + " surplus"}`, `${snapshot.classificationMismatchCount} Master Data review`].map(item => <span key={item}>{item}</span>)}</div>
-       <div className="panel staffing-calendar-panel"><div className="title-row"><div><h2>{availabilityTab === "staff" ? "Staff availability" : "Agency availability"} · Availability calendar</h2><p className="hint">{availabilityTab === "staff" ? "Sage HR working patterns are the source for employed staff leave and availability. This view is read-only in Staffing." : "Agency availability comes from imported spreadsheets and controlled manual calendar adjustments."}</p></div><div className="calendar-controls"><button type="button" onClick={() => setWeekStart(addDays(weekStart, -7))}>← Previous</button><strong>{weekStart} – {addDays(weekStart, 6)}</strong><button type="button" onClick={() => setWeekStart(addDays(weekStart, 7))}>Next →</button></div></div>{calendarBusy ? <p className="hint">Loading seven-day availability…</p> : <AvailabilityCalendar employmentType={availabilityTab === "staff" ? "Employed" : "Agency"} weekStart={weekStart} snapshots={calendar} onChanged={() => { void refresh(); setCalendarReload(value => value + 1); }} />}</div>
-      <div className="driver-availability-groups staffing-groups">{groups.map(group => <details key={group} open={group.includes("unconfirmed") || group.includes("blocked")}><summary>{group}<b>{byGroup.get(group)?.length || 0}</b></summary><div className="driver-availability-list">{byGroup.get(group)?.map(driver => <StaffingRow key={driver.driverId} driver={driver} onChanged={() => void refresh()} />)}</div></details>)}</div></>}
-    </>}
-  </section>;
+
+    <section className="ui-card staffing-calendar-panel">
+      <div className="ui-card-head">
+        <h2>Availability calendar</h2>
+        <div className="ui-page-actions">
+          <div className="ui-seg" role="group" aria-label="Show drivers">
+            {([["all", "All"], ["Employed", "Employed"], ["Agency", "Agency & casual"]] as const).map(([key, label]) => <button key={key} type="button" aria-pressed={filter === key} onClick={() => setFilter(key)}>{label}</button>)}
+          </div>
+          <button type="button" onClick={() => setWeekStart(addDays(weekStart, -7))}>‹ Week</button>
+          <strong>{workingDateLabel(weekStart)} – {workingDateLabel(addDays(weekStart, 6))}</strong>
+          <button type="button" onClick={() => setWeekStart(addDays(weekStart, 7))}>Week ›</button>
+          <button type="button" className="primary" onClick={() => setImportOpen(value => !value)}>{importOpen ? "Close import" : "Import agency spreadsheet"}</button>
+        </div>
+      </div>
+      <p className="hint">Employed drivers: leave comes from Sage HR and rest from Tacho; Sage HR working patterns are not read yet, so other days show as PATTERN. Agency and casual: from imported agency spreadsheets, and you can set a day by clicking it.</p>
+      {importOpen && <div className="staffing-import-panel">
+        <h3>Import agency availability</h3>
+        <p className="hint">Upload the agency booking spreadsheets. Names are matched to Driver Master; new agency names are added as agency drivers.</p>
+        <input type="file" accept=".xlsx,.xls,.xlsm,.csv" multiple onChange={async event => { const files = Array.from(event.target.files || []); const results = await Promise.all(files.map(parseAgencyWorkbook)); const parsed = results.reduce((all, result) => ({ rows: all.rows.concat(result.rows), issues: all.issues.concat(result.issues) }), { rows: [] as ImportRow[], issues: [] as ImportIssue[] }); setImportRows(parsed.rows); setImportIssues(parsed.issues); setImportMessage(undefined); }} />
+        {importRows.length > 0 && <><p><strong>{importRows.length}</strong> confirmed day{importRows.length === 1 ? "" : "s"} ready · <strong>{unmatchedRows.length}</strong> names not matched to Driver Master · <strong>{creatableRows.length}</strong> will be added as agency drivers.</p><button className="primary" type="button" disabled={importBusy || (!matchedRows.some(row => row.driver) && creatableRows.length === 0)} onClick={() => void importAvailability()}>{importBusy ? "Importing…" : "Import confirmed availability"}</button></>}
+        {importIssues.length > 0 && <details><summary>{importIssues.length} row{importIssues.length === 1 ? "" : "s"} not imported</summary><ul>{importIssues.slice(0, 100).map(issue => <li key={`${issue.row}-${issue.reason}`}>{issue.row}: {issue.reason}</li>)}</ul></details>}
+        {importMessage && <p className="notice inline-notice">{importMessage}</p>}
+      </div>}
+      {calendarBusy ? <div className="ui-empty">Loading the week…</div> : <AvailabilityCalendar filter={filter} weekStart={weekStart} snapshots={calendar} onChanged={() => { void refresh(); setCalendarReload(value => value + 1); }} />}
+    </section>
+
+    {snapshot && <details className="ui-card">
+      <summary><strong>Who is available on {workingDateLabel(planningDate)}</strong> · amend an agency booking window</summary>
+      <div className="driver-availability-groups staffing-groups">{groups.map(group => <details key={group} open={group.includes("unconfirmed")}><summary>{group}<b>{byGroup.get(group)?.length || 0}</b></summary><div className="driver-availability-list">{byGroup.get(group)?.map(driver => <StaffingRow key={driver.driverId} driver={driver} onChanged={() => void refresh()} />)}</div></details>)}</div>
+    </details>}
+  </>;
 }
 
 function DriverForecast() {
   const token = useAccessToken();
-  const [from, setFrom] = useState(() => monday(new Date().toISOString().slice(0, 10)));
+  const [workingDate] = useWorkingDate();
+  const [from, setFrom] = useState(() => monday(workingDate));
   const [rows, setRows] = useState<ForecastDay[]>([]);
+  const [dirty, setDirty] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string>();
   const to = addDays(from, 6);
+  useEffect(() => { setFrom(monday(workingDate)); }, [workingDate]);
   const load = useCallback(async () => {
     setBusy(true);
-    try { setRows(await request<ForecastDay[]>(`/api/v1/driver-forecast?from=${from}&to=${to}`, await token(), undefined, 30000)); setMessage(undefined); }
+    try { setRows(await request<ForecastDay[]>(`/api/v1/driver-forecast?from=${from}&to=${to}`, await token(), undefined, 30000)); setDirty({}); setMessage(undefined); }
     catch (exception) { setMessage(exception instanceof Error ? exception.message : "Forecast could not be loaded."); }
     finally { setBusy(false); }
   }, [from, to, token]);
   useEffect(() => { void load(); }, [load]);
   async function save(row: ForecastDay) {
-    await request(`/api/v1/driver-forecast/${row.date}`, await token(), { method: "PUT", body: JSON.stringify({ dayRequired: row.dayRequired, nightRequired: row.nightRequired, agencyRequested: row.agencyRequested, agencyConfirmed: row.agencyConfirmed, notes: row.notes || null, opsNotes: row.opsNotes || null }) });
-    setMessage(`${row.date} forecast saved.`); await load();
+    try {
+      await request(`/api/v1/driver-forecast/${row.date}`, await token(), { method: "PUT", body: JSON.stringify({ dayRequired: row.dayRequired, nightRequired: row.nightRequired, agencyRequested: row.agencyRequested, agencyConfirmed: row.agencyConfirmed, notes: row.notes || null, opsNotes: row.opsNotes || null }) });
+      setMessage(`${workingDateLabel(row.date)} saved.`); await load();
+    } catch (exception) { setMessage(exception instanceof Error ? exception.message : "Could not save."); }
   }
-  function useSuggestion(date: string) {
+  function adoptSuggestion(date: string) {
     setRows(current => current.map(row => row.date === date ? { ...row, dayRequired: row.suggestedDayRequired, nightRequired: row.suggestedNightRequired } : row));
+    setDirty(current => ({ ...current, [date]: true }));
   }
-  function edit(date: string, field: keyof ForecastDay, value: string) { setRows(current => current.map(row => row.date === date ? { ...row, [field]: field === "notes" || field === "opsNotes" ? value : Math.max(0, Number(value) || 0) } : row)); }
-  return <section className="driver-forecast"><div className="title-row"><div><p className="eyebrow">Management input · Operations action · Planner visibility</p><h2>Driver requirements forecast</h2><p className="hint">Management values remain authoritative. The TMS also suggests demand from current planned runs so the team can adopt or override it.</p></div><div className="calendar-controls"><button type="button" onClick={() => setFrom(addDays(from, -7))}>← Previous week</button><strong>{from} – {to}</strong><button type="button" onClick={() => setFrom(addDays(from, 7))}>Next week →</button><button type="button" onClick={() => void load()} disabled={busy}>{busy ? "Loading…" : "Refresh forecast"}</button></div></div>{message && <p className="notice inline-notice">{message}</p>}{busy ? <p className="hint">Calculating requirements against availability…</p> : <div className="table-wrap"><table className="forecast-table"><thead><tr><th>Date</th><th>Day required</th><th>Night required</th><th>Planned-run suggestion</th><th>Available now</th><th>Shortfall</th><th>Agency target</th><th>Agency confirmed</th><th>Operations notes</th><th>Save</th></tr></thead><tbody>{rows.map(row => <tr key={row.date} className={row.shortfall > 0 ? "forecast-shortfall" : ""}><th>{row.date}<small>{new Intl.DateTimeFormat("en-GB", { weekday: "short" }).format(new Date(`${row.date}T12:00:00`))}</small></th><td><input aria-label={`${row.date} day drivers required`} type="number" min="0" value={row.dayRequired} onChange={event => edit(row.date, "dayRequired", event.target.value)} /></td><td><input aria-label={`${row.date} night drivers required`} type="number" min="0" value={row.nightRequired} onChange={event => edit(row.date, "nightRequired", event.target.value)} /></td><td><strong>{row.suggestedDayRequired} day · {row.suggestedNightRequired} night</strong><small>{row.plannedRunCount} planned runs · suggested shortfall {row.suggestedShortfall > 0 ? row.suggestedShortfall : 0}</small><button type="button" className="forecast-suggestion-button" onClick={() => useSuggestion(row.date)}>Use suggestion</button></td><td><strong>{row.availableDrivers}</strong><small>{row.employedAvailable} employed · {row.agencyAvailable} agency · {row.casualAvailable} casual</small></td><td><strong className={row.shortfall > 0 ? "forecast-gap" : "forecast-ok"}>{row.shortfall > 0 ? `${row.shortfall} needed` : `${Math.abs(row.shortfall)} surplus`}</strong></td><td><input aria-label={`${row.date} agency target`} type="number" min="0" value={row.agencyRequested} onChange={event => edit(row.date, "agencyRequested", event.target.value)} /></td><td><input aria-label={`${row.date} agency confirmed`} type="number" min="0" value={row.agencyConfirmed} onChange={event => edit(row.date, "agencyConfirmed", event.target.value)} /></td><td><input aria-label={`${row.date} operations notes`} value={row.opsNotes || ""} onChange={event => edit(row.date, "opsNotes", event.target.value)} placeholder="Ops action / booking reference" /></td><td><button className="primary" type="button" onClick={() => void save(row)}>Save</button></td></tr>)}</tbody></table></div>}</section>;
+  function edit(date: string, field: keyof ForecastDay, value: string) {
+    setRows(current => current.map(row => row.date === date ? { ...row, [field]: field === "notes" || field === "opsNotes" ? value : Math.max(0, Number(value) || 0) } : row));
+    setDirty(current => ({ ...current, [date]: true }));
+  }
+  const weekShort = rows.reduce((sum, row) => sum + Math.max(0, row.shortfall), 0);
+  return <section className="driver-forecast">
+    <div className="ui-card-head">
+      <div><p className="eyebrow">Management input · Operations action · Planner visibility</p><h2>Driver requirements forecast</h2></div>
+      <div className="ui-page-actions">
+        <button type="button" onClick={() => setFrom(addDays(from, -7))}>‹ Week</button>
+        <strong>{workingDateLabel(from)} – {workingDateLabel(to)}</strong>
+        <button type="button" onClick={() => setFrom(addDays(from, 7))}>Week ›</button>
+        {weekShort > 0 ? <span className="ui-chip red">{weekShort} driver-days short</span> : rows.length > 0 && <span className="ui-chip green">Week covered</span>}
+      </div>
+    </div>
+    <p className="hint">Management sets how many drivers are needed. The suggestion comes from the runs already planned.</p>
+    {message && <p className="notice inline-notice">{message}</p>}
+    {busy && !rows.length ? <div className="ui-empty">Working out cover against availability…</div> : <div className="forecast-cards">
+      {rows.map(row => {
+        const needed = row.dayRequired + row.nightRequired;
+        const short = row.shortfall > 0;
+        return <article key={row.date} className={`ui-card forecast-card ${short ? "short" : "ok"} ${row.date === workingDate ? "selected" : ""}`}>
+          <header><strong>{workingDateLabel(row.date)}</strong><span className={`ui-chip ${short ? "red" : "green"}`}>{short ? `${row.shortfall} short` : row.shortfall < 0 ? `${Math.abs(row.shortfall)} spare` : "Covered"}</span></header>
+          <div className="forecast-need-have"><div><span>Need</span><b>{needed}</b></div><div><span>Have</span><b>{row.availableDrivers}</b></div></div>
+          <small>{row.employedAvailable} employed · {row.agencyAvailable} agency · {row.casualAvailable} casual</small>
+          <div className="forecast-inputs">
+            <label>Day<input aria-label={`${row.date} day drivers required`} type="number" min="0" value={row.dayRequired} onChange={event => edit(row.date, "dayRequired", event.target.value)} /></label>
+            <label>Night<input aria-label={`${row.date} night drivers required`} type="number" min="0" value={row.nightRequired} onChange={event => edit(row.date, "nightRequired", event.target.value)} /></label>
+            <label>Agency asked<input aria-label={`${row.date} agency target`} type="number" min="0" value={row.agencyRequested} onChange={event => edit(row.date, "agencyRequested", event.target.value)} /></label>
+            <label>Agency confirmed<input aria-label={`${row.date} agency confirmed`} type="number" min="0" value={row.agencyConfirmed} onChange={event => edit(row.date, "agencyConfirmed", event.target.value)} /></label>
+          </div>
+          {(row.suggestedDayRequired !== row.dayRequired || row.suggestedNightRequired !== row.nightRequired) && <button type="button" className="forecast-suggestion-button" onClick={() => adoptSuggestion(row.date)}>{row.plannedRunCount} runs planned: use {row.suggestedDayRequired} day · {row.suggestedNightRequired} night</button>}
+          <input aria-label={`${row.date} operations notes`} value={row.opsNotes || ""} onChange={event => edit(row.date, "opsNotes", event.target.value)} placeholder="Note, e.g. agency booking reference" />
+          {dirty[row.date] && <button className="primary" type="button" onClick={() => void save(row)}>Save</button>}
+        </article>;
+      })}
+    </div>}
+  </section>;
 }
 
-function AvailabilityCalendar({ weekStart, snapshots, onChanged, employmentType }: { weekStart: string; snapshots: Record<string, DriverAvailabilitySnapshot>; onChanged: () => void; employmentType: "Employed" | "Agency" }) {
+type FileDriver = { driverId: string; displayName?: string; employeeNumber?: string; driverType?: string; driverGroup?: string; skills?: string; workingStyle?: string; recentRuns?: number; recentLongRuns?: number; recentFurthestMiles?: number; onLeave: boolean; leaveType?: string };
+type FileStatus = { driverId: string; projectedDayNumber?: number; cycleLength?: number; cycleNote?: string; weeklyRestStatus?: string; availabilityStatus?: string; availabilityMessage?: string };
+
+function expiryChip(label: string, value: string | undefined, today: string) {
+  if (!value) return <span key={label} className="ui-chip">{label} not recorded</span>;
+  const days = Math.round((Date.parse(`${value.slice(0, 10)}T12:00:00Z`) - Date.parse(`${today}T12:00:00Z`)) / 86_400_000);
+  const tone = days < 0 ? "red" : days <= 30 ? "amber" : "green";
+  const text = days < 0 ? `${label} expired` : days <= 30 ? `${label} ${days}d` : `${label} ok`;
+  return <span key={label} className={`ui-chip ${tone}`} title={`${label} expires ${value.slice(0, 10)}`}>{text}</span>;
+}
+
+const styleLabel: Record<string, string> = { Tramper: "Tramper (nights out)", HalfTramper: "Half tramper", Day: "Day driver", Night: "Night driver" };
+
+function DriverFiles() {
+  const token = useAccessToken();
+  const [date] = useWorkingDate();
+  const today = todayIsoDate();
+  const [search, setSearch] = useState("");
+  const [problemsOnly, setProblemsOnly] = useState(false);
+  const [state, setState] = useState<{ drivers: FileDriver[]; statuses: Record<string, FileStatus>; master: Awaited<ReturnType<typeof getMasterDispatchData>> | undefined; error?: string; loading: boolean }>({ drivers: [], statuses: {}, master: undefined, loading: true });
+
+  useEffect(() => {
+    let active = true;
+    setState(current => ({ ...current, loading: true }));
+    void (async () => {
+      const accessToken = await token();
+      const [dispatch, status, master] = await Promise.allSettled([
+        request<{ drivers: FileDriver[] }>(`/api/v1/driver-dispatch?date=${encodeURIComponent(date)}`, accessToken, undefined, 60000),
+        request<{ drivers: FileStatus[] }>(`/api/v1/driver-dispatch-status?date=${encodeURIComponent(date)}`, accessToken, undefined, 60000),
+        getMasterDispatchData(accessToken),
+      ]);
+      if (!active) return;
+      setState({
+        drivers: dispatch.status === "fulfilled" ? dispatch.value.drivers : [],
+        statuses: status.status === "fulfilled" ? Object.fromEntries(status.value.drivers.map(item => [item.driverId, item])) : {},
+        master: master.status === "fulfilled" ? master.value : undefined,
+        error: dispatch.status === "rejected" ? "Driver list could not be loaded." : undefined,
+        loading: false,
+      });
+    })();
+    return () => { active = false; };
+  }, [date, token]);
+
+  const rows = useMemo(() => {
+    const masterById = new Map((state.master?.drivers || []).map(driver => [driver.driverId, driver]));
+    return state.drivers.map(driver => {
+      const master = masterById.get(driver.driverId);
+      const docs = [master?.licenceExpiry, master?.cpcExpiry, master?.digitalTachoCardExpiry];
+      const docDays = docs.filter(Boolean).map(value => Math.round((Date.parse(`${value!.slice(0, 10)}T12:00:00Z`) - Date.parse(`${today}T12:00:00Z`)) / 86_400_000));
+      const status = state.statuses[driver.driverId];
+      const problem = docDays.some(days => days <= 30) || status?.availabilityStatus === "Unavailable" || status?.weeklyRestStatus === "Overdue";
+      return { driver, master, status, problem, worstDoc: docDays.length ? Math.min(...docDays) : 9999 };
+    })
+      .filter(row => !problemsOnly || row.problem)
+      .filter(row => !search.trim() || `${row.driver.displayName} ${row.driver.employeeNumber} ${row.driver.skills}`.toLowerCase().includes(search.trim().toLowerCase()))
+      .sort((a, b) => Number(b.problem) - Number(a.problem) || a.worstDoc - b.worstDoc || (a.driver.displayName || "").localeCompare(b.driver.displayName || ""));
+  }, [problemsOnly, search, state, today]);
+
+  return <section className="ui-card">
+    <div className="ui-card-head">
+      <h2>Driver files</h2>
+      <div className="ui-filters">
+        <label>Search<input value={search} onChange={event => setSearch(event.target.value)} placeholder="Name, number or skill" /></label>
+        <label className="checkbox-label"><input type="checkbox" checked={problemsOnly} onChange={event => setProblemsOnly(event.target.checked)} /> Only drivers needing attention</label>
+      </div>
+    </div>
+    <p className="hint">Block day and weekly rest come from Tacho for {workingDateLabel(date)}. Long runs are runs of 120+ miles from Barnham in the last 14 days, so the far work is shared fairly.</p>
+    {state.error && <p className="ui-error">{state.error}</p>}
+    {state.loading ? <div className="ui-empty">Loading driver files…</div> : rows.length === 0 ? <div className="ui-empty">No drivers match.</div> : <div className="ui-table-wrap"><table className="ui-table">
+      <thead><tr><th>Driver</th><th>Works as</th><th>Block</th><th>Last 14 days</th><th>Documents</th><th>Skills</th></tr></thead>
+      <tbody>{rows.map(({ driver, master, status }) => <tr key={driver.driverId}>
+        <td><strong>{driver.displayName || master?.preferredName || master?.fullName || driver.employeeNumber}</strong><br /><small>{driver.employeeNumber || "No employee number"} · {driver.driverType || master?.employmentType || "Type not set"}{master?.agencyName ? ` · ${master.agencyName}` : ""}</small></td>
+        <td>{driver.workingStyle ? styleLabel[driver.workingStyle] || driver.workingStyle : <span className="ui-chip">Not set</span>}</td>
+        <td>{driver.onLeave ? <span className="ui-chip blue">{driver.leaveType || "Leave"}</span> : status?.projectedDayNumber ? <span className={`ui-chip ${status.availabilityStatus === "Unavailable" ? "red" : status.projectedDayNumber >= (status.cycleLength || 6) ? "amber" : "green"}`}>Day {status.projectedDayNumber} of {status.cycleLength || 6}</span> : <span className="ui-chip">No Tacho block</span>}{status?.cycleNote && <><br /><small>{status.cycleNote}</small></>}</td>
+        <td>{driver.recentRuns ?? 0} runs · {driver.recentLongRuns ?? 0} long{driver.recentFurthestMiles ? <><br /><small>furthest {Math.round(driver.recentFurthestMiles)} mi</small></> : null}</td>
+        <td><div className="ui-page-actions">{expiryChip("Licence", master?.licenceExpiry, today)}{expiryChip("CPC", master?.cpcExpiry, today)}{expiryChip("Tacho card", master?.digitalTachoCardExpiry, today)}</div></td>
+        <td><small>{driver.skills || "—"}</small></td>
+      </tr>)}</tbody>
+    </table></div>}
+  </section>;
+}
+
+function AvailabilityCalendar({ weekStart, snapshots, onChanged, filter }: { weekStart: string; snapshots: Record<string, DriverAvailabilitySnapshot>; onChanged: () => void; filter: CalendarFilter }) {
   const token = useAccessToken();
   const [openCell, setOpenCell] = useState<string>();
   const [savingCell, setSavingCell] = useState<string>();
   const drivers = useMemo(() => {
     const all = Object.values(snapshots).flatMap(snapshot => snapshot.drivers);
-    return [...new Map(all.filter(driver => employmentType === "Employed" ? driver.employmentType === "Employed" : ["Agency", "Casual"].includes(driver.employmentType)).map(driver => [driver.driverId, driver])).values()].sort((a, b) => Number(b.dispatchable) - Number(a.dispatchable) || Number(b.availabilityConfirmed) - Number(a.availabilityConfirmed) || a.displayName.localeCompare(b.displayName));
-  }, [employmentType, snapshots]);
+    return [...new Map(all.filter(driver => filter === "all" || (filter === "Employed" ? driver.employmentType === "Employed" : ["Agency", "Casual"].includes(driver.employmentType))).map(driver => [driver.driverId, driver])).values()].sort((a, b) => Number(b.dispatchable) - Number(a.dispatchable) || Number(b.availabilityConfirmed) - Number(a.availabilityConfirmed) || a.displayName.localeCompare(b.displayName));
+  }, [filter, snapshots]);
   async function setStatus(driver: DriverAvailabilityItem, date: string, status: "AV" | "Leave" | "Not available") {
-    if (employmentType === "Employed" || (driver.employmentType !== "Agency" && driver.employmentType !== "Casual")) return;
+    if (driver.employmentType !== "Agency" && driver.employmentType !== "Casual") return;
     const key = `${driver.driverId}-${date}`;
     setSavingCell(key);
     const current = snapshots[date]?.drivers.find(item => item.driverId === driver.driverId);

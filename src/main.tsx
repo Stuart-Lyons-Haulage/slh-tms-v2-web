@@ -32,6 +32,7 @@ import './ui-navigation-refresh.css';
 import './table-header-viewport-fix.css';
 import './driver-timesheets.css';
 import './staffing.css';
+import './workflow-ui.css';
 
 installPollingPolicy();
 installPerformanceTelemetry();

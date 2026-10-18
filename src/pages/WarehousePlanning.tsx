@@ -1,14 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useWorkingDate } from '../lib/workingDate';
 import { request } from '../lib/api';
 import { useAccessToken } from '../lib/auth';
 import { useApi } from '../lib/useApi';
 import { startVisiblePolling } from '../lib/visiblePolling';
 import { expectedAt, sortByExpected, unitLabel, type WarehouseDailyResult, type WarehouseMovement } from './warehousePlanningData';
 
-function localDate() {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-}
 function clock(value?: string) {
   return value ? new Date(value).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '';
 }
@@ -31,7 +28,7 @@ function totals(rows: WarehouseMovement[]) {
  */
 export function WarehousePlanning() {
   const token = useAccessToken();
-  const [date, setDate] = useState(localDate());
+  const [date] = useWorkingDate();
   const data = useApi(useCallback(async () => request<WarehouseDailyResult>(`/api/v1/warehouse/daily?date=${encodeURIComponent(date)}`, await token()), [date, token]));
   const refresh = data.refresh;
   useEffect(() => startVisiblePolling(refresh, 60_000), [refresh]);
@@ -41,7 +38,7 @@ export function WarehousePlanning() {
   return <section className="page warehouse-page">
     <div className="page-heading warehouse-heading">
       <div><p className="eyebrow">Barnham warehouse</p><h1>Warehouse board</h1><p>What's coming in and what needs loading at SLH. Live ETAs come from tracking; confirm each movement with the count you actually handled.</p></div>
-      <div className="warehouse-actions"><label>Date<input type="date" value={date} onChange={event => setDate(event.target.value)} /></label><button type="button" onClick={() => window.print()}>Print</button><button type="button" onClick={() => void refresh()}>Refresh</button></div>
+      <div className="warehouse-actions"><button type="button" onClick={() => window.print()}>Print</button><button type="button" onClick={() => void refresh()}>Refresh</button></div>
     </div>
     {data.loading && !data.data && <p className="notice">Loading warehouse movements…</p>}
     {data.error && <p className="notice error">Warehouse movements could not be loaded: {data.error}</p>}

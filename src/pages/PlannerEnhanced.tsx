@@ -1,6 +1,5 @@
-import { useState } from "react";
 import { RunPlannerLive } from "./RunPlannerLive";
-import { tomorrowIsoDate } from "../lib/dateUtils";
+import { useWorkingDate } from "../lib/workingDate";
 
 function clickPlannerButton(pattern: RegExp) {
   const buttons = Array.from(document.querySelectorAll<HTMLButtonElement>(".simple-planner-toolbar button"));
@@ -9,11 +8,10 @@ function clickPlannerButton(pattern: RegExp) {
 }
 
 export function PlannerEnhanced() {
-  const [date, setDate] = useState(tomorrowIsoDate());
+  const [date] = useWorkingDate();
 
   return <section className="planner-enhanced-page">
     <div className="panel planner-action-bar">
-      <label>Date<input type="date" value={date} onChange={event => setDate(event.target.value)} /></label>
       <button className="primary" type="button" onClick={() => clickPlannerButton(/add run/i)}>Add Run</button>
       <button type="button" onClick={() => clickPlannerButton(/^refresh$/i)}>Refresh</button>
       <span className="planner-action-spacer" />

@@ -1,8 +1,8 @@
 import { useCallback, useMemo, useState } from "react";
+import { useWorkingDate } from "../lib/workingDate";
 import { api, request, type Driver } from "../lib/api";
 import { useAccessToken } from "../lib/auth";
 import { useApi } from "../lib/useApi";
-import { todayIsoDate } from "../lib/dateUtils";
 
 type ComplianceRow = {
   assetType: "Vehicle" | "Trailer";
@@ -49,8 +49,6 @@ type ComplianceReport = {
   rows: ComplianceRow[];
 };
 
-// today() replaced with timezone-safe todayIsoDate from dateUtils
-const today = todayIsoDate;
 const fmtTime = (value?: string) => value
   ? new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(value))
   : "—";
@@ -76,7 +74,7 @@ function statusDot(status: ComplianceRow["status"]) {
 
 export function DailyCompliance() {
   const token = useAccessToken();
-  const [date, setDate] = useState(today());
+  const [date] = useWorkingDate();
   const [assetType, setAssetType] = useState("all");
   const [status, setStatus] = useState("all");
   const [employment, setEmployment] = useState("all");
@@ -142,7 +140,6 @@ export function DailyCompliance() {
     </div>
 
     <div className="panel" style={{ display: "flex", gap: 12, alignItems: "end", flexWrap: "wrap" }}>
-      <label>Date<input type="date" value={date} onChange={event => setDate(event.target.value)} /></label>
       <label>Asset<select value={assetType} onChange={event => setAssetType(event.target.value)}><option value="all">Vehicles & trailers</option><option value="Vehicle">Vehicles</option><option value="Trailer">Trailers</option></select></label>
       <label>Status<select value={status} onChange={event => setStatus(event.target.value)}><option value="all">All statuses</option><option value="Compliant">Compliant</option><option value="Paper evidence required">Agency / paper</option><option value="Review">Review</option><option value="Non-compliant">Non-compliant</option></select></label>
       <label>Employment<select value={employment} onChange={event => setEmployment(event.target.value)}><option value="all">All drivers</option><option value="Employed">Employed</option><option value="Casual">Casual</option><option value="Agency">Agency</option><option value="Subcontractor">Subcontractor</option></select></label>

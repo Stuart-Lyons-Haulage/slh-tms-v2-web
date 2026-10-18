@@ -1,8 +1,7 @@
-import { useState } from "react";
 import { CustomerDeliveryTimesActions } from "../components/CustomerDeliveryTimesActions";
 import { CustomerLoadPlanActions } from "../components/CustomerLoadPlanActions";
 import { CustomerMessagesPanel } from "../components/CustomerMessagesPanel";
-import { todayIsoDate } from "../lib/dateUtils";
+import { useWorkingDate } from "../lib/workingDate";
 import "../customer-comms.css";
 
 /**
@@ -10,7 +9,7 @@ import "../customer-comms.css";
  * from the live Dispatch plan, and inbound customer messages that are not new orders.
  */
 export function CustomerComms() {
-  const [date, setDate] = useState(todayIsoDate);
+  const [date] = useWorkingDate();
 
   return <div className="customer-comms-page">
     <header className="customer-comms-header">
@@ -20,7 +19,6 @@ export function CustomerComms() {
         <p>Send load plans and delivery times from the live plan, and deal with customer requests that are not new orders.</p>
       </div>
       <div className="customer-comms-actions">
-        <label className="smart-date-control">Planning date<input type="date" value={date} onChange={event => setDate(event.target.value)} /></label>
         <CustomerLoadPlanActions date={date} />
         <CustomerDeliveryTimesActions date={date} />
       </div>
