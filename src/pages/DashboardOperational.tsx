@@ -143,7 +143,17 @@ export function DashboardOperational() {
     return list.sort((a, b) => toneRank[a.tone] - toneRank[b.tone]);
   }, [comms.data, changes.data, compliance.data, date, forecast.data, master.data, messages.data, pallets.data, readiness.data, reviewCounts.data, sync.data, today]);
 
-  const failures = [readiness, pallets, reviewCounts, changes, forecast, messages, sync].filter(item => item.error).length;
+  const checks: Array<[string, { error?: string }]> = [["Runs", readiness], ["Pallet Order", pallets], ["Orders", reviewCounts], ["Order changes", changes], ["Driver cover", forecast], ["Customer messages", messages], ["Data feeds", sync]];
+  const failedChecks = checks.filter(([, item]) => item.error).map(([name]) => name);
+  const failures = failedChecks.length;
+  const serverDown = failures >= 5;
+  // Most failures at once means the server is briefly unavailable (usually restarting after
+  // an update): retry every 15 seconds until it answers, rather than waiting a minute.
+  useEffect(() => {
+    if (failures === 0) return;
+    const timer = globalThis.setTimeout(() => void refreshFast(), 15_000);
+    return () => globalThis.clearTimeout(timer);
+  }, [failures, refreshFast, readiness.error, pallets.error, reviewCounts.error]);
   const loading = [readiness, pallets, reviewCounts, changes].some(item => item.loading && !item.data);
   const summary = pallets.data?.summary;
   const ready = readiness.data;
@@ -166,8 +176,9 @@ export function DashboardOperational() {
       <Link className={`ui-metric ${day && day.shortfall > 0 ? "red" : day ? "green" : ""}`} to="/staffing"><span>Drivers</span><strong>{day ? `${day.availableDrivers}/${day.dayRequired + day.nightRequired}` : "—"}</strong><small>{day ? day.shortfall > 0 ? `${day.shortfall} short` : "available / needed" : "loading"}</small></Link>
     </div>
 
+    {serverDown && <p className="ui-error">Can't reach the TMS server just now. It's usually restarting after an update and back within a few minutes. Retrying automatically every 15 seconds.</p>}
     <section className="ui-card">
-      <div className="ui-card-head"><h2>Needs you now</h2>{failures > 0 && <span className="ui-chip amber">{plural(failures, "check")} could not load</span>}</div>
+      <div className="ui-card-head"><h2>Needs you now</h2>{failures > 0 && !serverDown && <span className="ui-chip amber" title={failedChecks.join(", ")}>Couldn't load: {failedChecks.join(", ")}</span>}</div>
       {loading && !items.length ? <div className="ui-empty">Checking orders, runs and drivers…</div>
         : items.length ? <div className="ui-attention">
           {items.map(item => <Link key={item.key} to={item.to} className={item.tone}>

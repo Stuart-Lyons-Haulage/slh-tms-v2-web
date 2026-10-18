@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { request } from "../lib/api";
+import { apiBaseUrl, request } from "../lib/api";
 import { useAccessToken } from "../lib/auth";
 import { useApi } from "../lib/useApi";
 
@@ -14,7 +14,15 @@ type ScheduleCustomer = {
   deliveryTimesStatus?: string;
   hasPlanTomorrow: boolean;
   hasDeliveriesToday: boolean;
+  loadPlanOpenedInOutlook?: { openedBy?: string; openedAtUtc: string };
+  deliveryTimesOpenedInOutlook?: { openedBy?: string; openedAtUtc: string };
 };
+
+function openedLabel(opened?: { openedBy?: string; openedAtUtc: string }) {
+  if (!opened) return null;
+  const time = new Date(opened.openedAtUtc).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  return <small className="hint">Opened in Outlook {time}{opened.openedBy ? ` by ${opened.openedBy.split("@")[0]}` : ""}</small>;
+}
 type ScheduleResponse = { loadPlanTime: string; deliveryTimesTime: string; loadPlanLatest: string; today: string; tomorrow: string; emailsWaitingOverTenMinutes: number; customers: ScheduleCustomer[] };
 
 function statusChip(status?: string, hold?: string) {
@@ -36,6 +44,35 @@ export function CustomerCommsSchedule() {
   const [draft, setDraft] = useState<ScheduleResponse>();
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string>();
+  const [opening, setOpening] = useState<string>();
+
+  /** Downloads a ready-to-send email; opening it gives a new Outlook message with the PDF attached. */
+  async function openInOutlook(customer: ScheduleCustomer, kind: "plan" | "times") {
+    if (!draft) return;
+    const key = `${customer.customerCode}-${kind}`;
+    setOpening(key); setMessage(undefined);
+    try {
+      const date = kind === "plan" ? draft.tomorrow : draft.today;
+      const response = await fetch(`${apiBaseUrl}/api/v1/customer-load-plans/draft?date=${encodeURIComponent(date)}&customerCode=${encodeURIComponent(customer.customerCode)}&kind=${kind}`, { headers: { Authorization: `Bearer ${await token()}` } });
+      if (!response.ok) {
+        const problem = await response.json().catch(() => null) as { message?: string } | null;
+        throw new Error(problem?.message || `Could not build the email (${response.status}).`);
+      }
+      const disposition = response.headers.get("Content-Disposition") || "";
+      const name = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition)?.[1] || `${customer.customerName} ${kind === "plan" ? "Load Plan" : "Delivery Times"}.eml`;
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = decodeURIComponent(name);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      globalThis.setTimeout(() => URL.revokeObjectURL(url), 30_000);
+      setMessage(`${customer.customerName} ${kind === "plan" ? "load plan" : "delivery times"} ready: open the downloaded email to send it from Outlook.`);
+      void data.refresh();
+    } catch (exception) { setMessage(exception instanceof Error ? exception.message : "Could not build the email."); }
+    finally { setOpening(undefined); }
+  }
   useEffect(() => { if (data.data) setDraft(data.data); }, [data.data]);
 
   async function save(next: ScheduleResponse) {
@@ -67,28 +104,34 @@ export function CustomerCommsSchedule() {
   if (!draft) return <div className="ui-empty">Loading the send schedule…</div>;
   return <section className="ui-card">
     <div className="ui-card-head">
-      <h2>Send automatically</h2>
+      <h2>Send to customers</h2>
       <div className="ui-filters">
         <label>Load plans (tomorrow) from<input type="time" value={draft.loadPlanTime} onChange={event => setDraft({ ...draft, loadPlanTime: event.target.value })} onBlur={() => void save(draft)} /></label>
         <label>Keep trying until<input type="time" value={draft.loadPlanLatest} onChange={event => setDraft({ ...draft, loadPlanLatest: event.target.value })} onBlur={() => void save(draft)} /></label>
         <label>Delivery times (today) at<input type="time" value={draft.deliveryTimesTime} onChange={event => setDraft({ ...draft, deliveryTimesTime: event.target.value })} onBlur={() => void save(draft)} /></label>
       </div>
     </div>
-    <p className="hint">A customer's load plan only goes once every one of their orders is on a run; until then it waits and shows why. Delivery times use the live ETAs. Each goes once a day, from info@, exactly as the buttons above would send it, with loading guides for mixed euro/standard loads.</p>
+    <p className="hint"><strong>Open in Outlook</strong> gives a ready-to-send email (recipients, subject, the load plan PDF with loading guides, info@ copied in): open the download, check it, press Send. Tip: in the browser's downloads, choose "Always open files of this type" so it opens straight in Outlook. <strong>Auto-send</strong> is ready for when you want it: load plans wait until every order for that customer is on a run.</p>
     {draft.emailsWaitingOverTenMinutes > 0 && <p className="ui-error">{draft.emailsWaitingOverTenMinutes} email{draft.emailsWaitingOverTenMinutes === 1 ? " has" : "s have"} been waiting to send for over 10 minutes. Check the info@ send flow in Power Automate is switched on.</p>}
     {message && <p className="notice inline-notice">{message}</p>}
     <div className="ui-table-wrap"><table className="ui-table">
-      <thead><tr><th>Customer</th><th>Sent to</th><th>Load plan · {draft.tomorrow}</th><th>Delivery times · {draft.today}</th></tr></thead>
+      <thead><tr><th>Customer</th><th>Sent to</th><th>Load plan · tomorrow</th><th>Delivery times · today</th></tr></thead>
       <tbody>{draft.customers.map(item => <tr key={item.customerCode}>
         <td><strong>{item.customerName}</strong><br /><small>{item.customerCode}</small></td>
         <td>{item.recipients.length ? <small>{item.recipients.join(", ")}</small> : <span className="ui-chip amber">No email in Master data</span>}</td>
         <td>
-          <label className="checkbox-label"><input type="checkbox" checked={item.loadPlan} disabled={saving} onChange={event => toggle(item.customerCode, "loadPlan", event.target.checked)} /> Auto at {draft.loadPlanTime}</label>
-          {item.hasPlanTomorrow ? statusChip(item.loadPlanStatus, item.loadPlanHold) : <small>Nothing planned</small>}
+          {item.hasPlanTomorrow ? <div className="comms-cell">
+            <button type="button" className="primary" disabled={Boolean(opening)} onClick={() => void openInOutlook(item, "plan")}>{opening === `${item.customerCode}-plan` ? "Preparing…" : "Open in Outlook"}</button>
+            {openedLabel(item.loadPlanOpenedInOutlook) || (item.loadPlanStatus || item.loadPlanHold ? statusChip(item.loadPlanStatus, item.loadPlanHold) : null)}
+          </div> : <small>Nothing planned</small>}
+          <label className="checkbox-label comms-auto"><input type="checkbox" checked={item.loadPlan} disabled={saving} onChange={event => toggle(item.customerCode, "loadPlan", event.target.checked)} /> Auto-send at {draft.loadPlanTime}</label>
         </td>
         <td>
-          <label className="checkbox-label"><input type="checkbox" checked={item.deliveryTimes} disabled={saving} onChange={event => toggle(item.customerCode, "deliveryTimes", event.target.checked)} /> Auto at {draft.deliveryTimesTime}</label>
-          {item.hasDeliveriesToday ? statusChip(item.deliveryTimesStatus) : <small>No deliveries</small>}
+          {item.hasDeliveriesToday ? <div className="comms-cell">
+            <button type="button" className="primary" disabled={Boolean(opening)} onClick={() => void openInOutlook(item, "times")}>{opening === `${item.customerCode}-times` ? "Preparing…" : "Open in Outlook"}</button>
+            {openedLabel(item.deliveryTimesOpenedInOutlook) || (item.deliveryTimesStatus ? statusChip(item.deliveryTimesStatus) : null)}
+          </div> : <small>No deliveries</small>}
+          <label className="checkbox-label comms-auto"><input type="checkbox" checked={item.deliveryTimes} disabled={saving} onChange={event => toggle(item.customerCode, "deliveryTimes", event.target.checked)} /> Auto-send at {draft.deliveryTimesTime}</label>
         </td>
       </tr>)}</tbody>
     </table></div>
