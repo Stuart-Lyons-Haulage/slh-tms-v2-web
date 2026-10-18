@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, request, type Customer } from '../lib/api';
 import { useAccessToken } from '../lib/auth';
 import { useApi } from '../lib/useApi';
+import { AutoApprovalFormats } from '../components/AutoApprovalFormats';
 
 type Mapping = {
   id: string;
@@ -49,7 +50,7 @@ function customerLabel(customer: Customer) { return `${customer.code} · ${custo
 export function OrderIntakeMappingAdmin() {
   const token = useAccessToken();
   const customers = useApi(useCallback(async () => api.customers(await token()), [token]));
-  const [mode, setMode] = useState<'mappings' | 'rules'>('mappings');
+  const [mode, setMode] = useState<'formats' | 'mappings' | 'rules'>('formats');
   const [mappings, setMappings] = useState<Mapping[]>([]);
   const [rules, setRules] = useState<RouteRule[]>([]);
   const [loading, setLoading] = useState(true);
@@ -159,22 +160,23 @@ export function OrderIntakeMappingAdmin() {
   }
 
   return <div>
-    <div className="title-row">
-      <div><p className="eyebrow">SQL intake control</p><h1>Email mappings &amp; route rules</h1></div>
+    <div className="ui-page-head" style={{ marginBottom: 12 }}>
+      <div><h1>Order intake</h1><p>How emails to info@ become orders: which booking formats approve themselves, who each sender is, and which route each kind of booking takes.</p></div>
       <button type="button" onClick={() => void load()} disabled={loading}>Refresh</button>
     </div>
-    <p className="intro">Sender mappings identify the customer. Route rules then use customer, origin, retailer and destination evidence. Generic senders do not create route assumptions.</p>
 
     <section className="panel" style={{ marginBottom: 18 }}>
       <div className="horizontal-tabs" role="tablist" aria-label="Intake mapping sections">
+        <button role="tab" aria-selected={mode === 'formats'} className={mode === 'formats' ? 'primary' : ''} onClick={() => setMode('formats')}>Booking formats</button>
         <button role="tab" aria-selected={mode === 'mappings'} className={mode === 'mappings' ? 'primary' : ''} onClick={() => setMode('mappings')}>Email mappings <span>{mappings.filter(row => row.active).length}</span></button>
         <button role="tab" aria-selected={mode === 'rules'} className={mode === 'rules' ? 'primary' : ''} onClick={() => setMode('rules')}>Route rules <span>{rules.filter(row => row.active).length}</span></button>
       </div>
-      <div className="form-grid" style={{ marginTop: 14 }}><label>Filter<input value={filter} onChange={event => setFilter(event.target.value)} placeholder="Customer, sender, site, depot…" /></label></div>
+      {mode !== 'formats' && <div className="form-grid" style={{ marginTop: 14 }}><label>Filter<input value={filter} onChange={event => setFilter(event.target.value)} placeholder="Customer, sender, site, depot…" /></label></div>}
     </section>
 
     {message && <p className="notice inline-notice">{message}</p>}
-    {loading && <div className="state">Loading SQL intake rules…</div>}
+    {mode === 'formats' && <AutoApprovalFormats />}
+    {loading && mode !== 'formats' && <div className="state">Loading intake rules…</div>}
 
     {!loading && mode === 'mappings' && <>
       <section className="panel" style={{ marginBottom: 18 }}><div className="title-row"><div><p className="eyebrow">Sender identity master</p><h2>Email mappings</h2><p className="hint">Maintain sender-to-customer identity in a controlled pop-out editor.</p></div><button className="primary" onClick={() => { setMappingId(undefined); setMappingDraft(emptyMapping); setMappingEditorOpen(true); }}>Add mapping</button></div></section>

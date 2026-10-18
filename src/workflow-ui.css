@@ -116,3 +116,4 @@
 .staffing-page .staffing-import-panel { margin: 10px 0; padding: 12px; border: 1px dashed var(--ui-line); border-radius: 10px; background: var(--ui-soft); }
 .staffing-page details.ui-card > summary { cursor: pointer; }
 .checkbox-label { display: flex !important; align-items: center; gap: 6px; }
+button.ui-metric { text-align: left; cursor: pointer; font: inherit; }

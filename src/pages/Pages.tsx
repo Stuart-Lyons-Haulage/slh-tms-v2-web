@@ -600,11 +600,11 @@ export function StagingQueue({ ordersOnly = false, masterOnly = false }: { order
   return <section>
     <div className="title-row">
       <div>
-        <p className="eyebrow">{ordersOnly ? 'Microsoft Graph order intake' : 'Admin · Imports'}</p>
-        <h1>{ordersOnly ? 'Order Review' : 'Master Data Imports & Staging Queue'}</h1>
+        <p className="eyebrow">{ordersOnly ? 'Microsoft Graph order intake' : 'Settings · Imports'}</p>
+        <h1>{ordersOnly ? 'Order Review' : 'Master data imports'}</h1>
         {ordersOnly
           ? <p className="hint">Orders captured from the Info mailbox through Microsoft Graph land here first. Check collection, delivery, pallet quantity and source evidence before approval.</p>
-          : <p className="hint">Add, import and approve governed Master Data here only — sites, vehicles, drivers, trailers, customers, contacts, markets, fuel data and geofences. Transport orders never appear in this queue; they remain exclusively in Order Review.</p>}
+          : <p className="hint">Import and approve master data in bulk: sites, vehicles, drivers, trailers, customers, contacts, markets, fuel prices and geofences. Orders are never imported here; they go to Orders.</p>}
       </div>
       <div className="actions">
         <button onClick={() => void refresh()}>Refresh</button>

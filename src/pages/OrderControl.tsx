@@ -8,7 +8,6 @@ import { SourceEmailEvidenceDrawer } from "../components/SourceEmailEvidenceDraw
 import { JobsOperational } from "./JobsOperational";
 import { OrderReviewBulk } from "./OrderReviewBulk";
 import { OrderChangeAlerts } from "../components/OrderChangeAlerts";
-import { AutoApprovalFormats } from "../components/AutoApprovalFormats";
 import { UndatedOrderReviewQueue } from "./UndatedOrderReviewQueue";
 import { listRuns } from "../api/runs";
 import { Orders as AddOrders } from "./Pages";
@@ -419,7 +418,7 @@ export function OrderControl({ initialTab = "review" }: { initialTab?: OrderCont
     </div>
     {repairNotice && <p className="notice inline-notice">{repairNotice}</p>}
     {tab !== "add" && <OrderReviewDateStrip selectedDate={selectedDate} onChange={updateDate} />}
-    {tab === "add" ? <AddOrders /> : tab === "review" ? <><OrderChangeAlerts /><OrderIntakeCacheRecovery date={selectedDate} /><UndatedOrderReviewQueue /><AutoApprovalFormats /><OrderReviewBulk date={selectedDate} /></> : <><ApprovedOrdersList date={selectedDate} token={token} /><JobsOperational date={selectedDate} /></>}
+    {tab === "add" ? <AddOrders /> : tab === "review" ? <><OrderChangeAlerts /><OrderIntakeCacheRecovery date={selectedDate} /><UndatedOrderReviewQueue /><OrderReviewBulk date={selectedDate} /></> : <><ApprovedOrdersList date={selectedDate} token={token} /><JobsOperational date={selectedDate} /></>}
     {sourceEmailStagingId && <SourceEmailEvidenceDrawer stagingId={sourceEmailStagingId} onClose={closeSourceEmail} />}
   </>;
 }

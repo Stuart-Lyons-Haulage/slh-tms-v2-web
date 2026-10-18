@@ -84,8 +84,8 @@ describe("operations housekeeping contract", () => {
     expect(app).toContain("['/master-data', 'Master data']");
     expect(app).toContain('path="/admin" element={<Navigate to="/admin/integrations" replace />}');
     expect(app).not.toContain('path="/admin/staging"');
-    expect(integrations).toContain("API Feeds & Integrations");
-    expect(integrations).toContain("single TMS source for external API/feed health");
+    expect(integrations).toContain("System health");
+    expect(integrations).toContain("Every outside system the TMS reads from");
   });
 
   it("keeps Planner Builder full-width and selects live jobs for the selected day", () => {
