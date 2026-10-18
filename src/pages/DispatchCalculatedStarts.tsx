@@ -46,7 +46,7 @@ function publishStarts(date: string, rows: StartSuggestion[], statuses?: Calcula
   window.dispatchEvent(new CustomEvent(dispatchStartsCalculatedEvent, { detail: { date, rows, statuses } }));
 }
 
-export function DispatchCalculatedStarts() {
+export function DispatchCalculatedStarts({ date: planningDate }: { date?: string } = {}) {
   const token = useAccessToken();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string>();
@@ -55,7 +55,7 @@ export function DispatchCalculatedStarts() {
     setBusy(true);
     setMessage(undefined);
     try {
-      const date = currentDispatchDate();
+      const date = planningDate || currentDispatchDate();
       const access = await token();
       const [starts, workbench, statusResponse] = await Promise.all([
         request<StartResponse>(`/api/v1/planner-starts?date=${encodeURIComponent(date)}`, access),

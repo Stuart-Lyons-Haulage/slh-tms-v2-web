@@ -4,7 +4,7 @@ import { request, type LoadDispatch, type Trailer, type Vehicle } from "../lib/a
 import { useAccessToken } from "../lib/auth";
 import { getDriverDispatchRoute, getRunDispatch } from "../api/runs";
 import { firstCollectionStop, runDirection, sortDispatchDrivers, suggestionRunLabel } from "./DriverDispatchPlanning";
-import { dispatchStartsCalculatedEvent, type StartSuggestion } from "./DispatchCalculatedStarts";
+import { DispatchCalculatedStarts, dispatchStartsCalculatedEvent, type StartSuggestion } from "./DispatchCalculatedStarts";
 import { getMasterDispatchData, type MasterVehicle } from "../api/master";
 import "../driver-dispatch.css";
 import "../driver-dispatch-compact.css";
@@ -568,6 +568,7 @@ export function DriverDispatch() {
         <button type="button" onClick={() => void syncDrivers()} disabled={driverToolBusy}>{driverToolBusy ? "Syncing…" : "Sync Drivers"}</button>
         <button type="button" onClick={() => setShowDriverTools(value => !value)}>{showDriverTools ? "Close" : "Add Driver"}</button>
         <button type="button" onClick={() => void refresh()} disabled={loading}>Refresh</button>
+        <DispatchCalculatedStarts date={date} />
       </div>
     </div>
 
