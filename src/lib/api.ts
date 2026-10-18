@@ -263,6 +263,10 @@ export async function request<T = unknown>(path: string, token?: string, init?: 
       throw new ApiError(response.status, message);
     }
     if (response.status === 204) return undefined as T;
+    // Some summary endpoints answer a failed lookup with placeholder zeros. Treat that as
+    // "couldn't load" so a broken lookup never looks like "all clear".
+    if (response.headers.get('X-SLH-Degraded') === 'true')
+      throw new ApiError(503, `This information couldn't be loaded just now (reference ${response.headers.get('X-SLH-Trace') || 'unknown'}). Try Refresh.`);
     const payload: unknown = await response.json();
     return payload as T;
   } catch (exception) {

@@ -19,7 +19,7 @@ const CustomerComms = lazy(() => import('./pages/CustomerComms').then(module => 
 const WarehousePlanning = lazy(() => import('./pages/WarehousePlanning').then(module => ({ default: module.WarehousePlanning })));
 
 import { apiScope, localTestAuthEnabled, useAccessToken } from './lib/auth';
-import { api } from './lib/api';
+import { request } from './lib/api';
 import { connectPlanningEventStream } from './lib/planningEvents';
 import { isDesktopApp } from './lib/desktop';
 import { HeaderIntelligence } from './components/HeaderIntelligence';
@@ -128,31 +128,25 @@ function Shell() {
     }
 
     let stopped = false;
+    // Counts only (a few bytes) rather than downloading the waiting orders themselves.
     const refreshPendingOrderReviews = async () => {
       try {
-        const rows = await api.staging(await accessToken(), 'PendingReview', 'order', 200);
-        if (!stopped) {
-          const dates = rows.reduce<Record<string, number>>((counts, row) => {
-            let payload: Record<string, unknown> = {};
-            try { payload = row.payloadJson ? JSON.parse(row.payloadJson) as Record<string, unknown> : {}; } catch { /* keep the notification usable if one source payload is malformed */ }
-            const value = String(payload.collectionDate || payload.deliveryDate || '').slice(0, 10);
-            if (/^\d{4}-\d{2}-\d{2}$/.test(value)) counts[value] = (counts[value] || 0) + 1;
-            return counts;
-          }, {});
-          const dateSummary = Object.entries(dates)
-            .sort(([left], [right]) => left.localeCompare(right))
-            .map(([date, count]) => `${new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short' }).format(new Date(`${date}T12:00:00`))}: ${count}`)
-            .join(' · ');
-          setPendingOrderReviews(rows.length);
-          setPendingOrderReviewDates(dateSummary);
-        }
+        const today = new Date();
+        const iso = (offset: number) => new Date(today.getTime() + offset * 86_400_000).toISOString().slice(0, 10);
+        const counts = await request<Record<string, number>>(`/api/v1/staging/queue/date-counts?from=${iso(-7)}&to=${iso(14)}`, await accessToken());
+        if (stopped) return;
+        const entries = Object.entries(counts).filter(([, count]) => count > 0).sort(([left], [right]) => left.localeCompare(right));
+        setPendingOrderReviews(entries.reduce((sum, [, count]) => sum + count, 0));
+        setPendingOrderReviewDates(entries
+          .map(([date, count]) => `${new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short' }).format(new Date(`${date}T12:00:00`))}: ${count}`)
+          .join(' · '));
       } catch (error) {
         console.warn('Pending order review count could not be refreshed.', error);
       }
     };
 
     void refreshPendingOrderReviews();
-    const interval = window.setInterval(() => void refreshPendingOrderReviews(), 20000);
+    const interval = window.setInterval(() => void refreshPendingOrderReviews(), 60000);
     const onFocus = () => void refreshPendingOrderReviews();
     window.addEventListener('focus', onFocus);
 
@@ -161,7 +155,7 @@ function Shell() {
       window.clearInterval(interval);
       window.removeEventListener('focus', onFocus);
     };
-  }, [accessToken, authenticated, location.pathname]);
+  }, [accessToken, authenticated]);
 
   const loadingContent = <section className="sign-in-panel" aria-live="polite"><p className="eyebrow">Loading</p><h1>Opening TMS screen…</h1></section>;
 
