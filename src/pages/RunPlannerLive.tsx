@@ -638,8 +638,8 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
       const created = await createRun({
         reference: runRef(date, number),
         planningDate: date,
-        // Creating a run establishes the shell only; pallet allocation is the
-        // explicit Pallet Control action and must remain zero until then.
+        // Line quantities are allocated straight after creation; the allocation
+        // updates the run's used spaces.
         palletSpacesUsed: 0,
         totalPalletSpaces: capacity.standardCapacity,
         capacityType: `Standard pallets · ${capacity.status} · ${capacity.utilisationPercent}%`,
@@ -651,17 +651,36 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
       // writes fails. The run and its stops are already live at this point.
       setLoads((current) => current.some((load) => load.id === created.id) ? current : [...current, created]);
       updateRun(run.key, (current) => ({ ...current, loadId: created.id, lines: linkedLines }));
-      // Run creation establishes the operational shell only. Pallet Control is
-      // the explicit allocation step, so no order allocation is written here.
       // The create response is the authoritative write result. Do not immediately
       // re-read the full run register here: that expensive read was the source
       // of gateway 504s after a successful run save.
       const confirmed = created;
       if (!confirmed?.id) throw new Error(`${created.reference} was accepted without a run id. The draft has been kept for retry.`);
+      // Putting an order on a run plans its quantity straight away, so Pallet Order's
+      // "To plan" drops the moment the run exists. Later edits replace these figures.
+      const lineAllocations = new Map<string, number>();
+      for (const line of linkedLines) {
+        const ids = lineOrderIds(line);
+        if (!ids.length) continue;
+        if (line.orderAllocations) {
+          for (const id of ids) lineAllocations.set(id, (lineAllocations.get(id) || 0) + Math.max(line.orderAllocations[id] || 0, 0));
+          continue;
+        }
+        let remaining = validPallets(line.pallets) || 0;
+        for (const id of ids) {
+          const order = orders.find((item) => item.id === id);
+          const quantity = ids.length === 1 ? remaining : Math.min(remaining, Math.max(order?.outstandingPallets ?? 0, 0));
+          if (quantity > 0) lineAllocations.set(id, (lineAllocations.get(id) || 0) + quantity);
+          remaining -= quantity;
+        }
+      }
+      const allocationEntries = [...lineAllocations.entries()].filter(([, pallets]) => pallets > 0);
+      if (allocationEntries.length === 1) await allocate(allocationEntries[0][0], created.id, allocationEntries[0][1], access);
+      else if (allocationEntries.length > 1) await allocateBatch(allocationEntries, created.id, access);
       if (run.relayEnabled) await updateRunRelay(created.id, relayPayload(run), access);
       dirtyRunKeys.current.delete(run.key);
       signalPlanningChange();
-      setMessage(`${created.reference} created. It is now available in Pallet Order for allocation.`);
+      setMessage(`${created.reference} created and planned in Pallet Order.`);
       void refreshControl().catch(() => undefined);
       return created.id;
     } catch (error) {

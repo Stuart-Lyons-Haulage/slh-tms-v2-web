@@ -8,7 +8,9 @@ describe("Run Planner autosave", () => {
     expect(planner).toContain("void createPlanningRun({ ...currentRun, lines: nextLines });");
     expect(planner).toContain("const confirmed = created;");
     expect(planner).toContain("gateway 504s after a successful run save");
-    expect(planner).toContain("Run creation establishes the operational shell only");
+    // Putting an order on a run plans its quantity at once so Pallet Order's To plan drops.
+    expect(planner).toContain("Putting an order on a run plans its quantity straight away");
+    expect(planner).toContain("await allocateBatch(allocationEntries, created.id, access)");
     expect(planner).not.toContain("await Promise.all(allocationWrites);");
     expect(planner).toContain("signalPlanningChange();");
   });

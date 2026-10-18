@@ -303,19 +303,14 @@ test('planner → dispatch → geofence arrival/departure → completion stays c
   await page.getByRole('button', { name: 'Hall Hunter', exact: true }).click();
   await page.getByPlaceholder('Choose delivery from this collection…').fill('Ley');
   await page.getByRole('button', { name: /Leyland\s+4 pallets/i }).click();
-  await expect(page.getByText(/created\. It is now available in Pallet Order for allocation\./i)).toBeVisible();
+  // Putting the order on a run plans it straight away: Pallet Order shows it planned.
+  await expect(page.getByText(/created and planned in Pallet Order\./i)).toBeVisible();
   expect(state.runCreated).toBe(true);
-  expect(state.allocatedPallets).toBe(0);
+  expect(state.allocatedPallets).toBe(4);
 
   await page.getByRole('link', { name: 'Pallet Order' }).click();
   await expect(page.getByRole('heading', { name: 'Pallet Control' })).toBeVisible();
-  await page.getByTitle('Hall Hunter → Leyland: 4 ordered, 0 planned, 4 to plan').first().click();
-  await expect(page.getByRole('heading', { name: 'Collect: Hall Hunter · Deliver: Leyland' })).toBeVisible();
-  await page.locator('.pallet-control-allocation select').selectOption(runId);
-  await page.getByRole('spinbutton', { name: 'Allocated load units' }).fill('4');
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
-  await expect(page.getByText(/HH-E2E-001: 4 allocated · 0 remaining/i)).toBeVisible();
-  expect(state.allocatedPallets).toBe(4);
+  await expect(page.getByTitle('Hall Hunter → Leyland: 4 ordered, 4 planned, 0 to plan').first()).toBeVisible();
 
   // The second-screen allocation must hydrate back into Planner with source references in Line note.
   await page.getByRole('link', { name: 'Planner', exact: true }).click();
