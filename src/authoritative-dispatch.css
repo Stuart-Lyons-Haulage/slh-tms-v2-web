@@ -438,3 +438,14 @@
   .smart-run-card-list { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
   .smart-run-allocation-grid { grid-template-columns: 1fr 1fr; }
 }
+
+/* Compact dispatch: collapsed rows show a one-line vital summary so planners see
+   as many drivers as possible, then expand a driver to allocate run/vehicle/trailer. */
+.dispatch-driver-pool .smart-collapsed-summary { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 4px; }
+.dispatch-driver-pool .smart-collapsed-summary .employment-badge { font-size: .68rem; }
+.dispatch-driver-pool .smart-collapsed-summary small { margin: 0; }
+.smart-collapsed-run { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; background: #e4edf4; color: #174d73; font-weight: 800; font-size: .72rem; }
+.dispatch-driver-pool .smart-dispatch-row.collapsed td:first-child { padding: 6px 9px; }
+.dispatch-driver-pool .smart-dispatch-row.collapsed .smart-driver-heading { align-items: center; }
+.dispatch-pool-tools { display: flex; align-items: center; gap: 10px; }
+.dispatch-pool-tools .smart-action.ghost { padding: 4px 10px; font-size: .74rem; }
