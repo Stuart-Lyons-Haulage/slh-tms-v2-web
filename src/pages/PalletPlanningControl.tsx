@@ -1,6 +1,6 @@
 import { PlannerLearningCard } from "../components/PlannerLearningCard";
 import { quantityLabel } from "../lib/loadQuantity";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { SouthboundCollections } from "./BookingReservations";
 import { request } from "../lib/api";
@@ -49,6 +49,11 @@ export function PalletPlanningControl() {
   const [message, setMessage] = useState<string>();
   const [busyKey, setBusyKey] = useState<string>();
   const [allocationDrafts, setAllocationDrafts] = useState<Record<string, { loadId: string; pallets: string }>>({});
+  // Serialise allocation saves and pause background reloads while one is in flight.
+  // A second allocation made while the first was still saving was being dropped,
+  // because overlapping save + refresh cycles on the same run raced each other.
+  const pendingSaves = useRef(0);
+  const saveChain = useRef<Promise<void>>(Promise.resolve());
   const control = useApi(useCallback(async () => request<PlanningControlData>(`/api/v1/planning-control/pallets?date=${encodeURIComponent(date)}`, await token()), [date, token]));
   const regions = useApi(useCallback(async () => request<RegionData>(`/api/v1/planning-control/regions?date=${encodeURIComponent(date)}`, await token()), [date, token]));
   const learningHints = useApi(useCallback(async () => request<OrderHint[]>(`/api/v1/planner/learning/orders?date=${encodeURIComponent(date)}`, await token()), [date, token]));
@@ -57,8 +62,11 @@ export function PalletPlanningControl() {
   const refreshRegions = regions.refresh;
 
   useEffect(() => {
-    const unsubscribe = subscribePlanningChanges(() => { void refreshControl(); void refreshRegions(); });
-    const stopReconciliation = startVisiblePolling(() => Promise.allSettled([refreshControl(), refreshRegions()]).then(() => undefined), 30_000);
+    // Don't reload the grid underneath an in-flight save: a background refresh that
+    // resolves mid-save can repaint stale figures and hide a just-added allocation.
+    // The save runs its own refresh when it finishes, so nothing is missed.
+    const unsubscribe = subscribePlanningChanges(() => { if (pendingSaves.current > 0) return; void refreshControl(); void refreshRegions(); });
+    const stopReconciliation = startVisiblePolling(() => pendingSaves.current > 0 ? Promise.resolve() : Promise.allSettled([refreshControl(), refreshRegions()]).then(() => undefined), 30_000);
     return () => { unsubscribe(); stopReconciliation(); };
   }, [refreshControl, refreshRegions]);
 
@@ -168,9 +176,17 @@ export function PalletPlanningControl() {
   async function saveAllocation(order: PlanningOrder) {
     const draftValue = currentDraft(order); if (!draftValue.loadId) { setMessage("Select a run before allocating load units."); return; }
     const pallets = Number(draftValue.pallets); if (!Number.isInteger(pallets) || pallets < 0) { setMessage("Enter a whole load-unit quantity of zero or more."); return; }
+    // Queue behind any save already running so two allocations to the same run can
+    // never overlap - the newer one was being dropped when it raced the first.
+    pendingSaves.current += 1;
+    const run = saveChain.current.catch(() => undefined).then(() => performAllocation(order, draftValue.loadId, pallets));
+    saveChain.current = run.then(() => undefined, () => undefined);
+    try { await run; } finally { pendingSaves.current -= 1; }
+  }
+  async function performAllocation(order: PlanningOrder, loadId: string, pallets: number) {
     setBusyKey(order.id); setMessage(undefined);
     try {
-      const result = await request<{ outstandingPallets: number; overplannedPallets: number; loadReference: string; runCapacityStatus?: string; runUtilisationPercent?: number; standardPallets?: number; euroPallets?: number; standardCapacity?: number; euroCapacity?: number; trolleyPositionsRemaining?: number }>("/api/v1/planning-control/allocations", await token(), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ orderId: order.id, loadId: draftValue.loadId, date, pallets, note: "Updated from live Pallet Control" }) });
+      const result = await request<{ outstandingPallets: number; overplannedPallets: number; loadReference: string; runCapacityStatus?: string; runUtilisationPercent?: number; standardPallets?: number; euroPallets?: number; standardCapacity?: number; euroCapacity?: number; trolleyPositionsRemaining?: number }>("/api/v1/planning-control/allocations", await token(), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ orderId: order.id, loadId, date, pallets, note: "Updated from live Pallet Control" }) });
       const capacity = result.runCapacityStatus ? ` · trailer ${result.runCapacityStatus}${result.runUtilisationPercent != null ? ` ${result.runUtilisationPercent.toFixed(1)}%` : ""}` : "";
       setMessage(`${order.reference}: ${pallets} allocated · ${result.outstandingPallets} remaining${result.overplannedPallets > 0 ? ` · ${result.overplannedPallets} over-planned` : ""}${capacity}.`);
       setAllocationDrafts(current => { const next = { ...current }; delete next[order.id]; return next; });
