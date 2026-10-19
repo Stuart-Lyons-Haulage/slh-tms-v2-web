@@ -3,6 +3,7 @@ import { DriverDispatch } from './pages/DriverDispatch';
 import { PlannerEnhanced } from './pages/PlannerEnhanced';
 import { LiveRunsBoard } from './pages/LiveRunsBoard';
 import { PalletPlanningControl } from './pages/PalletPlanningControl';
+import { WorkingDateControl } from './components/WorkingDateControl';
 
 export function E2eHarness() {
   return <BrowserRouter>
@@ -11,6 +12,8 @@ export function E2eHarness() {
       <Link to="/pallet-control">Pallet Order</Link>
       <Link to="/driver-dispatch">Driver Dispatch</Link>
       <Link to="/operations-wallboard">Operations Wallboard</Link>
+      {/* The real app's one working date, as in the header. */}
+      <WorkingDateControl />
     </nav>
     <Routes>
       <Route path="/" element={<PlannerEnhanced />} />

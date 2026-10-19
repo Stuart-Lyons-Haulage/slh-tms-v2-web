@@ -169,8 +169,10 @@ export function DispatchDriverRow({
   const wtdHours = availableTime?.weeklyWorkingTimeUsed ?? driver.tachoData.weeklyWorkingTime;
   const wtdTone = availableTime?.wtdStatus || wtdClass(wtdHours);
   const blocked = driver.isBlocked;
+  const availabilityUnknown = driver.availabilityState === "unknown";
   const blockedText = driver.blockedReason || "Unavailable";
   const lockedToDriver = Boolean(selection.runId && lockedRunId === selection.runId);
+  const allocationBlocked = blocked || (availabilityUnknown && !lockedToDriver);
   const dispatchStatus = status?.dispatchStatus || (lockedToDriver ? "Awaiting Dispatch" : "No Run");
   const dispatchStatusLabel = dispatchStatus === "No Run" ? "No Route" : dispatchStatus;
   const action = dispatchActionForStatus(lockedToDriver, dispatchStatus);
@@ -195,7 +197,7 @@ export function DispatchDriverRow({
     });
   }
 
-  const availabilityTone = driver.onLeave ? "on-leave" : blocked ? "blocked" : driver.needsReturn ? "return-needed" : "available";
+  const availabilityTone = driver.onLeave ? "on-leave" : blocked ? "blocked" : availabilityUnknown ? "availability-unknown" : driver.needsReturn ? "return-needed" : "available";
   const dispatchTone = samsaraState ? "samsara-sent" : lockedToDriver ? "allocated" : "";
   return <tr className={`smart-dispatch-row ${availabilityTone} ${dispatchTone}`.trim()}>
     <td className="smart-driver-cell">
@@ -207,10 +209,14 @@ export function DispatchDriverRow({
       {driver.agencyName && <small>{driver.agencyName}</small>}
       {driver.availabilityGroup && <small>{driver.availabilityGroup}{driver.placementEndDate ? ` · placement ends ${driver.placementEndDate}` : ""}</small>}
       {driver.classificationMismatch && <small className="smart-inline-warning">Master Data review</small>}
+      {samsaraState && <small className="smart-inline-status">Dispatched to Samsara</small>}
+      {!samsaraState && lockedToDriver && <small className="smart-inline-warning">Allocated</small>}
     </td>
 
     <td>
-      <span className={`smart-day ${dayTone(driver)}`} title={driver.availabilityDayCount ? "Tacho duty day / confirmed staffing availability days this week" : "Tacho duty day / Sage and Driver Master contracted working days"}>Day {status?.projectedDayNumber || driver.dayNumber || driver.tachoData.currentDutyDay}{(driver.availabilityDayCount || driver.contractedDays.length) > 0 ? ` of ${driver.availabilityDayCount || driver.contractedDays.length}` : ""}</span>
+      <span className={`smart-day ${dayTone(driver)}`} title={status?.workPatternName ? `Sage HR work pattern: ${status.workPatternName}${status.tachoDayNumber ? ` · Tacho: Day ${status.tachoDayNumber} since weekly rest` : ""}` : driver.availabilityDayCount ? "Confirmed staffing availability days this week" : "No Sage work pattern recorded: from Tacho"}>{status?.patternRestDay ? "Rest day" : <>Day {status?.projectedDayNumber || driver.dayNumber || driver.tachoData.currentDutyDay}{(status?.cycleLength || driver.availabilityDayCount || driver.contractedDays.length) > 0 ? ` of ${status?.cycleLength || driver.availabilityDayCount || driver.contractedDays.length}` : ""}</>}{status?.workPatternSource && <small className="smart-day-source"> · {status.workPatternSource === "Tacho" ? "Tacho" : "Sage"}</small>}</span>
+      {status?.cycleNote && <small className="smart-inline-warning">{status.cycleNote}</small>}
+      {driver.workingStyle && <small className="smart-working-style">{driver.workingStyle === "HalfTramper" ? "Half tramper" : driver.workingStyle}{driver.recentLongRuns ? ` · ${driver.recentLongRuns} long run${driver.recentLongRuns === 1 ? "" : "s"} / 2 wks` : ""}</small>}
       {driver.onLeave && <small className="smart-inline-error">{driver.leaveType || "Sage HR leave"}{driver.partDayLeave ? " · part day" : ""}</small>}
       {!driver.onLeave && driver.needsReturn && <small className="smart-inline-warning">{(driver.dayNumber || driver.tachoData.currentDutyDay) >= 5 ? "Return priority" : "Return soon"}</small>}
     </td>
@@ -238,7 +244,7 @@ export function DispatchDriverRow({
       <td><span className="smart-blocked-label">{blockedText}</span></td>
     </> : <>
       <td>
-        <select aria-label={`Route for ${driver.name}`} value={selection.runId} onChange={event => changeRun(event.target.value)} disabled={lockedToDriver && dispatchStatus !== "No Run"}>
+        <select aria-label={`Route for ${driver.name}`} value={selection.runId} onChange={event => changeRun(event.target.value)} disabled={allocationBlocked || (lockedToDriver && dispatchStatus !== "No Run")}>
           <option value="">Route…</option>
           {legalRuns.map(run => <option key={run.runId} value={run.runId}>
             {run.reference}{run.runId === driver.suggestedRunId ? driver.backloadCandidate ? " · Backload candidate" : " · Suggested" : ""}
@@ -246,11 +252,11 @@ export function DispatchDriverRow({
         </select>
       </td>
       <td>
-        <DispatchAssetTypeahead ariaLabel={`Vehicle for ${driver.name}`} value={selection.vehicleId} onChange={value => onSelectionChange(driver.driverId, { vehicleId: value })} options={vehicleOptions} placeholder="Vehicle…" disabled={lockedToDriver && dispatchStatus !== "No Run"} />
+        <DispatchAssetTypeahead ariaLabel={`Vehicle for ${driver.name}`} value={selection.vehicleId} onChange={value => onSelectionChange(driver.driverId, { vehicleId: value })} options={vehicleOptions} placeholder="Vehicle…" disabled={allocationBlocked || (lockedToDriver && dispatchStatus !== "No Run")} />
         {driver.tachoData.lastVehicleRegistration && <small>Tacho: last used · {driver.tachoData.lastVehicleRegistration}</small>}
       </td>
       <td>
-        <DispatchAssetTypeahead ariaLabel={`Trailer for ${driver.name}`} value={selection.trailerId} onChange={value => onSelectionChange(driver.driverId, { trailerId: value })} options={trailerOptions} placeholder="Trailer…" disabled={lockedToDriver && dispatchStatus !== "No Run"} />
+        <DispatchAssetTypeahead ariaLabel={`Trailer for ${driver.name}`} value={selection.trailerId} onChange={value => onSelectionChange(driver.driverId, { trailerId: value })} options={trailerOptions} placeholder="Trailer…" disabled={allocationBlocked || (lockedToDriver && dispatchStatus !== "No Run")} />
         {driver.previousTrailerNumber && <small>Last used · {driver.previousTrailerNumber}{driver.previousTrailerPlanningDate ? ` · ${driver.previousTrailerPlanningDate}` : ""}</small>}
         {selectedRun?.trailerSwapRequested && <small className="smart-inline-warning">Planner note requests a trailer swap · continuity trailer not auto-selected</small>}
         {selectedRun?.requiresDoubleDeck && <small>Double-deck only</small>}
@@ -263,7 +269,7 @@ export function DispatchDriverRow({
         <input
           type="checkbox"
           checked={reducedRestSelected}
-          disabled={busy || blocked || !reducedRestAvailable || (lockedToDriver && dispatchStatus !== "No Run")}
+          disabled={busy || allocationBlocked || !reducedRestAvailable || (lockedToDriver && dispatchStatus !== "No Run")}
           onChange={event => onSelectionChange(driver.driverId, {
             useReducedDailyRest: event.target.checked,
             plannedStartTime: undefined
@@ -290,6 +296,7 @@ export function DispatchDriverRow({
 
     <td className="smart-status-cell">
       <span className={`smart-status-pill ${statusTone(status?.operationalStatus || dispatchStatus)}`}>{status?.operationalStatus || dispatchStatusLabel}</span>
+      {availabilityUnknown && <small className="smart-inline-warning">Availability unknown · verify Sage/Tacho before assigning</small>}
       {status?.driverConfirmed && <small>Driver confirmed</small>}
       {status?.lastDriverReply && <small title={status.lastDriverReply}>{status.lastDriverReply.length > 60 ? `${status.lastDriverReply.slice(0, 60)}…` : status.lastDriverReply}</small>}
       {status?.availabilityStatus === "Unavailable" && <small className="smart-inline-error">{status.availabilityMessage || "Tacho unavailable"}</small>}
@@ -297,10 +304,10 @@ export function DispatchDriverRow({
 
     <td className="smart-dispatch-action-cell">
       {action === "allocate" && selection.runId && <>
-        <button className="smart-action primary" type="button" disabled={busy || blocked || !selection.vehicleId} onClick={() => onDispatch(driver, selection)}>{busy ? "Allocating…" : "Dispatch"}</button>
+        <button className="smart-action primary" type="button" disabled={busy || allocationBlocked || !selection.vehicleId} onClick={() => onDispatch(driver, selection)}>{busy ? "Allocating…" : "Dispatch"}</button>
         <small>Validates and locks this row, then prepares it for route export.</small>
       </>}
-      {action === "dispatch" && lockedToDriver && <button className="smart-action primary" type="button" disabled={busy || blocked || status?.availabilityStatus === "Unavailable"} onClick={() => onDispatch(driver, selection)}>{busy ? "Preparing…" : "Dispatch"}</button>}
+      {action === "dispatch" && lockedToDriver && <button className="smart-action primary" type="button" disabled={busy || allocationBlocked || status?.availabilityStatus === "Unavailable"} onClick={() => onDispatch(driver, selection)}>{busy ? "Preparing…" : "Dispatch"}</button>}
       {lockedToDriver && selection.runId && <button className="smart-action ghost dark" type="button" disabled={busy || (!samsaraConfigured && !samsaraState)} onClick={() => onSamsaraAndDispatch(driver, selection)}>{busy ? "Working…" : samsaraState ? "Update Samsara route" : "Export to Samsara"}</button>}
       {lockedToDriver && selection.runId && <button className="smart-action ghost" type="button" disabled={busy} onClick={() => onDownloadSamsaraCsv(driver, selection)}>Download Samsara CSV</button>}
       {lockedToDriver && !samsaraConfigured && <small>{samsaraState ? "Samsara connection check unavailable · existing route can be updated" : "Samsara API unavailable · CSV fallback is still available"}</small>}

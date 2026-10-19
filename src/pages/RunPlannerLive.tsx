@@ -10,6 +10,7 @@ import { tomorrowIsoDate } from "../lib/dateUtils";
 import { calculateRunCapacity } from "./runPlannerCapacity";
 import { findFinalRunSavings, type FinalCheckLine, type FinalCheckRun } from "./runPlannerFinalCheck";
 import { suggestJobsForRun, suggestionConfidencePercent, type RunSuggestionLine, type RunSuggestionSite } from "./runPlannerSuggestions";
+import { RunPlannerLine } from "./RunPlannerLine";
 
 type Period = "" | "AM" | "PM";
 type PeriodFilter = "ALL" | "AM" | "PM";
@@ -175,18 +176,21 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
   const [periodFilter, setPeriodFilter] = useState<PeriodFilter>("ALL");
   const [dismissedPlanChecks, setDismissedPlanChecks] = useState(() => new Set<string>());
   const saveTimers = useRef<Record<string, number>>({});
+  // Multiple order additions can happen before the first request returns. Keep
+  // each run's allocation/stop writes in order so they cannot race each other.
+  const quantitySaveQueues = useRef<Record<string, Promise<boolean>>>({});
+  const quantitySaveFailures = useRef(new Set<string>());
   const mutationCounter = useRef(0);
   const refreshSequence = useRef(0);
   const loadsRef = useRef<Load[]>([]);
   const sitesRef = useRef<Site[]>([]);
   const dirtyRunKeys = useRef(new Set<string>());
+  const dirtyRunVersions = useRef(new Map<string, number>());
   const runsRef = useRef(runs);
   const setPlannerRuns = (next: RunDraft[] | ((current: RunDraft[]) => RunDraft[])) => {
-    setRuns((current) => {
-      const resolved = typeof next === "function" ? next(current) : next;
-      runsRef.current = resolved;
-      return resolved;
-    });
+    const resolved = typeof next === "function" ? next(runsRef.current) : next;
+    runsRef.current = resolved;
+    setRuns(resolved);
   };
 
   const consolidateLines = useCallback((rawLines: RunLine[], ordersById: Map<string, PlanningOrder>) => {
@@ -314,8 +318,11 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
   }, [refreshAll]);
 
   useEffect(() => {
-    const refresh = () => void refreshAll().catch(() => undefined);
-    const stopPolling = startVisiblePolling(refresh, 30_000);
+    const refresh = () => {
+      if (dirtyRunKeys.current.size > 0) return;
+      void refreshAll().catch(() => undefined);
+    };
+    const stopPolling = startVisiblePolling(refresh, 60_000);
     const unsubscribe = subscribePlanningChanges(refresh);
     return () => { stopPolling(); unsubscribe(); };
   }, [refreshAll]);
@@ -405,10 +412,16 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
   };
   const updateRun = (key: string, updater: (run: RunDraft) => RunDraft) => {
     dirtyRunKeys.current.add(key);
-    setPlannerRuns((current) => current.map((run) => run.key === key ? updater(run) : run));
+    dirtyRunVersions.current.set(key, (dirtyRunVersions.current.get(key) ?? 0) + 1);
+    // Keep the ref current synchronously as well as React state. Several jobs can
+    // be added before React renders again, and each save must build from every
+    // line already added to this run.
+    const nextRuns = runsRef.current.map((run) => run.key === key ? updater(run) : run);
+    setPlannerRuns(nextRuns);
   };
   const updateLine = (runKey: string, lineKey: string, patch: Partial<RunLine>) => updateRun(runKey, (run) => ({ ...run, lines: run.lines.map((line) => line.key === lineKey ? { ...line, ...patch } : line) }));
   const addSuggestedOrder = (run: RunDraft, order: PlanningOrder) => {
+    const currentRun = runsRef.current.find((candidate) => candidate.key === run.key) || run;
     const quantity = run.loadId
       ? distributeQuantity([order.id], order.outstandingPallets, run.key).allocations[order.id] || 0
       : order.outstandingPallets;
@@ -426,13 +439,14 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
       orderAllocations: { [order.id]: quantity },
       note: orderLineNote(order),
     };
-    const nextLines = [...run.lines.filter(line => lineOrderIds(line).length > 0 || line.collectionSite.trim() || line.deliverySite.trim() || line.pallets.trim()), nextLine];
+    const nextLines = [...currentRun.lines.filter(line => lineOrderIds(line).length > 0 || line.collectionSite.trim() || line.deliverySite.trim() || line.pallets.trim()), nextLine];
     updateRun(run.key, current => ({ ...current, lines: nextLines }));
-    if (run.loadId) void persistQuantity(run.key, nextLine.key, run.loadId, { [order.id]: quantity }, quantity, nextLines);
-    setMessage(`${order.reference} added to ${run.loadId ? "the live run and saved" : "the draft run"}.`);
+    if (run.loadId) void enqueuePersistQuantity(run.key, nextLine.key, run.loadId, { [order.id]: quantity }, quantity, nextLines);
+    const runReference = run.loadId ? loads.find((load) => load.id === run.loadId)?.reference : undefined;
+    setMessage(run.loadId ? `Saving ${order.reference} to ${runReference || "the run"}…` : `${order.reference} added to the draft run.`);
   };
   const changeLineLocation = (runKey: string, line: RunLine, field: "collectionSite" | "deliverySite", value: string) => {
-    const currentRun = runs.find((run) => run.key === runKey);
+    const currentRun = runsRef.current.find((run) => run.key === runKey);
     if (!currentRun) return;
     const nextLine = { ...line, [field]: value, orderId: undefined, orderIds: undefined, orderAllocations: undefined } as RunLine;
     const nextLines = currentRun.lines.map((item) => item.key === line.key ? nextLine : item);
@@ -462,7 +476,7 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
     const matches = matchingAvailableOrders(collection, destination);
     if (!matches.length) return;
     const outstanding = matches.reduce((sum, order) => sum + Math.max(order.outstandingPallets, 0), 0);
-    const currentRun = runs.find((run) => run.key === runKey);
+    const currentRun = runsRef.current.find((run) => run.key === runKey);
     const currentLine = currentRun?.lines.find((line) => line.key === lineKey);
     if (!currentRun || !currentLine) return;
     const nextLine: RunLine = {
@@ -520,7 +534,26 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
   }
 
   async function allocate(orderId: string, loadId: string, pallets: number, access: string) {
-    return request<AllocationResult>("/api/v1/planning-control/allocations", access, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ orderId, loadId, date, pallets, note: "Auto-saved from live Run Planner" }) });
+    // The key belongs to this save operation: retries reuse it, while a later
+    // edit back to a previously used quantity must create a new ledger event.
+    const idempotencyKey = crypto.randomUUID();
+    return request<AllocationResult>("/api/v1/planning-control/allocations", access, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ orderId, loadId, date, pallets, idempotencyKey, note: "Auto-saved from live Run Planner" }) });
+  }
+
+  async function allocateBatch(entries: Array<[string, number]>, loadId: string, access: string) {
+    const allocations = entries.map(([orderId, pallets]) => ({
+      orderId,
+      loadId,
+      date,
+      pallets,
+      idempotencyKey: crypto.randomUUID(),
+      note: "Auto-saved from live Run Planner",
+    }));
+    return request<AllocationResult[]>("/api/v1/planning-control/allocations/bulk", access, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(allocations),
+    });
   }
 
   async function syncStops(loadId: string, lines: RunLine[], access: string) {
@@ -530,6 +563,23 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
       return;
     }
     await updateRunStops(loadId, stops, access);
+  }
+
+  // Every mutation that replaces the complete stop list must share the same
+  // per-run queue. Otherwise a note edit or removal can race an order add and
+  // persist an older snapshot over the newer route.
+  function enqueueRunMutation(runKey: string, mutation: () => Promise<void>) {
+    const previous = quantitySaveQueues.current[runKey] || Promise.resolve(true);
+    const next = previous.catch(() => true).then(async () => {
+      await mutation();
+      return true;
+    });
+    quantitySaveQueues.current[runKey] = next;
+    void next.then(
+      () => { if (quantitySaveQueues.current[runKey] === next) delete quantitySaveQueues.current[runKey]; },
+      () => { if (quantitySaveQueues.current[runKey] === next) delete quantitySaveQueues.current[runKey]; },
+    );
+    return next;
   }
 
   function notesForRun(run: RunDraft, period = run.period) {
@@ -588,8 +638,8 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
       const created = await createRun({
         reference: runRef(date, number),
         planningDate: date,
-        // Creating a run establishes the shell only; pallet allocation is the
-        // explicit Pallet Control action and must remain zero until then.
+        // Line quantities are allocated straight after creation; the allocation
+        // updates the run's used spaces.
         palletSpacesUsed: 0,
         totalPalletSpaces: capacity.standardCapacity,
         capacityType: `Standard pallets · ${capacity.status} · ${capacity.utilisationPercent}%`,
@@ -601,14 +651,36 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
       // writes fails. The run and its stops are already live at this point.
       setLoads((current) => current.some((load) => load.id === created.id) ? current : [...current, created]);
       updateRun(run.key, (current) => ({ ...current, loadId: created.id, lines: linkedLines }));
-      // Run creation establishes the operational shell only. Pallet Control is
-      // the explicit allocation step, so no order allocation is written here.
-      const confirmed = (await listRuns(date, access)).find((item) => item.id === created.id);
-      if (!confirmed) throw new Error(`${created.reference} was accepted but could not be confirmed in the saved run list. It was not made available for allocation.`);
+      // The create response is the authoritative write result. Do not immediately
+      // re-read the full run register here: that expensive read was the source
+      // of gateway 504s after a successful run save.
+      const confirmed = created;
+      if (!confirmed?.id) throw new Error(`${created.reference} was accepted without a run id. The draft has been kept for retry.`);
+      // Putting an order on a run plans its quantity straight away, so Pallet Order's
+      // "To plan" drops the moment the run exists. Later edits replace these figures.
+      const lineAllocations = new Map<string, number>();
+      for (const line of linkedLines) {
+        const ids = lineOrderIds(line);
+        if (!ids.length) continue;
+        if (line.orderAllocations) {
+          for (const id of ids) lineAllocations.set(id, (lineAllocations.get(id) || 0) + Math.max(line.orderAllocations[id] || 0, 0));
+          continue;
+        }
+        let remaining = validPallets(line.pallets) || 0;
+        for (const id of ids) {
+          const order = orders.find((item) => item.id === id);
+          const quantity = ids.length === 1 ? remaining : Math.min(remaining, Math.max(order?.outstandingPallets ?? 0, 0));
+          if (quantity > 0) lineAllocations.set(id, (lineAllocations.get(id) || 0) + quantity);
+          remaining -= quantity;
+        }
+      }
+      const allocationEntries = [...lineAllocations.entries()].filter(([, pallets]) => pallets > 0);
+      if (allocationEntries.length === 1) await allocate(allocationEntries[0][0], created.id, allocationEntries[0][1], access);
+      else if (allocationEntries.length > 1) await allocateBatch(allocationEntries, created.id, access);
       if (run.relayEnabled) await updateRunRelay(created.id, relayPayload(run), access);
       dirtyRunKeys.current.delete(run.key);
       signalPlanningChange();
-      setMessage(`${created.reference} created. It is now available in Pallet Order for allocation.`);
+      setMessage(`${created.reference} created and planned in Pallet Order.`);
       void refreshControl().catch(() => undefined);
       return created.id;
     } catch (error) {
@@ -658,39 +730,84 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
     return { allocations, remaining };
   }
 
-  async function persistQuantity(runKey: string, lineKey: string, loadId: string, allocations: Record<string, number>, pallets: number, linesAfterEdit: RunLine[]) {
+  async function persistQuantity(runKey: string, lineKey: string, loadId: string, allocations: Record<string, number>, pallets: number, linesAfterEdit: RunLine[], persistStops = true) {
     const mutation = ++mutationCounter.current;
+    const dirtyVersion = dirtyRunVersions.current.get(runKey) ?? 0;
     const key = `${runKey}:${lineKey}`;
     setBusyKey(key);
     try {
       const access = await token();
-      await Promise.all(Object.entries(allocations).map(([orderId, quantity]) => allocate(orderId, loadId, quantity, access)));
-      if (pallets === 0) await syncStops(loadId, linesAfterEdit, access);
-      dirtyRunKeys.current.delete(runKey);
-      signalPlanningChange();
-      setMessage(`Auto-saved · ${pallets} pallet${pallets === 1 ? "" : "s"} on this consolidated movement.`);
-      // Re-read runs, allocations and order review together after the server
-      // allocation succeeds. This keeps Planner Builder and Pallet Order on the
-      // same authoritative state instead of refreshing only the local summary.
-      void refreshAll().catch(() => undefined);
+      // Save the whole consolidated row in one server transaction. This keeps
+      // Pallet Control from seeing a partially-written row and removes the
+      // repeated ledger reads that previously caused slow mobile saves/504s.
+      const entries = Object.entries(allocations);
+      // A quantity edit is a single allocation replacement. Use the proven
+      // single-allocation endpoint for it; reserve the batch endpoint for
+      // genuinely multi-order consolidated rows.
+      if (entries.length === 1) {
+        await allocate(entries[0][0], loadId, entries[0][1], access);
+      } else {
+        await allocateBatch(entries, loadId, access);
+      }
+      // Adding an order changes the route's stops. A quantity-only edit does not,
+      // so avoid a second write that can time out after the allocation succeeded.
+      if (persistStops) {
+        // A queued save may have been created before the next clicks rendered.
+        // Read the current run immediately before replacing its stop list so an
+        // older snapshot cannot remove jobs added while this request was running.
+        const latestLines = runsRef.current.find((run) => run.key === runKey)?.lines || linesAfterEdit;
+        await syncStops(loadId, latestLines, access);
+      }
+      // Only clear the dirty marker after every save has succeeded. Keep newer
+      // edits protected if they were made while this request was in flight.
+      if (dirtyRunVersions.current.get(runKey) === dirtyVersion) dirtyRunKeys.current.delete(runKey);
+      return true;
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Pallet quantity could not be auto-saved.");
       if (mutation === mutationCounter.current) void refreshAll();
+      return false;
     } finally { setBusyKey((current) => current === key ? undefined : current); }
   }
 
+  function enqueuePersistQuantity(runKey: string, lineKey: string, loadId: string, allocations: Record<string, number>, pallets: number, linesAfterEdit: RunLine[], persistStops = true) {
+    const previous = quantitySaveQueues.current[runKey] || Promise.resolve(true);
+    if (!quantitySaveQueues.current[runKey]) quantitySaveFailures.current.delete(runKey);
+    const next = previous
+      .catch(() => undefined)
+      .then(async () => {
+        const saved = await persistQuantity(runKey, lineKey, loadId, allocations, pallets, linesAfterEdit, persistStops);
+        if (!saved) quantitySaveFailures.current.add(runKey);
+        return saved;
+      });
+    quantitySaveQueues.current[runKey] = next;
+    void next.then(
+      (saved) => {
+        if (quantitySaveQueues.current[runKey] !== next) return;
+        delete quantitySaveQueues.current[runKey];
+        if (quantitySaveFailures.current.has(runKey) || !saved) return;
+        quantitySaveFailures.current.delete(runKey);
+        signalPlanningChange();
+        setMessage(`Saved to Pallet Control · ${pallets} load unit${pallets === 1 ? "" : "s"} on this consolidated movement.`);
+      },
+      () => { if (quantitySaveQueues.current[runKey] === next) delete quantitySaveQueues.current[runKey]; },
+    );
+    return next;
+  }
+
   function scheduleQuantity(run: RunDraft, line: RunLine, value: string) {
+    const currentRun = runsRef.current.find((item) => item.key === run.key) || run;
+    const currentLine = currentRun.lines.find((item) => item.key === line.key) || line;
     const pallets = validPallets(value);
     if (pallets === undefined) { updateLine(run.key, line.key, { pallets: value }); return; }
-    const ids = lineOrderIds(line);
-    if (!ids.length || !run.loadId) { updateLine(run.key, line.key, { pallets: value }); return; }
-    const distributed = distributeQuantity(ids, pallets, run.key);
+    const ids = lineOrderIds(currentLine);
+    if (!ids.length || !currentRun.loadId) { updateLine(run.key, line.key, { pallets: value }); return; }
+    const distributed = distributeQuantity(ids, pallets, currentRun.key);
     if (distributed.remaining > 0) {
       const maximum = pallets - distributed.remaining;
-      setMessage(`Maximum available for this consolidated movement is ${maximum} pallets.`);
+      setMessage(`Maximum available for this consolidated movement is ${maximum} load units.`);
       return;
     }
-    const linesAfterEdit = run.lines.map((item) => item.key === line.key ? { ...item, pallets: value, orderAllocations: distributed.allocations } : item);
+    const linesAfterEdit = currentRun.lines.map((item) => item.key === line.key ? { ...item, pallets: value, orderAllocations: distributed.allocations } : item);
     updateRun(run.key, (current) => ({ ...current, lines: linesAfterEdit }));
     const timerKey = `${run.key}:${line.key}`;
     if (saveTimers.current[timerKey]) window.clearTimeout(saveTimers.current[timerKey]);
@@ -700,39 +817,49 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
       // below emits again, so a refresh that races the request is followed by
       // the authoritative result without refreshing on every keystroke.
       signalPlanningChange();
-      void persistQuantity(run.key, line.key, run.loadId!, distributed.allocations, pallets, linesAfterEdit);
+      void enqueuePersistQuantity(currentRun.key, line.key, currentRun.loadId!, distributed.allocations, pallets, linesAfterEdit, false);
     }, 250);
   }
 
   async function persistLineNote(run: RunDraft, line: RunLine, note: string) {
-    const linesAfterEdit = run.lines.map((item) => item.key === line.key ? { ...item, note } : item);
+    const currentRun = runsRef.current.find((item) => item.key === run.key) || run;
+    const linesAfterEdit = currentRun.lines.map((item) => item.key === line.key ? { ...item, note } : item);
     updateRun(run.key, (current) => ({ ...current, lines: linesAfterEdit }));
-    if (!run.loadId || !lineOrderIds(line).length) return;
+    if (!currentRun.loadId || !lineOrderIds(line).length) return;
     const key = `${run.key}:${line.key}:note`;
     setBusyKey(key);
-    try { await syncStops(run.loadId, linesAfterEdit, await token()); dirtyRunKeys.current.delete(run.key); signalPlanningChange(); setMessage("Line note auto-saved."); }
+    try {
+      await enqueueRunMutation(run.key, async () => {
+        const latestLines = runsRef.current.find((item) => item.key === run.key)?.lines || linesAfterEdit;
+        await syncStops(currentRun.loadId!, latestLines, await token());
+      });
+      dirtyRunKeys.current.delete(run.key); signalPlanningChange(); setMessage("Line note auto-saved.");
+    }
     catch (error) { setMessage(error instanceof Error ? error.message : "Line note could not be saved."); }
     finally { setBusyKey((current) => current === key ? undefined : current); }
   }
 
   async function clearLine(run: RunDraft, line: RunLine) {
+    const currentRun = runsRef.current.find((item) => item.key === run.key) || run;
     const timerKey = `${run.key}:${line.key}`;
     if (saveTimers.current[timerKey]) { window.clearTimeout(saveTimers.current[timerKey]); delete saveTimers.current[timerKey]; }
-    const remaining = run.lines.length === 1 ? [blankLine()] : run.lines.filter((item) => item.key !== line.key);
+    const remaining = currentRun.lines.length === 1 ? [blankLine()] : currentRun.lines.filter((item) => item.key !== line.key);
     updateRun(run.key, (current) => ({ ...current, lines: remaining }));
     const ids = lineOrderIds(line);
-    if (!ids.length || !run.loadId) return;
+    if (!ids.length || !currentRun.loadId) return;
     setBusyKey(timerKey);
     try {
-      const access = await token();
-      await Promise.all(ids.map((orderId) => allocate(orderId, run.loadId!, 0, access)));
-      if (remaining.some(item => lineOrderIds(item).length > 0)) {
-        await syncStops(run.loadId, remaining, access);
-      } else {
-        // Removing the final movement removes the planning run. Persist a cancellation
-        // tombstone so Dispatch and audit recovery cannot continue to show the old run.
-        await updateRunStatus(run.loadId, "Cancelled", access);
-      }
+      await enqueueRunMutation(run.key, async () => {
+        const access = await token();
+        for (const orderId of ids) await allocate(orderId, currentRun.loadId!, 0, access);
+        const latestLines = runsRef.current.find((item) => item.key === run.key)?.lines || remaining;
+        if (latestLines.some(item => lineOrderIds(item).length > 0)) {
+          await syncStops(currentRun.loadId!, latestLines, access);
+        } else {
+          // Removing the final movement leaves a cancellation tombstone.
+          await updateRunStatus(currentRun.loadId!, "Cancelled", access);
+        }
+      });
       dirtyRunKeys.current.delete(run.key);
       signalPlanningChange();
       setMessage("Movement removed from the run and its remaining pallets returned to Pallet Order.");
@@ -796,34 +923,28 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
             {nextOrderSuggestions.length > 0 && <details className="simple-run-suggestions" aria-label={`Suggested next orders for ${run.key}`} onClick={(event) => event.stopPropagation()}><summary className="simple-run-suggestions-heading"><span><strong>Route suggestions</strong><small>{nextOrderSuggestions.length} sensible fit{nextOrderSuggestions.length === 1 ? "" : "s"} · mileage and direction checked</small></span><span className="simple-run-suggestion-hint">Show</span></summary><div className="simple-run-suggestion-list">{nextOrderSuggestions.map(item => { const confidencePercent = suggestionConfidencePercent(item.score); const confidence = confidencePercent >= 70 ? "high" : confidencePercent >= 45 ? "medium" : "low"; const loadType = item.order.palletType || item.order.loadUnitType; return <article key={item.order.id} className={`simple-run-suggestion confidence-${confidence}`}><div className="simple-run-suggestion-route"><span><small>From</small><strong>{item.order.collection}</strong></span><b aria-hidden="true">→</b><span><small>To</small><strong>{item.order.destination}</strong></span></div><div className="simple-run-suggestion-meta"><span><small>Load</small><strong>{item.order.outstandingPallets}{loadType ? ` ${loadType}` : ""}</strong></span>{item.connectorMiles != null && <span><small>Reposition</small><strong>~{Math.round(item.connectorMiles)} mi</strong></span>}<span><small>Fit</small><strong>{confidencePercent}%</strong></span></div><details><summary>Why?</summary><small>{item.reasons.join(" · ")}</small></details><button type="button" onClick={() => addSuggestedOrder(run, item.order)}>Add</button></article>; })}</div></details>}
             {builderWarnings.length > 0 && <aside className="simple-run-warnings" aria-label="Run builder checks"><strong>Planner checks</strong><ul>{builderWarnings.map(warning => <li key={warning}>{warning}</li>)}</ul></aside>}
             <div className="simple-run-columns"><span>Collection</span><span>Pallets</span><span>Delivery</span><span>Line note</span><span /></div>
-            <div className="simple-run-lines">{run.lines.map((line, lineIndex) => {
-              const refs = lineOrderIds(line).map((id) => effectiveOrders.find((order) => order.id === id)?.reference).filter(Boolean);
-              const matches = matchingLiveOrders(line.collectionSite, line.deliverySite);
-              const completeRoute = Boolean(line.collectionSite.trim() && line.deliverySite.trim());
-              const collectionSuggestions = liveCollections.filter((collection) => !line.collectionSite || normalise(collection).includes(normalise(line.collectionSite))).slice(0, 8);
-              const deliveryByName = new Map<string, { destination: string; pallets: number }>();
-              availableOrders.filter((order) => normalise(order.collection) === normalise(line.collectionSite)).forEach((order) => {
-                const destination = order.destination.trim();
-                const current = deliveryByName.get(normalise(destination));
-                deliveryByName.set(normalise(destination), { destination, pallets: (current?.pallets || 0) + Math.max(order.outstandingPallets, 0) });
-              });
-              const deliverySuggestions = [...deliveryByName.values()].sort((left, right) => left.destination.localeCompare(right.destination));
-              return <div className="simple-run-line" key={line.key} title={refs.length > 1 ? `${refs.length} source orders: ${refs.join(", ")}` : refs[0]}>
-                <span className="simple-line-number">{lineIndex + 1}</span>
-                <div className="simple-picker"><input autoComplete="off" value={line.collectionSite} onFocus={() => setOpenPicker(`${run.key}:${line.key}:collection`)} onBlur={() => window.setTimeout(() => setOpenPicker((current) => current === `${run.key}:${line.key}:collection` ? undefined : current), 120)} onChange={(event) => changeLineLocation(run.key, line, "collectionSite", event.target.value)} placeholder="Start typing live collection…" />{openPicker === `${run.key}:${line.key}:collection` && line.collectionSite && collectionSuggestions.length > 0 && normalise(collectionSuggestions[0]) !== normalise(line.collectionSite) ? <div className="simple-picker-options">{collectionSuggestions.map((collection) => <button type="button" key={collection} onMouseDown={(event) => event.preventDefault()} onClick={() => { chooseCollection(run.key, line.key, collection); setOpenPicker(undefined); }}>{collection}</button>)}</div> : null}</div>
-                <input className="simple-pallet-input" type="number" min="0" inputMode="numeric" value={line.pallets} onChange={(event) => scheduleQuantity(run, line, event.target.value)} placeholder="0" />
-                <div className="simple-picker"><input autoComplete="off" value={line.deliverySite} onFocus={() => setOpenPicker(`${run.key}:${line.key}:delivery`)} onBlur={() => window.setTimeout(() => setOpenPicker((current) => current === `${run.key}:${line.key}:delivery` ? undefined : current), 120)} onChange={(event) => changeLineLocation(run.key, line, "deliverySite", event.target.value)} placeholder="Choose delivery from this collection…" />{openPicker === `${run.key}:${line.key}:delivery` && deliverySuggestions.length > 0 && <div className="simple-picker-options delivery-options">{deliverySuggestions.map((choice) => <button type="button" key={choice.destination} onMouseDown={(event) => event.preventDefault()} onClick={() => { chooseDelivery(run.key, line.key, line.collectionSite, choice.destination); setOpenPicker(undefined); }}><span>{choice.destination}</span><small>{choice.pallets} pallet{choice.pallets === 1 ? "" : "s"}</small></button>)}</div>}</div>
-                <input value={line.note} onChange={(event) => updateLine(run.key, line.key, { note: event.target.value })} onBlur={(event) => void persistLineNote(run, line, event.currentTarget.value)} placeholder={refs.length > 1 ? `${refs.length} orders consolidated` : "Facility / load-line note"} />
-                <button type="button" className="simple-clear-line" aria-label={`Clear line ${lineIndex + 1}`} disabled={busyKey === `${run.key}:${line.key}`} onClick={(event) => { event.stopPropagation(); void clearLine(run, line); }}>×</button>
-                {completeRoute && <small className={`simple-line-match ${lineOrderIds(line).length || matches.length ? "matched" : "unmatched"}`}>
-                  {lineOrderIds(line).length
-                    ? `Linked to ${lineOrderIds(line).length} live order${lineOrderIds(line).length === 1 ? "" : "s"}`
-                    : matches.length
-                    ? `${matches.length} live order${matches.length === 1 ? "" : "s"} · ${matches.reduce((sum, order) => sum + order.outstandingPallets, 0)} available`
-                    : "No live order matches this collection and delivery for the selected date"}
-                </small>}
-              </div>;
-            })}</div>
+            <div className="simple-run-lines">{run.lines.map((line, lineIndex) => (
+              <RunPlannerLine
+                key={line.key}
+                run={run}
+                line={line}
+                lineIndex={lineIndex}
+                effectiveOrders={effectiveOrders}
+                sites={sites}
+                liveCollections={liveCollections}
+                availableOrders={availableOrders}
+                busyKey={busyKey}
+                openPicker={openPicker}
+                setOpenPicker={setOpenPicker}
+                changeLineLocation={changeLineLocation}
+                scheduleQuantity={scheduleQuantity}
+                chooseCollection={chooseCollection}
+                chooseDelivery={chooseDelivery}
+                updateLine={updateLine}
+                persistLineNote={persistLineNote}
+                clearLine={clearLine}
+              />
+            ))}</div>
             <div className="simple-run-footer"><div className="simple-line-actions"><button type="button" onClick={(event) => { event.stopPropagation(); updateRun(run.key, (current) => ({ ...current, lines: [...current.lines, blankLine()] })); }}>+ Add line</button>{!run.loadId && <button type="button" className="primary" disabled={Boolean(busyKey)} onClick={(event) => { event.stopPropagation(); void createPlanningRun(run); }}>{saving ? "Saving…" : "Retry save"}</button>}</div><small>{saving ? "Saving…" : run.loadId ? "✓ Live · available in Pallet Order" : "Select a valid collection and delivery to auto-save this run"}</small></div>
           </article>;
         })}
@@ -834,3 +955,4 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
     </div>
   </section>;
 }
+

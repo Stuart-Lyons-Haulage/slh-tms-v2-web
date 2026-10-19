@@ -144,6 +144,20 @@ export function sortDriversForDispatch(
     const leftHasRun = Boolean(selections[left.driverId]?.runId);
     const rightHasRun = Boolean(selections[right.driverId]?.runId);
     if (leftHasRun !== rightHasRun) return leftHasRun ? -1 : 1;
+
+    // Keep the operational pool useful at a glance: available drivers first,
+    // then unknown/stale records, with unavailable/blocked records at the end.
+    // Allocated rows deliberately remain above this ordering so their amber
+    // allocation state is never hidden below an availability warning.
+    const availabilityRank = (driver: DispatchDriverDto) => {
+      if (driver.isBlocked || driver.onLeave || driver.availabilityState === "unavailable") return 2;
+      if (driver.availabilityState === "unknown") return 1;
+      return 0;
+    };
+    const leftAvailability = availabilityRank(left);
+    const rightAvailability = availabilityRank(right);
+    if (leftAvailability !== rightAvailability) return leftAvailability - rightAvailability;
+
     return left.name.localeCompare(right.name, "en-GB", { sensitivity: "base" });
   });
 }

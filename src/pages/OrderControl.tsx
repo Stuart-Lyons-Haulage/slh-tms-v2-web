@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useWorkingDate } from "../lib/workingDate";
 import { useSearchParams } from "react-router-dom";
 import { request } from "../lib/api";
 import { useAccessToken } from "../lib/auth";
@@ -6,12 +7,14 @@ import { SILENT_API_REFRESH_EVENT } from "../lib/useApi";
 import { SourceEmailEvidenceDrawer } from "../components/SourceEmailEvidenceDrawer";
 import { JobsOperational } from "./JobsOperational";
 import { OrderReviewBulk } from "./OrderReviewBulk";
+import { OrderChangeAlerts } from "../components/OrderChangeAlerts";
 import { UndatedOrderReviewQueue } from "./UndatedOrderReviewQueue";
 import { listRuns } from "../api/runs";
-import { tomorrowIsoDate } from "../lib/dateUtils";
+import { Orders as AddOrders } from "./Pages";
 import type { Load, TransportOrder } from "../lib/api";
+import { PastDatedOrders } from "../components/PastDatedOrders";
 
-type OrderControlTab = "review" | "live";
+type OrderControlTab = "review" | "live" | "add";
 type NwfRepairResponse = { repaired: number; message: string };
 type CachedEmailRecord = {
   evidenceId: string;
@@ -49,15 +52,8 @@ type ForceReviewResponse = {
   stagedImportId?: string;
 };
 
-type RetainedReplayResponse = {
-  eligibleOrders: number;
-  evidenceScanned: number;
-  pendingAfterReplay: number;
-  legacyMappingExceptionsArchived: number;
-  hasMore: boolean;
-  nextAfterReceivedAtUtc?: string;
-  nextAfterEvidenceId?: string;
-};
+type ReplayJobStatus = { id: string; done: boolean; evidenceScanned: number; eligibleOrders: number; pendingAfterReplay: number; legacyMappingExceptionsArchived: number; errors: string[] };
+
 
 type RetainedReplayCheckpoint = {
   receivedFromUtc?: string;
@@ -74,32 +70,6 @@ type RetainedReplayCheckpoint = {
 
 function replayCheckpointKey(date: string) {
   return `slh:retained-order-replay:${date}`;
-}
-
-function readReplayCheckpoint(date: string, receivedFromUtc: string, receivedToUtc: string): RetainedReplayCheckpoint | undefined {
-  try {
-    const raw = sessionStorage.getItem(replayCheckpointKey(date));
-    if (!raw) return undefined;
-    const value = JSON.parse(raw) as Partial<RetainedReplayCheckpoint>;
-    if (!value.startFromBeginning && (!value.afterReceivedAtUtc || !value.afterEvidenceId)) return undefined;
-    const checkpointReceivedFrom = value.receivedFromUtc ?? `${addDays(date, -2)}T00:00:00Z`;
-    const checkpointReceivedTo = value.receivedToUtc ?? `${addDays(date, 1)}T00:00:00Z`;
-    if (checkpointReceivedFrom !== receivedFromUtc || checkpointReceivedTo !== receivedToUtc) return undefined;
-    return {
-      receivedFromUtc: checkpointReceivedFrom,
-      receivedToUtc: checkpointReceivedTo,
-      afterReceivedAtUtc: value.afterReceivedAtUtc,
-      afterEvidenceId: value.afterEvidenceId,
-      startFromBeginning: value.startFromBeginning === true,
-      batchSize: value.batchSize === 1 ? 1 : 5,
-      batches: Number(value.batches) || 0,
-      evidenceScanned: Number(value.evidenceScanned) || 0,
-      eligibleOrders: Number(value.eligibleOrders) || 0,
-      archived: Number(value.archived) || 0,
-    };
-  } catch {
-    return undefined;
-  }
 }
 
 function saveReplayCheckpoint(date: string, checkpoint: RetainedReplayCheckpoint | undefined) {
@@ -301,92 +271,31 @@ function OrderIntakeCacheRecovery({ date }: { date: string }) {
     setReplaying(true);
     setError(undefined);
     try {
-      const authToken = await token();
-      const receivedFromUtc = `${receivedFromDate}T00:00:00Z`;
-      const receivedToUtc = `${addDays(receivedThroughDate, 1)}T00:00:00Z`;
-      const checkpoint = readReplayCheckpoint(date, receivedFromUtc, receivedToUtc);
-      const baseRequest = {
-        receivedFromUtc,
-        receivedToUtc,
-        minimumPlanningDate: date,
-        maximumPlanningDate: date,
-        refreshUnamendedPending: true,
-        maxMessages: 5
-      };
-      let afterReceivedAtUtc: string | undefined = checkpoint?.afterReceivedAtUtc;
-      let afterEvidenceId: string | undefined = checkpoint?.afterEvidenceId;
-      let batchSize = checkpoint?.batchSize ?? 5;
-      let eligibleOrders = checkpoint?.eligibleOrders ?? 0;
-      let evidenceScanned = checkpoint?.evidenceScanned ?? 0;
-      let pendingAfterReplay = 0;
-      let archived = checkpoint?.archived ?? 0;
-      let batches = checkpoint?.batches ?? 0;
-      let hasMore = true;
-      if (checkpoint) setNotice(`Resuming re-parse at batch ${batches + 1}; ${evidenceScanned} emails already checked.`);
-
-      while (hasMore) {
-        const sendBatch = (maxMessages: number) => request<RetainedReplayResponse>("/api/v1/order-intake/replay-retained-evidence", authToken, {
-          method: "POST",
-          body: JSON.stringify({ ...baseRequest, maxMessages, afterReceivedAtUtc, afterEvidenceId })
-        });
-        let result: RetainedReplayResponse;
-        try {
-          result = await sendBatch(batchSize);
-        } catch (batchError) {
-          if (batchSize === 1) throw batchError;
-          // If a five-email request times out, retry from the same cursor one email
-          // at a time. Each successful reply is checkpointed, so later retries do
-          // not have to replay the whole date window.
-          batchSize = 1;
-          saveReplayCheckpoint(date, checkpoint ? { ...checkpoint, batchSize } : {
-            receivedFromUtc,
-            receivedToUtc,
-            startFromBeginning: true,
-            batchSize,
-            batches,
-            evidenceScanned,
-            eligibleOrders,
-            archived,
-          });
-          setNotice(`Batch ${batches + 1} failed; retrying one email at a time from the last saved point.`);
-          result = await sendBatch(batchSize);
-        }
-        batches += 1;
-        eligibleOrders += result.eligibleOrders;
-        evidenceScanned += result.evidenceScanned;
-        pendingAfterReplay += result.pendingAfterReplay;
-        archived += result.legacyMappingExceptionsArchived;
-        hasMore = result.hasMore;
-        afterReceivedAtUtc = result.nextAfterReceivedAtUtc;
-        afterEvidenceId = result.nextAfterEvidenceId;
-        if (hasMore && (!afterReceivedAtUtc || !afterEvidenceId)) {
-          throw new Error("Replay continuation cursor was missing.");
-        }
-        saveReplayCheckpoint(date, hasMore && afterReceivedAtUtc && afterEvidenceId ? {
-          receivedFromUtc,
-          receivedToUtc,
-          afterReceivedAtUtc,
-          afterEvidenceId,
-          batchSize,
-          batches,
-          evidenceScanned,
-          eligibleOrders,
-          archived,
-        } : undefined);
-        if (hasMore) setNotice(`Re-parsing… batch ${batches}; ${evidenceScanned} emails checked, ${eligibleOrders} matching orders found.`);
-        if (batches > 500) throw new Error("Replay exceeded the safe batch limit.");
-        setNotice(`Re-parsing retained evidence… batch ${batches}${hasMore ? "; continuing" : " complete"}.`);
+      // The server runs the re-parse as a job and this screen only polls it, so a slow
+      // email can no longer time out the phone's request part-way through.
+      const started = await request<ReplayJobStatus>("/api/v1/order-intake/replay-jobs", await token(), {
+        method: "POST",
+        body: JSON.stringify({
+          receivedFromUtc: `${receivedFromDate}T00:00:00Z`,
+          receivedToUtc: `${addDays(receivedThroughDate, 1)}T00:00:00Z`,
+          minimumPlanningDate: date,
+          maximumPlanningDate: date,
+          refreshUnamendedPending: true,
+        }),
+      });
+      let job = started;
+      while (!job.done) {
+        setNotice(`Re-parsing… ${job.evidenceScanned} emails checked, ${job.eligibleOrders} matching orders found. You can leave this page.`);
+        await new Promise(resolve => globalThis.setTimeout(resolve, 2500));
+        job = await request<ReplayJobStatus>(`/api/v1/order-intake/replay-jobs/${encodeURIComponent(started.id)}`, await token());
       }
-
-      setNotice(`Re-parse complete: ${eligibleOrders} order${eligibleOrders === 1 ? "" : "s"} matched for ${date}; ${pendingAfterReplay} awaiting review; ${archived} legacy mapping exception${archived === 1 ? "" : "s"} archived.`);
+      saveReplayCheckpoint(date, undefined);
+      const skipped = job.errors.length ? ` ${job.errors.length} email${job.errors.length === 1 ? "" : "s"} could not be re-parsed: ${job.errors.slice(0, 3).join("; ")}` : "";
+      setNotice(`Re-parse complete: ${job.eligibleOrders} order${job.eligibleOrders === 1 ? "" : "s"} matched for ${date}; ${job.pendingAfterReplay} awaiting review; ${job.legacyMappingExceptionsArchived} old placeholder${job.legacyMappingExceptionsArchived === 1 ? "" : "s"} archived.${skipped}`);
       await loadCache();
       refreshVisibleReviewData();
     } catch (err) {
-      const checkpoint = readReplayCheckpoint(date, `${receivedFromDate}T00:00:00Z`, `${addDays(receivedThroughDate, 1)}T00:00:00Z`);
-      const detail = err instanceof Error ? err.message : "Retained evidence could not be re-parsed.";
-      setError(checkpoint
-        ? `${detail} Stopped before batch ${checkpoint.batches + 1}, after ${checkpoint.evidenceScanned} emails. Progress is saved; press Re-parse to resume.`
-        : detail);
+      setError(err instanceof Error ? err.message : "Retained evidence could not be re-parsed.");
     } finally {
       setReplaying(false);
     }
@@ -455,19 +364,31 @@ function OrderIntakeCacheRecovery({ date }: { date: string }) {
   </section>;
 }
 
+let lastNwfRepairCheck = 0;
+
 export function OrderControl({ initialTab = "review" }: { initialTab?: OrderControlTab }) {
   const token = useAccessToken();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [tab, setTab] = useState<OrderControlTab>(initialTab);
+  const requestedTab = searchParams.get("tab");
+  const [tab, setTabState] = useState<OrderControlTab>(requestedTab === "add" || requestedTab === "live" ? requestedTab : initialTab);
+  function setTab(next: OrderControlTab) {
+    setTabState(next);
+    const params = new URLSearchParams(searchParams);
+    if (next === "review") params.delete("tab"); else params.set("tab", next);
+    setSearchParams(params, { replace: true });
+  }
   const [repairNotice, setRepairNotice] = useState<string>();
   const reviewId = searchParams.get("reviewId")?.trim() || undefined;
   const sourceEmailStagingId = searchParams.get("sourceEmail") === "1" ? reviewId : undefined;
-  const selectedDate = searchParams.get("date") || tomorrowIsoDate();
+  const [selectedDate, setWorkingDate] = useWorkingDate();
 
-  useEffect(() => { if (reviewId) setTab("review"); }, [reviewId]);
+  useEffect(() => { if (reviewId) setTabState("review"); }, [reviewId]);
 
   useEffect(() => {
     let active = true;
+    // A write: it tells every open screen to refresh, so run it at most every 30 minutes.
+    if (Date.now() - lastNwfRepairCheck < 30 * 60_000) return;
+    lastNwfRepairCheck = Date.now();
     void (async () => {
       try {
         const result = await request<NwfRepairResponse>("/api/v1/staging/orders/repair-nwf-references", await token(), { method: "POST" });
@@ -480,10 +401,7 @@ export function OrderControl({ initialTab = "review" }: { initialTab?: OrderCont
   }, [token]);
 
   function updateDate(nextDate: string) {
-    const next = new URLSearchParams(searchParams);
-    if (nextDate) next.set("date", nextDate);
-    else next.delete("date");
-    setSearchParams(next, { replace: true });
+    if (nextDate) setWorkingDate(nextDate);
   }
 
   function closeSourceEmail() {
@@ -493,24 +411,20 @@ export function OrderControl({ initialTab = "review" }: { initialTab?: OrderCont
   }
 
   return <>
-    <section className="panel" style={{ marginBottom: 18 }}>
-      <div className="title-row" style={{ alignItems: "end", gap: 16 }}>
-        <div>
-          <p className="eyebrow">Order control</p>
-          <h1>Manage imported jobs</h1>
-        </div>
-        <div className="title-actions" style={{ alignItems: "center", gap: 8 }}>
-          <label className="dashboard-date">Date <input type="date" value={selectedDate} onChange={(event) => updateDate(event.target.value)} /></label>
-          <div role="tablist" aria-label="Order control view" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button type="button" className={tab === "review" ? "primary" : ""} onClick={() => setTab("review")} role="tab" aria-selected={tab === "review"}>Waiting for review</button>
-            <button type="button" className={tab === "live" ? "primary" : ""} onClick={() => setTab("live")} role="tab" aria-selected={tab === "live"}>Approved / promoted orders</button>
-          </div>
-        </div>
+    <section className="ui-page-head" style={{ marginBottom: 10 }}>
+      <div>
+        <h1>Orders</h1>
+        <p>Check what came in from the mailbox, approve it into the plan, and add anything that arrived another way.</p>
       </div>
-      {repairNotice && <p className="notice inline-notice" style={{ marginBottom: 0 }}>{repairNotice}</p>}
     </section>
-    <OrderReviewDateStrip selectedDate={selectedDate} onChange={updateDate} />
-    {tab === "review" ? <><OrderIntakeCacheRecovery date={selectedDate} /><UndatedOrderReviewQueue /><OrderReviewBulk date={selectedDate} /></> : <><ApprovedOrdersList date={selectedDate} token={token} /><JobsOperational date={selectedDate} /></>}
+    <div className="ui-tabs" role="tablist" aria-label="Orders view" style={{ marginBottom: 12 }}>
+      <button type="button" role="tab" aria-selected={tab === "review"} onClick={() => setTab("review")}>Waiting for review</button>
+      <button type="button" role="tab" aria-selected={tab === "live"} onClick={() => setTab("live")}>Approved orders</button>
+      <button type="button" role="tab" aria-selected={tab === "add"} onClick={() => setTab("add")}>Add orders</button>
+    </div>
+    {repairNotice && <p className="notice inline-notice">{repairNotice}</p>}
+    {tab !== "add" && <OrderReviewDateStrip selectedDate={selectedDate} onChange={updateDate} />}
+    {tab === "add" ? <AddOrders /> : tab === "review" ? <><p className="hint" style={{ margin: "0 0 8px" }}>"Unusual: new delivery point / collection site" usually means a site name isn't in Master data yet. <a href="/admin/order-intake?tab=names">Fix site names</a> once and every waiting order is re-checked.</p><OrderChangeAlerts /><PastDatedOrders onClosed={refreshVisibleReviewData} /><OrderIntakeCacheRecovery date={selectedDate} /><UndatedOrderReviewQueue /><OrderReviewBulk date={selectedDate} /></> : <><ApprovedOrdersList date={selectedDate} token={token} /><JobsOperational date={selectedDate} /></>}
     {sourceEmailStagingId && <SourceEmailEvidenceDrawer stagingId={sourceEmailStagingId} onClose={closeSourceEmail} />}
   </>;
 }

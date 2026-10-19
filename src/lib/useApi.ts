@@ -29,13 +29,23 @@ export function useApi<T>(load: () => Promise<T>): UseApiResult<T> {
   const requestNumber = useRef(0);
   const inFlight = useRef<Promise<void> | null>(null);
   const inFlightLoad = useRef<(() => Promise<T>) | null>(null);
+  // A refresh asked for while one is running (e.g. "saved" arriving while the
+  // "typing finished" reload is still loading) must not be dropped: that reload
+  // started before the save, so it shows the old figures. Run one more after it.
+  const rerunAfter = useRef<Promise<void> | null>(null);
   const mounted = useRef(true);
   const hasData = useRef(Boolean(initialData));
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (): Promise<void> => {
     // A changed dependency (for example a new timesheet date range) is a new
     // request even when the previous request is still resolving. Reusing the
     // old promise here leaves the new view displaying the previous range.
-    if (inFlight.current && inFlightLoad.current === load) return inFlight.current;
+    if (inFlight.current && inFlightLoad.current === load) {
+      if (!rerunAfter.current) {
+        const running = inFlight.current;
+        rerunAfter.current = running.catch(() => undefined).then(() => { rerunAfter.current = null; return refreshRef.current(); });
+      }
+      return rerunAfter.current;
+    }
     const request = ++requestNumber.current;
     const operation = (async () => {
       // Once data is already rendered, refresh it in place. This avoids replacing an
@@ -80,6 +90,8 @@ export function useApi<T>(load: () => Promise<T>): UseApiResult<T> {
       }
     }
   }, [load]);
+  const refreshRef = useRef(refresh);
+  refreshRef.current = refresh;
   useEffect(() => {
     mounted.current = true;
     const onSilentRefresh = () => { void refresh(); };

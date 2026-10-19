@@ -9,6 +9,7 @@ import review from "./pages/OrderReviewBulk.tsx?raw";
 import palletControl from "./pages/PalletPlanningControl.tsx?raw";
 import planner from "./pages/PlannerEnhanced.tsx?raw";
 import runBuilder from "./pages/RunPlannerLive.tsx?raw";
+import runBuilderLine from "./pages/RunPlannerLine.tsx?raw";
 
 describe("operations housekeeping contract", () => {
   it("keeps Planner focused on planning only", () => {
@@ -40,7 +41,7 @@ describe("operations housekeeping contract", () => {
     expect(palletControl).toContain('matrix("toPlan", "To Plan"');
     expect(palletControl).toContain('matrix("planned", "Planned"');
     expect(palletControl).toContain('matrix("summary", "Pallet Summary"');
-    expect(palletControl).toContain("data.summary.ordered");
+    expect(palletControl).toContain("palletTotals.ordered");
     expect(palletControl).toContain("pallet-control-stack");
     expect(palletControl).toContain("destinationLabels");
     expect(palletControl).toContain("pallet-destination-heading");
@@ -74,20 +75,22 @@ describe("operations housekeeping contract", () => {
     expect(master).not.toContain("Lists is the editable master-data authority");
   });
 
-  it("keeps Admin focused on API feeds, order intake rules and master imports only", () => {
+  it("keeps Settings focused on master data, order intake, system health and imports only", () => {
     expect(app).not.toContain("Admin Home");
     expect(app).not.toContain("RoadRunner Review");
-    expect(app).toContain("['/admin/integrations', 'Integrations / API Feeds']");
-    expect(app).toContain("['/admin/imports', 'Imports / Staging Queue']");
+    expect(app).toContain("['/admin/integrations', 'System health']");
+    expect(app).toContain("['/admin/order-intake', 'Order intake']");
+    expect(app).toContain("['/admin/imports', 'Imports']");
+    expect(app).toContain("['/master-data', 'Master data']");
     expect(app).toContain('path="/admin" element={<Navigate to="/admin/integrations" replace />}');
     expect(app).not.toContain('path="/admin/staging"');
-    expect(integrations).toContain("API Feeds & Integrations");
-    expect(integrations).toContain("single TMS source for external API/feed health");
+    expect(integrations).toContain("System health");
+    expect(integrations).toContain("Every outside system the TMS reads from");
   });
 
   it("keeps Planner Builder full-width and selects live jobs for the selected day", () => {
     expect(runBuilder).not.toContain('className="simple-order-pool"');
-    expect(runBuilder).toContain('simple-picker-options');
+    expect(runBuilderLine).toContain('simple-picker-options');
     expect(runBuilder).not.toContain('planner-collection-site-options');
     expect(runBuilder).toContain("liveCollections");
     expect(runBuilder).toContain("matchingLiveOrders");
@@ -95,23 +98,37 @@ describe("operations housekeeping contract", () => {
     expect(runBuilder).toContain("Choose both to link the line to the matching order(s)");
     expect(runBuilder).toContain("orderLineNote(order)");
     expect(runBuilder).toContain("mergedOrderLineNote");
-    expect(runBuilder).toContain('Start typing live collection');
-    expect(runBuilder).toContain('Choose delivery from this collection');
+    expect(runBuilderLine).toContain('Start typing live collection');
+    expect(runBuilderLine).toContain('Choose delivery from this collection');
   });
 
   it("keeps Run Builder suggestions scrollable and signals Pallet Order during quantity edits", () => {
     expect(runBuilder).toContain("signalPlanningChange();");
-    expect(runBuilder).toContain("const linesAfterEdit = run.lines.map");
+    expect(runBuilder).toContain("const linesAfterEdit = currentRun.lines.map");
   });
 
 
 
-  it("keeps Dashboard focused on daily transport control and feed freshness", () => {
-    expect(dashboard).toContain("Daily transport control");
-    expect(dashboard).toContain("System feeds");
-    expect(dashboard).toContain("Data freshness");
-    expect(dashboard).toContain("Planner Builder");
-    expect(dashboard).toContain("Master Data");
-    expect(dashboard).toContain("Compliance");
+  it("keeps Today as an exceptions list that links to the screen that fixes each one", () => {
+    expect(dashboard).toContain("Needs you now");
+    expect(dashboard).toContain("useWorkingDate");
+    expect(dashboard).toContain("/api/v1/order-changes?open=true");
+    expect(dashboard).toContain("pendingReviewCounts");
+    expect(dashboard).toContain('to: "/admin/integrations"');
+    // Feed detail lives in System health only; Today just flags a feed that is down.
+    expect(dashboard).not.toContain("Data freshness");
+    expect(dashboard).not.toContain("DailyAllocationViewer");
+  });
+
+  it("orders the menu by the working day and drops duplicate routes", () => {
+    expect(app).toContain("['/dashboard', 'Today']");
+    expect(app).toContain("['/staging', 'Orders']");
+    expect(app).toContain("['/staffing', 'Drivers']");
+    expect(app).not.toContain("['/bookings',");
+    expect(app).toContain('<Route path="/orders" element={<Navigate to="/staging?tab=add" replace />} />');
+    expect(app).toContain('<Route path="/bookings" element={<Navigate to="/pallet-control?tab=southbound" replace />} />');
+    expect(app).toContain('<Route path="/driver-timesheets" element={<Navigate to="/staffing?tab=timesheets" replace />} />');
+    expect(app).toContain("<WorkingDateControl />");
+    expect(palletControl).toContain("<SouthboundCollections");
   });
 });

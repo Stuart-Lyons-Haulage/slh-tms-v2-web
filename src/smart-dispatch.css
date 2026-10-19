@@ -243,11 +243,29 @@
 .smart-dispatch-row:last-child td { border-bottom: 0; }
 .smart-dispatch-row.return-needed { background: #fffaf0; }
 .smart-dispatch-row.blocked { background: #f7f7f8; color: #687984; }
+.smart-dispatch-row.availability-unknown {
+  background-color: #f1f3f4;
+  background-image: repeating-linear-gradient(135deg, rgba(95, 109, 119, .08) 0, rgba(95, 109, 119, .08) 6px, transparent 6px, transparent 12px);
+  color: #596873;
+}
 .smart-dispatch-row.on-leave { background: #fde3e3; color: #7f1d1d; }
 .smart-dispatch-row.on-leave td { border-bottom-color: #f3b8b8; }
 .smart-dispatch-row.on-leave .smart-driver-cell strong,
 .smart-dispatch-row.on-leave .smart-location-cell strong,
 .smart-dispatch-row.on-leave .smart-available-cell strong { color: #7f1d1d; }
+
+/* Dispatch state is the operational truth and must override availability
+   styling: amber means allocated, green means sent to Samsara. */
+.smart-dispatch-row.allocated { background: #fff3d6; color: #7a4a00; }
+.smart-dispatch-row.allocated td { border-bottom-color: #f1d28b; }
+.smart-dispatch-row.samsara-sent { background: #e1f3e7; color: #155724; }
+.smart-dispatch-row.samsara-sent td { border-bottom-color: #abd8b7; }
+.smart-dispatch-row.allocated .smart-driver-cell strong,
+.smart-dispatch-row.allocated .smart-location-cell strong,
+.smart-dispatch-row.allocated .smart-available-cell strong { color: #7a4a00; }
+.smart-dispatch-row.samsara-sent .smart-driver-cell strong,
+.smart-dispatch-row.samsara-sent .smart-location-cell strong,
+.smart-dispatch-row.samsara-sent .smart-available-cell strong { color: #155724; }
 
 .smart-driver-cell strong,
 .smart-location-cell strong,
@@ -407,6 +425,7 @@
 }
 
 .smart-inline-warning { color: #8a5c00 !important; }
+.smart-inline-status { color: #16733a !important; font-weight: 700; }
 .smart-inline-error { color: #a52b2b !important; }
 .smart-muted { color: #81919c; }
 

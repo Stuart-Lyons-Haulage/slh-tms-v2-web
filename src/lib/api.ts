@@ -167,17 +167,21 @@ export type CustomerCommunication = {
   reviewedBy?: string;
   reviewNote?: string;
   payload: {
-    source: { subject?: string; senderName?: string; senderAddress?: string };
+    source: { subject?: string; senderName?: string; senderAddress?: string; receivedAtUtc?: string; webLink?: string };
+    /** What the sender wrote in this email, without quoted history (mailbox-recorded requests). */
+    ownText?: string;
+    /** Orders in the same email thread (requests) or orders missing from a resent booking. */
+    linkedOrders?: { stagingId: string; reference?: string; status?: string; destination?: string; pallets?: number }[];
     extraction: {
       purpose: string;
-      planVersion: string;
-      exceptionSignals: string[];
-      customerHints: string[];
-      claims: CustomerCommunicationClaim[];
+      planVersion?: string;
+      exceptionSignals?: string[];
+      customerHints?: string[];
+      claims?: CustomerCommunicationClaim[];
       nextUpdateLocal?: string;
       acceptanceUntilLocal?: string;
-      attachments: CustomerCommunicationAttachment[];
-      warnings: string[];
+      attachments?: CustomerCommunicationAttachment[];
+      warnings?: string[];
     };
   };
 };
@@ -188,7 +192,8 @@ export type OperationsReconciliation = {
   orders: { total: number; readyToPlan: number; planned: number; inTransit: number; delivered: number };
   loads: { total: number; planned: number; dispatched: number; completed: number; unallocated: number };
   fleet: { activeDrivers: number; assignedDrivers: number; unassignedDrivers: number; activeVehicles: number; assignedVehicles: number; vehiclesSeenToday: number; vehiclesNoSignal: number };
-  staging: { pendingReview: number };
+  staging: { pendingReview: number; failed?: number; mappingExceptions?: number; allocationRecords?: number };
+  audit?: { pendingOutbox: number; mailboxPoll?: { lastAttemptUtc?: string; lastSuccessUtc?: string; inProgress: boolean; lastMessagesSeen: number; lastMessagesIngested: number; lastFailureStage?: string; lastError?: string } | null };
 };
 
 export type OperationalException = { type: string; severity: string; reference: string; description: string; loadId?: string };
@@ -258,6 +263,10 @@ export async function request<T = unknown>(path: string, token?: string, init?: 
       throw new ApiError(response.status, message);
     }
     if (response.status === 204) return undefined as T;
+    // Some summary endpoints answer a failed lookup with placeholder zeros. Treat that as
+    // "couldn't load" so a broken lookup never looks like "all clear".
+    if (response.headers.get('X-SLH-Degraded') === 'true')
+      throw new ApiError(503, `This information couldn't be loaded just now (reference ${response.headers.get('X-SLH-Trace') || 'unknown'}). Try Refresh.`);
     const payload: unknown = await response.json();
     return payload as T;
   } catch (exception) {
@@ -280,6 +289,8 @@ export interface TmsApi {
   trailers(token?: string): Promise<Trailer[]>;
   sites(token?: string): Promise<Site[]>;
   updateSite(id: string, payload: SiteUpdate, token?: string): Promise<Site>;
+  matchStagedSite(id: string, payload: { siteId: string; alias?: string; field: 'collection' | 'destination' }, token?: string): Promise<{ siteId: string; siteName: string; alias: string; field: string; updated: boolean }>;
+  createStagedSite(id: string, payload: { field: 'collection' | 'destination'; name: string; address: string; alias?: string; customerCode?: string }, token?: string): Promise<{ siteId: string; siteName: string; externalCode: string; alias: string; field: string; created: boolean }>;
   marketContacts(token?: string): Promise<MarketContact[]>;
   updateMarketContact(id: string, payload: Omit<MarketContact, 'id'>, token?: string): Promise<MarketContact>;
   fuelPrices(token?: string): Promise<FuelPrice[]>;
@@ -296,6 +307,7 @@ export interface TmsApi {
   fleetStatus(token?: string): Promise<FleetStatus>;
   trackingHistory(date: string, token?: string): Promise<Telemetry>;
   operationsReconciliation(date: string, token?: string): Promise<OperationsReconciliation>;
+  operationsFullSnapshot(date: string, token?: string): Promise<UnknownRecord>;
   operationsExceptions(date: string, token?: string): Promise<OperationsExceptions>;
   driverAssignments(from: string, to: string, token?: string): Promise<DriverAssignment[]>;
   driverTimesheets(from: string, to: string, token?: string): Promise<DriverTimesheetReport>;
@@ -337,16 +349,30 @@ export interface TmsApi {
   invoiceHistory(query: { from?: string; to?: string; customerCode?: string; status?: string }, token?: string): Promise<InvoiceHistoryRecord[]>;
 }
 
+type SharedLookupEntry = { expiresAt: number; promise: Promise<unknown> };
+const sharedLookupCache = new Map<string, SharedLookupEntry>();
+const SHARED_LOOKUP_TTL_MS = 5 * 60_000;
+function sharedLookup<T>(key: string, load: () => Promise<T>): Promise<T> {
+  const current = sharedLookupCache.get(key);
+  if (current && current.expiresAt > Date.now()) return current.promise as Promise<T>;
+  const promise = load().catch(error => { sharedLookupCache.delete(key); throw error; });
+  sharedLookupCache.set(key, { expiresAt: Date.now() + SHARED_LOOKUP_TTL_MS, promise });
+  return promise;
+}
+function invalidateSharedLookup(key: string) { sharedLookupCache.delete(key); }
+
 export const api: TmsApi = {
   customers: token => request<Customer[]>('/api/v1/customers', token),
   customerContacts: token => request<CustomerContact[]>('/api/v1/customer-contacts', token),
-  vehicles: token => request<Vehicle[]>('/api/v1/vehicles', token),
-  updateVehicle: (id, payload, token) => request<Vehicle>(`/api/v1/vehicles/${id}`, token, { method: 'PUT', body: JSON.stringify(payload) }),
-  drivers: token => request<Driver[]>('/api/v1/drivers', token),
-  updateDriver: (id, payload, token) => request<Driver>(`/api/v1/drivers/${id}`, token, { method: 'PUT', body: JSON.stringify(payload) }),
-  trailers: token => request<Trailer[]>('/api/v1/trailers', token),
-  sites: token => request<Site[]>('/api/v1/sites', token),
-  updateSite: (id, payload, token) => request<Site>(`/api/v1/sites/${id}`, token, { method: 'PUT', body: JSON.stringify(payload) }),
+  vehicles: token => sharedLookup('vehicles', () => request<Vehicle[]>('/api/v1/vehicles', token)),
+  updateVehicle: async (id, payload, token) => { const result = await request<Vehicle>(`/api/v1/vehicles/${id}`, token, { method: 'PUT', body: JSON.stringify(payload) }); invalidateSharedLookup('vehicles'); return result; },
+  drivers: token => sharedLookup('drivers', () => request<Driver[]>('/api/v1/drivers', token)),
+  updateDriver: async (id, payload, token) => { const result = await request<Driver>(`/api/v1/drivers/${id}`, token, { method: 'PUT', body: JSON.stringify(payload) }); invalidateSharedLookup('drivers'); return result; },
+  trailers: token => sharedLookup('trailers', () => request<Trailer[]>('/api/v1/trailers', token)),
+  sites: token => sharedLookup('sites', () => request<Site[]>('/api/v1/sites', token)),
+  updateSite: async (id, payload, token) => { const result = await request<Site>(`/api/v1/sites/${id}`, token, { method: 'PUT', body: JSON.stringify(payload) }); invalidateSharedLookup('sites'); return result; },
+  matchStagedSite: async (id, payload, token) => { const result = await request<{ siteId: string; siteName: string; alias: string; field: string; updated: boolean }>(`/api/v1/staging/${id}/match-site`, token, { method: 'POST', body: JSON.stringify(payload) }); invalidateSharedLookup('sites'); return result; },
+  createStagedSite: async (id, payload, token) => { const result = await request<{ siteId: string; siteName: string; externalCode: string; alias: string; field: string; created: boolean }>(`/api/v1/staging/${id}/create-site`, token, { method: 'POST', body: JSON.stringify(payload) }); invalidateSharedLookup('sites'); return result; },
   marketContacts: async token => normaliseMarketContacts(await request<MarketContact[]>('/api/v1/market-contacts', token)),
   updateMarketContact: (id, payload, token) => request<MarketContact>(`/api/v1/market-contacts/${id}`, token, { method: 'PUT', body: JSON.stringify(payload) }),
   fuelPrices: token => request<FuelPrice[]>('/api/v1/fuel-prices', token),
@@ -363,6 +389,7 @@ export const api: TmsApi = {
   fleetStatus: token => request<FleetStatus>('/api/v1/tracking/dot/fleet-status', token),
   trackingHistory: (date, token) => request<Telemetry>(`/api/v1/tracking/dot/history?date=${encodeURIComponent(date)}`, token),
   operationsReconciliation: (date, token) => request<OperationsReconciliation>(`/api/v1/operations/reconciliation?date=${encodeURIComponent(date)}`, token),
+  operationsFullSnapshot: (date, token) => request<UnknownRecord>(`/api/v1/operations/full-snapshot?date=${encodeURIComponent(date)}`, token, undefined, 60000),
   operationsExceptions: (date, token) => request<OperationsExceptions>(`/api/v1/operations/exceptions?date=${encodeURIComponent(date)}`, token),
   driverAssignments: (from, to, token) => request<DriverAssignment[]>(`/api/v1/driver-assignments?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, token),
   driverTimesheets: (from, to, token) => request<DriverTimesheetReport>(`/api/v1/driver-timesheets?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, token),

@@ -168,6 +168,24 @@ describe("smart Dispatch board state", () => {
       .toEqual(["driver-25", ...drivers.slice(0, 24).map(item => item.driverId)]);
   });
 
+  it("puts unavailable and unknown drivers below the available pool", () => {
+    const drivers = [
+      driver({ driverId: "blocked", name: "Blocked Driver", isBlocked: true }),
+      driver({ driverId: "unknown", name: "Unknown Driver", availabilityState: "unknown" }),
+      driver({ driverId: "available", name: "Available Driver" })
+    ];
+    const selections = Object.fromEntries(drivers.map(item => [
+      item.driverId,
+      { runId: "", vehicleId: "", trailerId: "" }
+    ]));
+
+    expect(sortDriversForDispatch(drivers, selections).map(item => item.driverId)).toEqual([
+      "available",
+      "unknown",
+      "blocked"
+    ]);
+  });
+
   it("filters driver dispatch by driver name, code, skill, employment and location text", () => {
     const drivers = [
       driver({ driverId: "north", name: "Alex North", driverCode: "SLH101", employmentType: "Employed", skills: "MarketRun", trackingData: { lastStopName: "Lake Lane" } }),

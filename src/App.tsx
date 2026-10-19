@@ -8,72 +8,76 @@ const MasterDataHub = lazy(() => import('./pages/MasterDataHub').then(module => 
 const DashboardOperational = lazy(() => import('./pages/DashboardOperational').then(module => ({ default: module.DashboardOperational })));
 const DailyCompliance = lazy(() => import('./pages/DailyCompliance').then(module => ({ default: module.DailyCompliance })));
 const JobInvoiceHistory = lazy(() => import('./pages/JobInvoiceHistory').then(module => ({ default: module.JobInvoiceHistory })));
-const BookingReservations = lazy(() => import('./pages/BookingReservations').then(module => ({ default: module.BookingReservations })));
-const DriverAssignments = lazy(() => import('./pages/Pages').then(module => ({ default: module.DriverAssignments })));
-const Orders = lazy(() => import('./pages/Pages').then(module => ({ default: module.Orders })));
 const StagingQueue = lazy(() => import('./pages/Pages').then(module => ({ default: module.StagingQueue })));
 const OrderControl = lazy(() => import('./pages/OrderControl').then(module => ({ default: module.OrderControl })));
 const DriverDispatchOperational = lazy(() => import('./pages/DriverDispatchOperational').then(module => ({ default: module.DriverDispatchOperational })));
-const DriverTimesheets = lazy(() => import('./pages/DriverTimesheets').then(module => ({ default: module.DriverTimesheets })));
 const Staffing = lazy(() => import('./pages/Staffing').then(module => ({ default: module.Staffing })));
 const AdminIntegrationSyncControls = lazy(() => import('./components/AdminIntegrationSyncControls').then(module => ({ default: module.AdminIntegrationSyncControls })));
 const OrderIntakeMappingAdmin = lazy(() => import('./pages/OrderIntakeMappingAdmin').then(module => ({ default: module.OrderIntakeMappingAdmin })));
 const MobileOperations = lazy(() => import('./pages/MobileOperations').then(module => ({ default: module.MobileOperations })));
+const CustomerComms = lazy(() => import('./pages/CustomerComms').then(module => ({ default: module.CustomerComms })));
+const WarehousePlanning = lazy(() => import('./pages/WarehousePlanning').then(module => ({ default: module.WarehousePlanning })));
 
 import { apiScope, localTestAuthEnabled, useAccessToken } from './lib/auth';
-import { api } from './lib/api';
 import { connectPlanningEventStream } from './lib/planningEvents';
 import { isDesktopApp } from './lib/desktop';
 import { HeaderIntelligence } from './components/HeaderIntelligence';
 import { MobileDock } from './components/MobileDock';
+import { WorkingDateControl } from './components/WorkingDateControl';
+import { setWorkingDate } from './lib/workingDate';
+import { pendingReviewCounts } from './lib/pendingReviewCounts';
+import { startVisiblePolling } from './lib/visiblePolling';
 
 type NavItem = [string, string];
+type NavGroup = { label: string; items: NavItem[] };
 
+/** Daily screens, in the order the day runs: orders in, plan, dispatch, execute, people. */
 const coreNavigation: NavItem[] = [
-  ['/dashboard', 'Dashboard'],
-  ['/orders', 'Order Entry'],
-  ['/staging', 'Order Review'],
-  ['/', 'Planner Builder'],
+  ['/dashboard', 'Today'],
+  ['/staging', 'Orders'],
+  ['/', 'Planner'],
   ['/pallet-control', 'Pallet Order'],
-  ['/bookings', 'Booking & Capacity'],
   ['/driver-dispatch', 'Dispatch'],
-  ['/staffing', 'Staffing'],
-  ['/master-data', 'Master Data'],
+  ['/warehouse', 'Warehouse'],
+  ['/customer-comms', 'Customer Comms'],
+  ['/staffing', 'Drivers'],
 ];
 
-const complianceNavigation: NavItem[] = [
-  ['/compliance', 'Compliance'],
-  ['/night-outs', 'Invoice / Job History'],
-];
-
-const adminNavigation: NavItem[] = [
-  ['/admin/integrations', 'Integrations / API Feeds'],
-  ['/admin/order-intake', 'Order Intake Rules'],
-  ['/admin/imports', 'Imports / Staging Queue'],
+const navigationGroups: NavGroup[] = [
+  { label: 'Compliance & Accounts', items: [
+    ['/compliance', 'Vehicle checks'],
+    ['/night-outs', 'Job history & invoicing'],
+  ] },
+  { label: 'Settings', items: [
+    ['/master-data', 'Master data'],
+    ['/admin/order-intake', 'Order intake'],
+    ['/admin/integrations', 'System health'],
+    ['/admin/imports', 'Imports'],
+  ] },
 ];
 
 function pathActive(current: string, path: string) {
   return path === '/' ? current === '/' : current === path || current.startsWith(`${path}/`);
 }
 
-function ComplianceNav({ current }: { current: string }) {
-  const active = complianceNavigation.some(([path]) => pathActive(current, path));
+function NavGroupMenu({ group, current }: { group: NavGroup; current: string }) {
+  const active = group.items.some(([path]) => pathActive(current, path));
   return <details className={`top-nav-group ${active ? 'active' : ''}`}>
-    <summary>Compliance<span aria-hidden="true">⌄</span></summary>
+    <summary>{group.label}<span aria-hidden="true">⌄</span></summary>
     <div className="top-nav-menu">
-      {complianceNavigation.map(([path, label]) => <NavLink key={path} to={path}>{label}</NavLink>)}
+      {group.items.map(([path, label]) => <NavLink key={path} to={path} onClick={event => event.currentTarget.closest('details')?.removeAttribute('open')}>{label}</NavLink>)}
     </div>
   </details>;
 }
 
-function AdminNav({ current }: { current: string }) {
-  const active = adminNavigation.some(([path]) => pathActive(current, path));
-  return <details className={`top-nav-group ${active ? 'active' : ''}`}>
-    <summary>Admin<span aria-hidden="true">⌄</span></summary>
-    <div className="top-nav-menu">
-      {adminNavigation.map(([path, label]) => <NavLink key={path} to={path}>{label}</NavLink>)}
-    </div>
-  </details>;
+/** Keeps the shared working date in step with any ?date= link (e.g. from Today). */
+function WorkingDateFromUrl() {
+  const location = useLocation();
+  useEffect(() => {
+    const date = new URLSearchParams(location.search).get('date');
+    if (date) setWorkingDate(date);
+  }, [location.search]);
+  return null;
 }
 
 function Shell() {
@@ -125,40 +129,30 @@ function Shell() {
     }
 
     let stopped = false;
+    // Counts only (a few bytes) rather than downloading the waiting orders themselves.
     const refreshPendingOrderReviews = async () => {
       try {
-        const rows = await api.staging(await accessToken(), 'PendingReview', 'order', 200);
-        if (!stopped) {
-          const dates = rows.reduce<Record<string, number>>((counts, row) => {
-            let payload: Record<string, unknown> = {};
-            try { payload = row.payloadJson ? JSON.parse(row.payloadJson) as Record<string, unknown> : {}; } catch { /* keep the notification usable if one source payload is malformed */ }
-            const value = String(payload.collectionDate || payload.deliveryDate || '').slice(0, 10);
-            if (/^\d{4}-\d{2}-\d{2}$/.test(value)) counts[value] = (counts[value] || 0) + 1;
-            return counts;
-          }, {});
-          const dateSummary = Object.entries(dates)
-            .sort(([left], [right]) => left.localeCompare(right))
-            .map(([date, count]) => `${new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short' }).format(new Date(`${date}T12:00:00`))}: ${count}`)
-            .join(' · ');
-          setPendingOrderReviews(rows.length);
-          setPendingOrderReviewDates(dateSummary);
-        }
+        const counts = await pendingReviewCounts(accessToken);
+        if (stopped) return;
+        const entries = Object.entries(counts).filter(([, count]) => count > 0).sort(([left], [right]) => left.localeCompare(right));
+        setPendingOrderReviews(entries.reduce((sum, [, count]) => sum + count, 0));
+        setPendingOrderReviewDates(entries
+          .map(([date, count]) => `${new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short' }).format(new Date(`${date}T12:00:00`))}: ${count}`)
+          .join(' · '));
       } catch (error) {
         console.warn('Pending order review count could not be refreshed.', error);
       }
     };
 
     void refreshPendingOrderReviews();
-    const interval = window.setInterval(() => void refreshPendingOrderReviews(), 20000);
-    const onFocus = () => void refreshPendingOrderReviews();
-    window.addEventListener('focus', onFocus);
+    // Paused while the tab is hidden; Today shares the same cached counts.
+    const stop = startVisiblePolling(refreshPendingOrderReviews, 60000);
 
     return () => {
       stopped = true;
-      window.clearInterval(interval);
-      window.removeEventListener('focus', onFocus);
+      stop();
     };
-  }, [accessToken, authenticated, location.pathname]);
+  }, [accessToken, authenticated]);
 
   const loadingContent = <section className="sign-in-panel" aria-live="polite"><p className="eyebrow">Loading</p><h1>Opening TMS screen…</h1></section>;
 
@@ -166,7 +160,7 @@ function Shell() {
     <header className="top-app-header">
       <button className="menu" onClick={() => setOpen(!open)} aria-label="Toggle navigation" aria-expanded={open}>☰</button>
       <NavLink className="brand" to="/dashboard"><span>SLH</span><small>Transport management</small></NavLink>
-      <div className="header-context"><b>Daily transport control</b></div>
+      <div className="header-context">{authenticated ? <WorkingDateControl /> : <b>Daily transport control</b>}</div>
       <div className="header-actions">
         {authenticated
           ? <><span className="user">{activeAccount?.name || activeAccount?.username || 'Microsoft user'}</span><button onClick={() => void signOut()}>Sign out</button></>
@@ -190,10 +184,10 @@ function Shell() {
           {hasPendingOrders && <span className="nav-order-review-count" aria-hidden="true">{pendingLabel}</span>}
         </NavLink>;
       })}
-      <ComplianceNav current={location.pathname} />
-      <AdminNav current={location.pathname} />
+      {navigationGroups.map(group => <NavGroupMenu key={group.label} group={group} current={location.pathname} />)}
     </nav>}
 
+    {authenticated && <WorkingDateFromUrl />}
     {authenticated && <div className="system-strip"><HeaderIntelligence /></div>}
 
     <main>
@@ -201,11 +195,13 @@ function Shell() {
         <Route path="/" element={<PlannerEnhanced />} />
         <Route path="/dashboard" element={<DashboardOperational />} />
         <Route path="/mobile" element={<MobileOperations />} />
-        <Route path="/orders" element={<Orders />} />
+        <Route path="/orders" element={<Navigate to="/staging?tab=add" replace />} />
         <Route path="/staging" element={<OrderControl />} />
         <Route path="/pallet-control" element={<PalletPlanningControl />} />
-        <Route path="/bookings" element={<BookingReservations />} />
+        <Route path="/bookings" element={<Navigate to="/pallet-control?tab=southbound" replace />} />
         <Route path="/driver-dispatch" element={<DriverDispatchOperational />} />
+        <Route path="/customer-comms" element={<CustomerComms />} />
+        <Route path="/warehouse" element={<WarehousePlanning />} />
         <Route path="/staffing" element={<Staffing />} />
         <Route path="/master-data" element={<MasterDataHub />} />
         <Route path="/drivers" element={<MasterDataHub initialSection="drivers" />} />
@@ -217,8 +213,8 @@ function Shell() {
         <Route path="/fuel" element={<MasterDataHub initialSection="fuel-prices" />} />
         <Route path="/compliance" element={<DailyCompliance />} />
         <Route path="/night-outs" element={<JobInvoiceHistory />} />
-        <Route path="/driver-assignments" element={<DriverAssignments />} />
-        <Route path="/driver-timesheets" element={<DriverTimesheets />} />
+        <Route path="/driver-assignments" element={<Navigate to="/staffing?tab=history" replace />} />
+        <Route path="/driver-timesheets" element={<Navigate to="/staffing?tab=timesheets" replace />} />
         <Route path="/admin" element={<Navigate to="/admin/integrations" replace />} />
         <Route path="/admin/imports" element={<StagingQueue masterOnly />} />
         <Route path="/admin/integrations" element={<AdminIntegrationSyncControls />} />

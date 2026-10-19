@@ -20,6 +20,7 @@ type IntakeHealth = {
   healthy: boolean;
   warnings: string[];
   note: string;
+  mailboxPoll?: { lastAttemptUtc?: string; lastSuccessUtc?: string; inProgress: boolean; lastMessagesSeen: number; lastMessagesIngested: number; lastFailureStage?: string; lastError?: string };
 };
 
 function time(value?: string) {
@@ -54,6 +55,7 @@ export function IntakeHealthPanel() {
       </div>
       <div style={{ marginTop: 12, display: "grid", gap: 4 }}>
         <small>Window from: <b>{time(health.data.fromUtc)}</b> · Last retained email: <b>{time(health.data.lastEmailReceivedUtc)}</b> · Last staged order: <b>{time(health.data.lastOrderStagedUtc)}</b> · Last promoted: <b>{time(health.data.lastPromotedUtc)}</b></small>
+        {health.data.mailboxPoll && <small>Mailbox poll: <b>{time(health.data.mailboxPoll.lastSuccessUtc)}</b> · {health.data.mailboxPoll.lastMessagesIngested} ingested from {health.data.mailboxPoll.lastMessagesSeen} seen{health.data.mailboxPoll.inProgress ? " · running" : ""}</small>}
         <small>Known sender fast-path orders: <b>{health.data.fastPathOrders}</b></small>
       </div>
       {health.data.warnings.length > 0 && <div className="warning-list" style={{ marginTop: 12 }}>{health.data.warnings.map((warning) => <span key={warning}>{warning}</span>)}</div>}

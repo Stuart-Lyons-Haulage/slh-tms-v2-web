@@ -24,6 +24,8 @@ type Payload = Record<string, unknown> & {
   sourceSubject?: string;
 };
 
+type UnreadEmail = { id: string; sender?: string; subject?: string; receivedAtUtc?: string; warning?: string; customer?: string; capturedOrders: number; evidenceKept: boolean };
+
 type PendingRow = {
   item: StagedImport;
   payload: Payload;
@@ -94,6 +96,10 @@ export function UndatedOrderReviewQueue() {
   const [busyId, setBusyId] = useState<string>();
   const [editing, setEditing] = useState<{ id: string; payload: Payload }>();
   const [sourceEmailStagingId, setSourceEmailStagingId] = useState<string>();
+  const [unread, setUnread] = useState<Record<string, UnreadEmail>>({});
+  const [notice, setNotice] = useState<string>();
+  const [rereadingAll, setRereadingAll] = useState<string>();
+  const [rowError, setRowError] = useState<{ id: string; message: string }>();
 
   const refresh = useCallback(async () => {
     try {
@@ -103,6 +109,10 @@ export function UndatedOrderReviewQueue() {
       setRecords(result.records);
       setTotal(result.total);
       setComplete(result.complete);
+      try {
+        const emails = await request<UnreadEmail[]>("/api/v1/order-intake/unread-emails", accessToken);
+        setUnread(Object.fromEntries(emails.map(email => [email.id, email])));
+      } catch { /* the cards still work without the extra detail */ }
     } catch (err) {
       setError(err instanceof Error ? err.message : "The pending order queue could not be loaded.");
     } finally {
@@ -119,6 +129,11 @@ export function UndatedOrderReviewQueue() {
 
   const undatedRows = useMemo(() => records.map(parse).filter((row): row is PendingRow => Boolean(row)), [records]);
   const datedCount = records.length - undatedRows.length;
+  // Any card that came from an email can be re-read, whether or not the email list loaded.
+  const emailRows = useMemo(() => undatedRows.filter(row => {
+    const evidence = resolveSourceEvidence(row.payload);
+    return Boolean(unread[row.item.id] || evidence.messageId || evidence.internetMessageId);
+  }), [undatedRows, unread]);
 
   async function beginFix(row: PendingRow) {
     setBusyId(row.item.id);
@@ -133,30 +148,134 @@ export function UndatedOrderReviewQueue() {
     }
   }
 
-  async function saveDates(row: PendingRow) {
+  async function saveAmendment(row: PendingRow) {
     if (!editing || editing.id !== row.item.id) return;
+    const fail = (message: string) => setRowError({ id: row.item.id, message });
+    setRowError(undefined);
     const collectionDate = text(editing.payload.collectionDate);
     const deliveryDate = text(editing.payload.deliveryDate);
-    if (!isUsableDate(collectionDate) && !isUsableDate(deliveryDate)) {
-      setError("Enter a valid collection or delivery date before saving.");
+    if (!isUsableDate(collectionDate)) {
+      fail(isUsableDate(deliveryDate) ? "Enter the collection date too (the day we pick up)." : "Enter a collection date before saving.");
       return;
     }
+    const customerCode = text(editing.payload.customerCode);
+    const collectionSite = text(editing.payload.collectionSite) || text(editing.payload.sellerName);
+    const deliverySite = text(editing.payload.deliverySite) || text(editing.payload.stallNumber);
+    const missing = [!customerCode && "customer", !collectionSite && "collection site", !deliverySite && "delivery site"].filter(Boolean);
+    if (missing.length) { fail(`Fill in the ${missing.join(", ")} before saving.`); return; }
+    const pallets = Number(text(editing.payload.pallets)) || 0;
+    const unitCount = Number(text(editing.payload.unitCount).replace(/,/g, "")) || 0;
+    // Trays / crates are often given as a count with no pallet figure; either is enough.
+    if (pallets <= 0 && unitCount <= 0) { fail("Enter the pallets, or the tray / crate count if that's all the customer gave."); return; }
+    // No reference on the email: make a readable one rather than blocking the save.
+    const reference = text(editing.payload.poNumber) || text(editing.payload.customerPo) ||
+      `${customerCode}-${collectionDate.replaceAll("-", "").slice(2)}-${collectionSite.replace(/[^A-Za-z0-9]/g, "").slice(0, 8).toUpperCase()}`;
 
     setBusyId(row.item.id);
-    setError(undefined);
     try {
+      const amendedPayload: Payload = {
+        ...editing.payload,
+        poNumber: reference,
+        customerCode,
+        collectionSite,
+        collectionSiteName: collectionSite,
+        deliverySite,
+        deliverySiteName: deliverySite,
+        sellerName: collectionSite,
+        stallNumber: deliverySite,
+        pallets,
+        ...(unitCount > 0 ? { unitCount, unitCountType: text(editing.payload.unitCountType) || "Trays" } : {}),
+        deliveryDate: isUsableDate(deliveryDate) ? deliveryDate : collectionDate,
+        plannerReady: true,
+        plannerReviewAcknowledged: true,
+        intakeConfidence: "High",
+        intakeWarnings: [],
+      };
       await request<StagedImport>(`/api/v1/staging/${row.item.id}/payload`, await token(), {
         method: "PUT",
         body: JSON.stringify({
-          payload: editing.payload,
-          note: "Planning date corrected from the Needs attention queue before approval.",
+          payload: amendedPayload,
+          note: "Order amended against the original retained Outlook message and attachment from Needs attention.",
         }),
       });
       setEditing(undefined);
+      setNotice(`Saved ${reference}. It's now in Orders for ${collectionDate.split("-").reverse().join("/")}.`);
       await refresh();
       window.dispatchEvent(new Event(SILENT_API_REFRESH_EVENT));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "The corrected dates could not be saved.");
+      fail(err instanceof Error ? err.message : "The order could not be saved.");
+    } finally {
+      setBusyId(undefined);
+    }
+  }
+
+  /** One email, two or more orders: adds another card from the same email to fill in. */
+  async function addAnotherFromEmail(row: PendingRow) {
+    setBusyId(row.item.id); setRowError(undefined);
+    try {
+      await request(`/api/v1/staging/${row.item.id}/copy-undated`, await token(), { method: "POST" });
+      setNotice("Added another card from the same email below. Fill it in and save it.");
+      await refresh();
+    } catch (err) { setRowError({ id: row.item.id, message: err instanceof Error ? err.message : "Couldn't add another card." }); }
+    finally { setBusyId(undefined); }
+  }
+
+  /** Runs the email back through the full intake for every date it covers. */
+  async function reread(id: string): Promise<string> {
+    const result = await request<{ orders: number; cleared: boolean; message: string }>(`/api/v1/order-intake/unread-emails/${id}/reread`, await token(), { method: "POST" }, 120000);
+    return result.message;
+  }
+
+  async function rereadOne(row: PendingRow) {
+    setBusyId(row.item.id); setError(undefined); setNotice(undefined);
+    try { setNotice(await reread(row.item.id)); await refresh(); window.dispatchEvent(new Event(SILENT_API_REFRESH_EVENT)); }
+    catch (err) { setError(err instanceof Error ? err.message : "The email could not be re-read."); }
+    finally { setBusyId(undefined); }
+  }
+
+  async function rereadAll() {
+    const ids = emailRows.map(row => row.item.id);
+    let inOrders = 0, notOrders = 0, failed = 0;
+    setError(undefined); setNotice(undefined);
+    for (const [index, id] of ids.entries()) {
+      setRereadingAll(`Re-reading ${index + 1} of ${ids.length}…`);
+      try {
+        const message = await reread(id);
+        if (message.includes("now in Orders")) inOrders++;
+        else if (message.startsWith("Not an order email")) notOrders++;
+      } catch { failed++; }
+    }
+    setRereadingAll(undefined);
+    const stillOpen = ids.length - inOrders - notOrders - failed;
+    setNotice(`Re-read ${ids.length} email${ids.length === 1 ? "" : "s"}: ${inOrders} now in Orders, ${notOrders} closed as not orders, ${stillOpen} still need adding by hand` +
+      (failed ? `, ${failed} couldn't be reached (try Re-read all again).` : "."));
+    await refresh();
+    window.dispatchEvent(new Event(SILENT_API_REFRESH_EVENT));
+  }
+
+  async function closeCaptured(row: PendingRow) {
+    setBusyId(row.item.id); setError(undefined);
+    try {
+      await request(`/api/v1/order-intake/unread-emails/${row.item.id}/close-captured`, await token(), { method: "POST" });
+      await refresh();
+    } catch (err) { setError(err instanceof Error ? err.message : "The card could not be closed."); }
+    finally { setBusyId(undefined); }
+  }
+
+  async function rejectRow(row: PendingRow) {
+    setBusyId(row.item.id);
+    setError(undefined);
+    try {
+      await request(`/api/v1/staging/${row.item.id}/reject`, await token(), {
+        method: "POST",
+        body: JSON.stringify({ note: "Rejected from Needs attention after source-evidence review." }),
+      });
+      if (editing?.id === row.item.id) setEditing(undefined);
+      if (sourceEmailStagingId === row.item.id) setSourceEmailStagingId(undefined);
+      await refresh();
+      window.dispatchEvent(new Event(SILENT_API_REFRESH_EVENT));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "The staged order could not be rejected.");
     } finally {
       setBusyId(undefined);
     }
@@ -179,6 +298,11 @@ export function UndatedOrderReviewQueue() {
       <article><span>Total pending</span><strong>{total}</strong><small>API queue total</small></article>
     </div>
 
+    {emailRows.length > 0 && <div className="bulk-source-line" style={{ margin: "8px 0" }}>
+      <span>{emailRows.length} of these came from customer emails. Re-read runs each email back through the TMS for every date in it.</span>
+      <button type="button" className="primary" onClick={() => void rereadAll()} disabled={Boolean(busyId) || Boolean(rereadingAll)}>{rereadingAll || "Re-read all"}</button>
+    </div>}
+    {notice && <p className="notice inline-notice">{notice}</p>}
     {!complete && <p className="review-error">The queue contains more records than this safety view loaded. Review paging is required before the queue can be reconciled completely.</p>}
     {error && <p className="review-error">{error}</p>}
     {loading && <div className="state">Checking pending orders for missing planning dates…</div>}
@@ -193,17 +317,35 @@ export function UndatedOrderReviewQueue() {
         return <article className="bulk-order-row held" key={row.item.id} role="listitem">
           <span className="bulk-order-ref"><strong>{displayReference(row.payload)}</strong><small>{text(row.payload.poNumber) || "TMS reference missing"}</small></span>
           <span><strong>{text(row.payload.customerCode) || "Customer / mapping missing"}</strong><small>{text(row.payload.sellerName) || "Collection site missing"} → {text(row.payload.stallNumber) || "Destination missing"}</small></span>
-          <span className="bulk-order-status blocked">{row.reason}</span>
+          {unread[row.item.id] ? <span className="bulk-order-status blocked" style={{ whiteSpace: "normal" }}>
+            <strong>Email couldn't be read</strong><br />
+            <small>{unread[row.item.id].sender || "Unknown sender"} · {unread[row.item.id].subject || "No subject"}{unread[row.item.id].receivedAtUtc ? ` · ${new Date(unread[row.item.id].receivedAtUtc!).toLocaleString("en-GB", { weekday: "short", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}` : ""}</small><br />
+            {unread[row.item.id].capturedOrders > 0
+              ? <small style={{ color: "#1d7a3a" }}>Already captured: {unread[row.item.id].capturedOrders} order{unread[row.item.id].capturedOrders === 1 ? "" : "s"} from this email are in Orders. Safe to close.</small>
+              : <small>No orders from this email are in the TMS yet.{unread[row.item.id].warning ? ` ${unread[row.item.id].warning}` : ""}</small>}
+          </span> : <span className="bulk-order-status blocked">{row.reason}</span>}
           <div className="bulk-order-actions">
             {hasSource && <button type="button" className="source-email-review-button" onClick={() => setSourceEmailStagingId(row.item.id)} disabled={Boolean(busyId)}>Review source email</button>}
-            {!isEditing && <button type="button" onClick={() => void beginFix(row)} disabled={Boolean(busyId)}>{rowBusy ? "Loading…" : "Fix dates"}</button>}
+            {unread[row.item.id] && unread[row.item.id].capturedOrders > 0 && !isEditing && <button type="button" className="primary" onClick={() => void closeCaptured(row)} disabled={Boolean(busyId)}>Close: already in Orders</button>}
+            {(unread[row.item.id] ? unread[row.item.id].evidenceKept : hasSource) && !isEditing && <button type="button" className="primary" onClick={() => void rereadOne(row)} disabled={Boolean(busyId) || Boolean(rereadingAll)}>{rowBusy ? "Re-reading…" : "Re-read email"}</button>}
+            {!isEditing && <button type="button" onClick={() => void beginFix(row)} disabled={Boolean(busyId)}>{rowBusy ? "Loading…" : "Amend from source"}</button>}
+            {!isEditing && <button type="button" className="reject-button" onClick={() => void rejectRow(row)} disabled={Boolean(busyId)}>{rowBusy ? "Working…" : "Reject"}</button>}
             {isEditing && <>
-              <button type="button" onClick={() => setEditing(undefined)} disabled={rowBusy}>Cancel</button>
-              <button type="button" className="primary" onClick={() => void saveDates(row)} disabled={rowBusy}>{rowBusy ? "Saving…" : "Save dates"}</button>
+              <button type="button" onClick={() => { setEditing(undefined); setRowError(undefined); }} disabled={rowBusy}>Cancel</button>
+              <button type="button" onClick={() => void addAnotherFromEmail(row)} disabled={rowBusy} title="For an email with more than one order">Add another order from this email</button>
+              <button type="button" className="primary" onClick={() => void saveAmendment(row)} disabled={rowBusy}>{rowBusy ? "Saving…" : "Save amended order"}</button>
             </>}
           </div>
+          {rowError?.id === row.item.id && <p className="review-error" role="alert" style={{ gridColumn: "1 / -1", margin: "4px 0" }}>{rowError.message}</p>}
           {isEditing && <div className="bulk-order-editor">
             <div className="bulk-editor-grid">
+              <label>Reference<input value={text(payload.poNumber) || text(payload.customerPo)} onChange={(event) => setEditing((current) => current ? { ...current, payload: { ...current.payload, poNumber: event.target.value, customerPo: event.target.value } } : current)} /></label>
+              <label>Customer code<input value={text(payload.customerCode)} onChange={(event) => setEditing((current) => current ? { ...current, payload: { ...current.payload, customerCode: event.target.value } } : current)} /></label>
+              <label>Collection site<input value={text(payload.collectionSite) || text(payload.sellerName)} onChange={(event) => setEditing((current) => current ? { ...current, payload: { ...current.payload, collectionSite: event.target.value, sellerName: event.target.value } } : current)} /></label>
+              <label>Delivery site<input value={text(payload.deliverySite) || text(payload.stallNumber)} onChange={(event) => setEditing((current) => current ? { ...current, payload: { ...current.payload, deliverySite: event.target.value, stallNumber: event.target.value } } : current)} /></label>
+              <label>Pallets (spaces)<input inputMode="numeric" value={text(payload.pallets)} onChange={(event) => setEditing((current) => current ? { ...current, payload: { ...current.payload, pallets: event.target.value } } : current)} /></label>
+              <label>Trays / crates count<input inputMode="numeric" value={text(payload.unitCount)} placeholder="if no pallet figure" onChange={(event) => setEditing((current) => current ? { ...current, payload: { ...current.payload, unitCount: event.target.value } } : current)} /></label>
+              <label>Counted in<select value={text(payload.unitCountType) || "Trays"} onChange={(event) => setEditing((current) => current ? { ...current, payload: { ...current.payload, unitCountType: event.target.value } } : current)}><option>Trays</option><option>Crates</option><option>Shippers</option></select></label>
               <label>Collection date<input type="date" value={text(payload.collectionDate)} onChange={(event) => setEditing((current) => current ? { ...current, payload: { ...current.payload, collectionDate: event.target.value } } : current)} /></label>
               <label>Delivery date<input type="date" value={text(payload.deliveryDate)} onChange={(event) => setEditing((current) => current ? { ...current, payload: { ...current.payload, deliveryDate: event.target.value } } : current)} /></label>
             </div>

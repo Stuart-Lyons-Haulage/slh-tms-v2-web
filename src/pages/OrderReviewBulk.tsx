@@ -1,5 +1,6 @@
+import { describeQuantity, payloadQuantity } from "../lib/loadQuantity";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api, request, type StagedImport } from "../lib/api";
+import { ApiError, api, request, type StagedImport } from "../lib/api";
 import { useAccessToken } from "../lib/auth";
 import { useApi } from "../lib/useApi";
 import { matchesPlanningDate } from "../lib/orderReviewDates";
@@ -84,6 +85,18 @@ type BulkApproveItemResult = {
   reason: string;
 };
 
+type BulkApprovalJob = {
+  id: string;
+  total: number;
+  processed: number;
+  approved: number;
+  skipped: number;
+  failed: number;
+  done: boolean;
+  skippedItems?: BulkApproveItemResult[];
+  failedItems?: BulkApproveItemResult[];
+};
+
 type BulkApproveResponse = {
   date: string;
   requested: number;
@@ -109,13 +122,44 @@ type ApprovalComparison = {
   changes?: AmendmentChange[];
 };
 
+type ComparisonResult = {
+  comparison?: ApprovalComparison;
+  unavailable: boolean;
+};
+
+type MappingField = "collection" | "destination";
+type MappingAction = { rowId: string; field: MappingField; mode: "match" | "create" };
+
 const text = (value: unknown) => String(value ?? "").trim();
 const numberText = (value: unknown) => value == null || value === "" ? "" : String(value);
 const queuePageSize = 100;
 // Approval promotes each order synchronously on the API. Keep each request
 // comfortably below the App Service/gateway timeout so a slow order cannot
 // discard the result of every order behind it.
-const approvalBatchSize = 10;
+
+async function compareStagedOrder(stagingId: string, accessToken: string): Promise<ComparisonResult> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      return {
+        comparison: await request<ApprovalComparison>(
+          `/api/v1/order-intake/duplicate-check/staging/${encodeURIComponent(stagingId)}/comparison`,
+          accessToken,
+          undefined,
+          30_000,
+        ),
+        unavailable: false,
+      };
+    } catch (error) {
+      lastError = error;
+      if (!(error instanceof ApiError) || error.status !== 503 || attempt === 2) break;
+      await new Promise((resolve) => window.setTimeout(resolve, 500 * (attempt + 1)));
+    }
+  }
+  if (lastError instanceof ApiError && lastError.status === 503)
+    return { unavailable: true };
+  throw lastError instanceof Error ? lastError : new Error("The live order comparison failed.");
+}
 
 function dateKey(value: Date) {
   return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
@@ -235,7 +279,7 @@ function blockingReason(row: ParsedRow, date: string) {
   if (text(payload.collectionDate) !== date && !isPmOvernightCarryIn(payload, date)) return "Collection date does not match the selected planning date";
   if (!text(payload.poNumber)) return "TMS reference is missing";
   if (!text(payload.customerCode)) return "Customer is missing";
-  if (!isBackhaul(payload) && palletCount(payload) <= 0) return "Zero or missing pallets";
+  if (!isBackhaul(payload) && palletCount(payload) <= 0 && !describeQuantity(payloadQuantity(payload)).unitsStated) return "No pallets or tray/crate count";
   return undefined;
 }
 
@@ -271,6 +315,12 @@ function amendmentPrompt(items: Array<{ row: ParsedRow; comparison: ApprovalComp
   return `${sections.join("\n\n")}\n\nOK = approve the amendment. Cancel = keep the existing live order unchanged.`;
 }
 
+function autoApprovalHint(payload: Payload) {
+  const decision = (payload as Record<string, unknown>).autoApproval as { mode?: string; eligible?: boolean } | undefined;
+  if (!decision || decision.mode !== "Trial") return "";
+  return decision.eligible ? "Trial: would auto-approve" : "";
+}
+
 function approvalFailureDetail(result: BulkApproveResponse) {
   const first = result.failedItems?.[0] ?? result.skippedItems?.[0];
   return first?.reason ? ` ${first.reason}` : "";
@@ -289,7 +339,13 @@ export function OrderReviewBulk({ date }: { date: string }) {
   const [requestingOrders, setRequestingOrders] = useState(false);
   const [loadingAllClean, setLoadingAllClean] = useState(false);
   const [customers, setCustomers] = useState<Array<{ code: string; name: string; active: boolean }>>([]);
-  const [sites, setSites] = useState<Array<{ id: string; name: string; driverTextName?: string; externalCode: string; active: boolean }>>([]);
+  const [sites, setSites] = useState<Array<{ id: string; name: string; driverTextName?: string; externalCode: string; collectionAddress?: string; aliases?: string; active: boolean }>>([]);
+  const [mappingAction, setMappingAction] = useState<MappingAction>();
+  const [mappingSiteId, setMappingSiteId] = useState("");
+  const [mappingAlias, setMappingAlias] = useState("");
+  const [mappingName, setMappingName] = useState("");
+  const [mappingAddress, setMappingAddress] = useState("");
+  const [mappingBusy, setMappingBusy] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -309,6 +365,8 @@ export function OrderReviewBulk({ date }: { date: string }) {
     request<StagingQueuePage>(
       `/api/v1/staging/queue?status=PendingReview&entityType=order&page=${queuePage}&pageSize=${queuePageSize}&planningDate=${encodeURIComponent(date)}`,
       await token(),
+      undefined,
+      30_000,
     ), [date, queuePage, token]));
 
   const rows = useMemo(() => (queue.data?.records || []).map(parse), [queue.data]);
@@ -454,6 +512,42 @@ export function OrderReviewBulk({ date }: { date: string }) {
     }
   }
 
+  function beginMapping(row: ParsedRow, field: MappingField, mode: "match" | "create") {
+    const current = field === "collection" ? text(row.payload.sellerName) : text(row.payload.stallNumber);
+    const notes = text(row.payload.driverInstructions);
+    const guessedAddress = field === "destination"
+      ? notes.match(/Deliver to\s+(.+?)(?:\. Must arrive|\. Source email|$)/i)?.[1]?.trim() || text(row.payload.deliveryAddress)
+      : text(row.payload.collectionAddress);
+    setMappingAction({ rowId: row.item.id, field, mode });
+    setMappingSiteId("");
+    setMappingAlias(current);
+    setMappingName(current);
+    setMappingAddress(guessedAddress);
+  }
+
+  async function applyMapping(row: ParsedRow) {
+    if (!mappingAction) return;
+    setMappingBusy(true);
+    setNotice(undefined);
+    try {
+      const authToken = await token();
+      if (mappingAction.mode === "match") {
+        if (!mappingSiteId) throw new Error("Select the canonical site to match.");
+        await api.matchStagedSite(row.item.id, { siteId: mappingSiteId, alias: mappingAlias, field: mappingAction.field }, authToken);
+      } else {
+        if (!mappingName.trim() || !mappingAddress.trim()) throw new Error("Enter both a site name and full address.");
+        await api.createStagedSite(row.item.id, { field: mappingAction.field, name: mappingName, address: mappingAddress, alias: mappingAlias || mappingName, customerCode: text(row.payload.customerCode) }, authToken);
+      }
+      setMappingAction(undefined);
+      await queue.refresh();
+      setNotice(`${displayReference(row.payload)} site mapping updated and kept waiting for approval.`);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "The site mapping could not be saved.");
+    } finally {
+      setMappingBusy(false);
+    }
+  }
+
   async function rejectRow(row: ParsedRow) {
     setBusyId(row.item.id);
     setNotice(undefined);
@@ -483,12 +577,14 @@ export function OrderReviewBulk({ date }: { date: string }) {
     setBusyId(row.item.id);
     setNotice(undefined);
     try {
-      const comparison = await request<ApprovalComparison>(
-        `/api/v1/order-intake/duplicate-check/staging/${encodeURIComponent(row.item.id)}/comparison`,
-        await token(),
-      );
+      const comparisonResult = await compareStagedOrder(row.item.id, await token());
+      const comparison = comparisonResult.comparison;
+      if (comparisonResult.unavailable && (blockingReason(row, date) || reviewFlagReason(row))) {
+        setNotice("This order still has review flags, so it cannot be approved until the live duplicate check is available.");
+        return;
+      }
 
-      if (comparison.classification === "Exact duplicate") {
+      if (comparison?.classification === "Exact duplicate") {
         if (!window.confirm(`Permanently delete the duplicate staging entry for ${displayReference(row.payload)} and its review history? The live order will remain unchanged.`)) {
           setNotice("Duplicate deletion cancelled. The live order and review entry were not changed.");
           return;
@@ -504,7 +600,7 @@ export function OrderReviewBulk({ date }: { date: string }) {
         return;
       }
 
-      if (comparison.classification === "Amendment/update" &&
+      if (comparison?.classification === "Amendment/update" &&
           !window.confirm(amendmentPrompt([{ row, comparison }]))) {
         setNotice("Amendment approval cancelled. The existing live order has not been changed.");
         return;
@@ -525,6 +621,9 @@ export function OrderReviewBulk({ date }: { date: string }) {
       );
 
       setNotice(`${result.message}${approvalFailureDetail(result)}`);
+      if (comparisonResult.unavailable) {
+        setNotice(`${result.message} Live duplicate comparison was temporarily unavailable; the order passed the clean-order validation and was recorded for follow-up review.`);
+      }
       if (result.approved > 0) {
         setSelectedIds((current) => {
           const next = new Set(current);
@@ -554,17 +653,29 @@ export function OrderReviewBulk({ date }: { date: string }) {
     setBusy(true);
     setNotice(undefined);
     try {
-      const approvalChecks = await Promise.all(rowsToApprove.map(async (row) => ({
-        row,
-        comparison: await request<ApprovalComparison>(
-          `/api/v1/order-intake/duplicate-check/staging/${encodeURIComponent(row.item.id)}/comparison`,
-          await token(),
-        ),
-      })));
+      // Check duplicates a few at a time: 100 simultaneous requests from a phone
+      // overload the connection and the API.
+      setNotice(`Checking ${rowsToApprove.length} order${rowsToApprove.length === 1 ? "" : "s"} against live orders…`);
+      const authToken = await token();
+      const approvalChecks: Array<{ row: ParsedRow; comparisonResult: Awaited<ReturnType<typeof compareStagedOrder>> }> = [];
+      for (let offset = 0; offset < rowsToApprove.length; offset += 6) {
+        const slice = rowsToApprove.slice(offset, offset + 6);
+        approvalChecks.push(...await Promise.all(slice.map(async row => ({ row, comparisonResult: await compareStagedOrder(row.item.id, authToken) }))));
+      }
 
-      const duplicates = approvalChecks.filter(({ comparison }) => comparison.classification === "Exact duplicate");
-      const amendments = approvalChecks.filter(({ comparison }) => comparison.classification === "Amendment/update");
-      const approvable = approvalChecks.filter(({ comparison }) => comparison.classification !== "Exact duplicate");
+      const duplicates = approvalChecks.filter(({ comparisonResult }) => comparisonResult.comparison?.classification === "Exact duplicate");
+      const amendments = approvalChecks
+        .filter(({ comparisonResult }) => comparisonResult.comparison?.classification === "Amendment/update")
+        .map(({ row, comparisonResult }) => ({ row, comparison: comparisonResult.comparison! }));
+      const unavailableFlagged = approvalChecks.filter(({ row, comparisonResult }) =>
+        comparisonResult.unavailable && (blockingReason(row, date) || reviewFlagReason(row)));
+      const approvable = approvalChecks.filter(({ row, comparisonResult }) =>
+        comparisonResult.comparison?.classification !== "Exact duplicate" &&
+        (!comparisonResult.unavailable || (!blockingReason(row, date) && !reviewFlagReason(row))));
+
+      if (unavailableFlagged.length > 0) {
+        setNotice(`${unavailableFlagged.length} order${unavailableFlagged.length === 1 ? "" : "s"} still require live duplicate comparison because they have review flags.`);
+      }
 
       if (duplicates.length > 0 && !window.confirm(
         `Permanently delete ${duplicates.length} exact duplicate staging entr${duplicates.length === 1 ? "y" : "ies"} and their review history? The live orders will remain unchanged.`,
@@ -596,33 +707,28 @@ export function OrderReviewBulk({ date }: { date: string }) {
       let skipped = 0;
       let failed = 0;
       let firstBatchResult: BulkApproveResponse | undefined;
-      for (let offset = 0; offset < approvable.length; offset += approvalBatchSize) {
-        const batch = approvable.slice(offset, offset + approvalBatchSize);
-        setNotice(`Approving orders ${offset + 1}–${Math.min(offset + batch.length, approvable.length)} of ${approvable.length}…`);
-        try {
-          const result = await request<BulkApproveResponse>(
-            "/api/v1/staging/orders/bulk-approve",
-            await token(),
-            {
-              method: "POST",
-              body: JSON.stringify({
-                date,
-                ids: batch.map(({ row }) => row.item.id),
-                acknowledgeReviewFlags: true,
-              }),
-            },
-            120000,
-          );
-          firstBatchResult ||= result;
-          approved += result.approved;
-          skipped += result.skipped;
-          failed += result.failed;
-        } catch {
-          // A request can fail after the API has committed its approval. Keep
-          // processing the remaining one-order batches and refresh the queue
-          // to determine the final state instead of abandoning the pass.
-          failed += batch.length;
+      let requestError: string | undefined;
+      try {
+        // The server approves the selection as a background job; this screen only
+        // polls for progress, so a long approval can never time out mid-way.
+        const ids = approvable.map(({ row }) => row.item.id);
+        const started = await request<BulkApprovalJob>("/api/v1/staging/orders/bulk-approve-jobs", await token(), {
+          method: "POST",
+          body: JSON.stringify({ date, ids, acknowledgeReviewFlags: true }),
+        });
+        let job = started;
+        while (!job.done) {
+          setNotice(`Approving ${job.processed} of ${job.total}… you can leave this page; approval carries on.`);
+          await new Promise(resolve => window.setTimeout(resolve, 2000));
+          job = await request<BulkApprovalJob>(`/api/v1/staging/orders/bulk-approve-jobs/${encodeURIComponent(started.id)}`, await token());
         }
+        approved = job.approved;
+        skipped = job.skipped;
+        failed = job.failed;
+        firstBatchResult = { date, requested: job.total, approved: job.approved, skipped: job.skipped, failed: job.failed, missing: 0, skippedItems: job.skippedItems, failedItems: job.failedItems, message: "" };
+      } catch (jobError) {
+        requestError = jobError instanceof Error ? jobError.message : String(jobError);
+        failed = approvable.length - approved - skipped;
       }
       const duplicateNote = duplicates.length > 0
         ? ` ${duplicates.length} exact duplicate staging entr${duplicates.length === 1 ? "y was" : "ies were"} deleted; live orders were left unchanged.`
@@ -630,7 +736,7 @@ export function OrderReviewBulk({ date }: { date: string }) {
       const approvalMessage = approved > 0
         ? `${approved} selected order${approved === 1 ? "" : "s"} approved into live Orders and removed from the review queue.`
         : "No selected orders were approved. Blocked or incomplete work remains in Order Control.";
-      setNotice(`${approvalMessage}${skipped || failed ? ` ${skipped} skipped and ${failed} failed remain for review.` : ""}${firstBatchResult ? approvalFailureDetail(firstBatchResult) : ""}${duplicateNote}`);
+      setNotice(`${approvalMessage}${skipped || failed ? ` ${skipped} skipped and ${failed} failed remain for review.` : ""}${firstBatchResult ? approvalFailureDetail(firstBatchResult) : ""}${requestError ? ` Error: ${requestError}` : ""}${duplicateNote}`);
       setSelectedIds(new Set());
       setEditingId(undefined);
       setDraft(undefined);
@@ -746,9 +852,9 @@ export function OrderReviewBulk({ date }: { date: string }) {
           />
           <span className="bulk-order-ref"><strong>{displayReference(row.payload)}</strong><small>{text(row.payload.poNumber) || "TMS reference missing"}</small></span>
           <span><strong>{text(row.payload.customerCode) || "Customer missing"}</strong><small>{text(row.payload.sellerName) || "Collection site missing"} → {text(row.payload.stallNumber) || "Destination missing"}</small></span>
-          <span className="bulk-order-pallets"><strong>{isBackhaul(row.payload) && palletCount(row.payload) <= 0 ? "—" : palletCount(row.payload)}</strong><small>{isBackhaul(row.payload) && palletCount(row.payload) <= 0 ? "backhaul" : "pallets"}</small></span>
+          {(() => { const quantity = describeQuantity(payloadQuantity(row.payload)); const backhaulOnly = isBackhaul(row.payload) && !quantity.palletsStated && !quantity.unitsStated; return <span className="bulk-order-pallets"><strong>{backhaulOnly ? "—" : quantity.palletsStated ? palletCount(row.payload) : quantity.main}</strong><small>{backhaulOnly ? "backhaul" : quantity.palletsStated ? (quantity.detail ? `pallets · ${quantity.detail}` : "pallets") : quantity.detail}</small></span>; })()}
           <span className="bulk-order-planning"><strong>{planningWindow(row.payload)}</strong><small>Collect {shortOperationalDate(row.payload.collectionDate)} · Deliver {shortOperationalDate(row.payload.deliveryDate || row.payload.collectionDate)}</small><small>{temperature(row.payload)} · {orderType(row.payload)}</small></span>
-          <span className={`bulk-order-status ${statusClass}`}>{statusText}</span>
+          <span className={`bulk-order-status ${statusClass}`}>{statusText}{autoApprovalHint(row.payload) && <small className="auto-approval-hint">{autoApprovalHint(row.payload)}</small>}</span>
           <div className="bulk-order-actions">
             {hasSourceIdentity && <button type="button" className="source-email-review-button" onClick={() => setSourceEmailStagingId(row.item.id)} disabled={busy || Boolean(busyId)}>Review source email</button>}
             {!isEditing && <button type="button" onClick={() => void beginEdit(row)} disabled={busy || Boolean(busyId)}>{rowBusy ? "Loading…" : "Edit"}</button>}
@@ -789,12 +895,12 @@ export function OrderReviewBulk({ date }: { date: string }) {
                 {text(payload.sellerName) && !sites.some((site) => site.name === text(payload.sellerName) || site.driverTextName === text(payload.sellerName)) && <option value={text(payload.sellerName)}>Imported: {text(payload.sellerName)}</option>}
                 <option value="">Select collection site…</option>
                 {sites.map((site) => <option key={"collection-" + site.id} value={site.name}>{site.name}{site.driverTextName ? " · " + site.driverTextName : ""}</option>)}
-              </select></label>
+              </select><span className="site-mapping-actions"><button type="button" onClick={() => beginMapping(row, "collection", "match")} disabled={rowBusy}>Match as alias</button><button type="button" onClick={() => beginMapping(row, "collection", "create")} disabled={rowBusy}>Add new site</button></span></label>
               <label>Destination<select value={text(payload.stallNumber)} onChange={(event) => setDraft((current) => ({ ...(current || payload), stallNumber: event.target.value }))}>
                 {text(payload.stallNumber) && !sites.some((site) => site.name === text(payload.stallNumber) || site.driverTextName === text(payload.stallNumber)) && <option value={text(payload.stallNumber)}>Imported: {text(payload.stallNumber)}</option>}
                 <option value="">Select destination…</option>
                 {sites.map((site) => <option key={"destination-" + site.id} value={site.name}>{site.name}{site.driverTextName ? " · " + site.driverTextName : ""}</option>)}
-              </select></label>
+              </select><span className="site-mapping-actions"><button type="button" onClick={() => beginMapping(row, "destination", "match")} disabled={rowBusy}>Match as alias</button><button type="button" onClick={() => beginMapping(row, "destination", "create")} disabled={rowBusy}>Add new site</button></span></label>
               <label>Wave<select value={text(payload.wave)} onChange={(event) => setDraft((current) => ({ ...(current || payload), wave: event.target.value === "" ? undefined : Number(event.target.value), planningWindow: event.target.value === "1" ? "AM" : event.target.value === "3" ? "PM" : payload.planningWindow, suggestedPlanningWindow: event.target.value === "1" ? "AM" : event.target.value === "3" ? "PM" : payload.suggestedPlanningWindow, routeTiming: event.target.value === "3" ? "Overnight" : event.target.value === "1" ? "SameDay" : payload.routeTiming, overnightRoute: event.target.value === "3", runsOvernight: event.target.value === "3" }))}>
                 <option value="">Not specified</option>
                 <option value="1">Wave 1 · AM</option>
@@ -825,6 +931,31 @@ export function OrderReviewBulk({ date }: { date: string }) {
       })}
     </div>}
 
+    {mappingAction && (() => {
+      const mappingRow = datedRows.find((row) => row.item.id === mappingAction.rowId);
+      if (!mappingRow) return null;
+      const fieldLabel = mappingAction.field === "collection" ? "collection site" : "destination";
+      return <div className="site-mapping-modal" role="dialog" aria-modal="true" aria-label={`Map ${fieldLabel}`}>
+        <div className="site-mapping-modal-card">
+          <h3>{mappingAction.mode === "match" ? "Match existing site as alias" : "Add new site"}</h3>
+          <p>Customer: <strong>{text(mappingRow.payload.customerCode) || "Not set"}</strong> · {fieldLabel}</p>
+          {mappingAction.mode === "match" ? <>
+            <label>Source name or address<input value={mappingAlias} onChange={(event) => setMappingAlias(event.target.value)} placeholder="e.g. K&N facility" autoFocus /></label>
+            <label>Canonical site<select value={mappingSiteId} onChange={(event) => setMappingSiteId(event.target.value)}>
+              <option value="">Select canonical site…</option>
+              {sites.map((site) => <option key={site.id} value={site.id}>{site.name}{site.driverTextName ? ` · ${site.driverTextName}` : ""}{site.collectionAddress ? ` · ${site.collectionAddress}` : ""}</option>)}
+            </select></label>
+            <p className="site-mapping-help">The alias is saved against this customer/site and will be used by future mailbox parses. Ambiguous aliases are rejected.</p>
+          </> : <>
+            <label>Site name<input value={mappingName} onChange={(event) => setMappingName(event.target.value)} placeholder="e.g. K&N facility" autoFocus /></label>
+            <label>Full address<textarea rows={3} value={mappingAddress} onChange={(event) => setMappingAddress(event.target.value)} placeholder="Building, road, town, postcode" /></label>
+            <label>Source alias<input value={mappingAlias} onChange={(event) => setMappingAlias(event.target.value)} placeholder="The name used in source emails" /></label>
+            <p className="site-mapping-help">The site is duplicate-checked before creation, added to Site Master and applied to this order. The order will remain pending review.</p>
+          </>}
+          <div className="site-mapping-modal-actions"><button type="button" onClick={() => setMappingAction(undefined)} disabled={mappingBusy}>Cancel</button><button type="button" className="primary" onClick={() => void applyMapping(mappingRow)} disabled={mappingBusy}>{mappingBusy ? "Saving…" : mappingAction.mode === "match" ? "Match alias" : "Create and apply"}</button></div>
+        </div>
+      </div>;
+    })()}
     {sourceEmailStagingId && <SourceEmailEvidenceDrawer stagingId={sourceEmailStagingId} onClose={() => setSourceEmailStagingId(undefined)} />}
   </section>;
 }

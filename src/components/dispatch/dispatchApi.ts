@@ -1,3 +1,4 @@
+import { runMetrics, sortRunsForDispatch } from "./dispatchRunFit";
 import { apiBaseUrl, request } from "../../lib/api";
 import type {
   DispatchAllocationSelection,
@@ -16,11 +17,26 @@ import { availabilityDayCount } from "./availabilityDayCount";
 import { isPotentiallyDispatchAvailable } from "./dispatchBoardState";
 
 const DISPATCH_READ_TIMEOUT_MS = 60_000;
-// Supporting feeds must not hold the authoritative Dispatch board hostage.
-// They are useful enrichments, but a slow Sage/Tacho/visibility source should
-// degrade the board explicitly rather than leave planners on a spinner.
-const DISPATCH_SUPPORT_TIMEOUT_MS = 10_000;
 const DISPATCH_TACHO_TIMEOUT_MS = 180_000;
+// Supporting feeds must not hold the authoritative driver board hostage. They
+// still complete in the background at the HTTP layer, but the UI uses a
+// conservative snapshot if they exceed this render budget.
+const DISPATCH_SUPPORT_TIMEOUT_MS = 5_000;
+
+function supportFeed<T>(promise: Promise<T>, fallback: T, onDegraded: () => void): Promise<T> {
+  return new Promise(resolve => {
+    let settled = false;
+    const finish = (value: T, degraded: boolean) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      if (degraded) onDegraded();
+      resolve(value);
+    };
+    const timer = window.setTimeout(() => finish(fallback, true), DISPATCH_SUPPORT_TIMEOUT_MS);
+    promise.then(value => finish(value, false)).catch(() => finish(fallback, true));
+  });
+}
 
 export type SamsaraDispatchResult = {
   success: boolean;
@@ -49,16 +65,63 @@ export type SamsaraDispatchState = {
   lastStopName?: string;
 };
 
+export type DispatchRosterHealth = {
+  healthy: boolean;
+  activeDrivers: number;
+  tachoLinkedDrivers: number;
+  latestTachoSyncUtc?: string;
+  message: string;
+};
+
 type DriverDispatchAuthority = DispatchEquipmentWorkbench & {
   drivers: Array<{
     driverId: string;
+    employeeNumber?: string;
+    displayName?: string;
+    driverType?: string;
+    driverGroup?: string;
+    skills?: string;
+    coding?: string;
     dayNumber: number;
+    workingStyle?: string;
+    recentLongRuns?: number;
+    recentFurthestMiles?: number;
     onLeave: boolean;
     leaveType?: string;
     leaveDetails?: string;
     partDayLeave: boolean;
   }>;
 };
+
+function authorityFallbackDriver(driver: DriverDispatchAuthority["drivers"][number]): DispatchDriverDto {
+  const employmentType = driver.driverType || driver.driverGroup || "Unknown";
+  return {
+    driverId: driver.driverId,
+    driverCode: driver.coding || driver.employeeNumber || driver.driverId,
+    name: driver.displayName || driver.employeeNumber || driver.driverId,
+    employmentType,
+    skills: driver.skills || "",
+    holidayDates: [],
+    contractedDays: [],
+    tachoData: {
+      currentDutyDay: driver.dayNumber || 0,
+      weeklyWorkingTime: 0,
+      dailyDrivingTime: 0,
+      breakCompliance: false,
+      requiredRestPeriod: 11,
+      reducedDailyRestsUsed: 0
+    },
+    trackingData: {},
+    needsReturn: false,
+    isBlocked: false,
+    backloadCandidate: false,
+    onLeave: driver.onLeave,
+    leaveType: driver.leaveType,
+    leaveDetails: driver.leaveDetails,
+    partDayLeave: driver.partDayLeave,
+    suggestion: driver.onLeave ? `Unavailable · Sage HR ${driver.leaveType || "leave"}.` : "Roster identity loaded; availability requires verification."
+  };
+}
 
 type SamsaraDispatchStatusResponse = {
   planningDate: string;
@@ -95,17 +158,21 @@ export type SmartDispatchOptionalEnrichment = {
   samsaraDispatch: Record<string, SamsaraDispatchState>;
 };
 
-export async function getDispatchVisibility(planningDate: string, token: string, timeoutMs = DISPATCH_READ_TIMEOUT_MS): Promise<DispatchVisibilitySnapshot> {
+export async function getDispatchVisibility(planningDate: string, token: string): Promise<DispatchVisibilitySnapshot> {
   return request<DispatchVisibilitySnapshot>(
     `/api/dispatch/driver-visibility?date=${encodeURIComponent(planningDate)}`,
     token,
     undefined,
-    timeoutMs
+    DISPATCH_READ_TIMEOUT_MS
   );
 }
 
-export async function getDriverAvailability(planningDate: string, token: string, timeoutMs = DISPATCH_READ_TIMEOUT_MS): Promise<DriverAvailabilitySnapshot> {
-  return request<DriverAvailabilitySnapshot>(`/api/v1/driver-availability?date=${encodeURIComponent(planningDate)}`, token, undefined, timeoutMs);
+export async function getDriverAvailability(planningDate: string, token: string): Promise<DriverAvailabilitySnapshot> {
+  return request<DriverAvailabilitySnapshot>(`/api/v1/driver-availability?date=${encodeURIComponent(planningDate)}`, token, undefined, DISPATCH_READ_TIMEOUT_MS);
+}
+
+export async function getDispatchRosterHealth(token: string): Promise<DispatchRosterHealth> {
+  return request<DispatchRosterHealth>("/api/v1/driver-dispatch/health", token, undefined, 10_000);
 }
 
 export async function getDispatchHistory(planningDate: string, token: string): Promise<DispatchHistoryItem[]> {
@@ -122,6 +189,28 @@ function cleanStopName(value?: string): string | undefined {
   return cleaned || undefined;
 }
 
+function authorityRun(load: LegacyDispatchLoad): DispatchRunDto {
+  const stops = [...(load.stops || [])].sort((left, right) => left.sequence - right.sequence);
+  const collection = stops.find(stop => /^collect\\b/i.test(stop.name)) || stops[0];
+  const delivery = [...stops].reverse().find(stop => /^deliver\\b/i.test(stop.name)) || stops.at(-1);
+  return {
+    runId: load.id,
+    reference: load.reference || load.rawReference || load.id,
+    collectionPoint: { name: cleanStopName(collection?.name) || collection?.name || "Collection pending", latitude: collection?.latitude, longitude: collection?.longitude },
+    requiredSkills: "",
+    requiresDoubleDeck: false,
+    requiresRefrigerated: false,
+    isBackload: Boolean(load.southbound),
+    isOvernightMarket: false,
+    isSouthbound: Boolean(load.southbound),
+    firstCollectionTimeUtc: collection?.latestAccessTimeUtc || collection?.plannedArrivalUtc || load.plannedStartUtc,
+    finalDeliveryPoint: delivery ? { name: cleanStopName(delivery.name) || delivery.name, latitude: delivery.latitude, longitude: delivery.longitude } : undefined,
+    plannerNotes: load.plannerNotes,
+    trailerSwapRequested: /(?:trailer\\s*(?:swap|change)|swap\\s*trailer|drop\\s*trailer|pick\\s*up\\s+(?:a\\s*)?(?:different|new)\\s*trailer)/i.test(load.plannerNotes || ""),
+    relay: load.relayPlan
+  };
+}
+
 function runDetail(run: DispatchRunDto, equipment: DispatchEquipmentWorkbench): DispatchRunDto {
   const load = equipment.loads.find(item => item.id === run.runId);
   if (!load) return run;
@@ -132,9 +221,7 @@ function runDetail(run: DispatchRunDto, equipment: DispatchEquipmentWorkbench): 
   const trailerSwapRequested = /(?:trailer\s*(?:swap|change)|swap\s*trailer|change\s*trailer|drop\s*trailer|pick\s*up\s*(?:a\s*)?(?:different|new)\s*trailer)/i.test(notes);
   return {
     ...run,
-    // Dispatch displays the latest permitted collection access from Site Master
-    // when available; the planned stop time remains the fallback for unmapped
-    // or incomplete timing rules.
+    ...runMetrics(load),
     firstCollectionTimeUtc: collection?.latestAccessTimeUtc || collection?.plannedArrivalUtc || load.plannedStartUtc,
     finalDeliveryPoint: delivery ? {
       name: cleanStopName(delivery.name) || delivery.name,
@@ -165,29 +252,44 @@ export async function getSmartDispatch(
   samsaraStaleRouteCount: number;
   samsaraDispatch: Record<string, SamsaraDispatchState>;
   degradedSources: string[];
+  rosterHealth: DispatchRosterHealth;
 }> {
   const encoded = encodeURIComponent(planningDate);
-  // The legal-start calculation is the slowest Dispatch dependency because it
-  // fans out to TachoMaster. Start it as soon as the authoritative workbench
-  // gives us the driver IDs instead of waiting for the optional enrichment
-  // requests (visibility, history and Samsara) to finish first.
-  const coreResults = await Promise.allSettled([
-    request<DispatchDriverDto[]>(`/api/dispatch/drivers?date=${encoded}`, token, undefined, DISPATCH_READ_TIMEOUT_MS),
-    request<DispatchRunDto[]>(`/api/dispatch/runs?date=${encoded}`, token, undefined, DISPATCH_READ_TIMEOUT_MS),
+  const rosterHealthPromise = getDispatchRosterHealth(token).catch(() => undefined);
+  // Use the single authoritative Driver Dispatch snapshot for the initial board.
+  // The old implementation started three heavyweight reads together; each rebuilt
+  // Tacho/availability state and they competed for the same SQL/provider resources,
+  // causing the mobile gateway to return 504 and an empty limited-mode board.
+  const authorityResult = await Promise.allSettled([
     request<DriverDispatchAuthority>(`/api/v1/driver-dispatch?date=${encoded}`, token, undefined, DISPATCH_READ_TIMEOUT_MS)
   ]);
+  const rosterHealth = (await rosterHealthPromise) || {
+    healthy: false,
+    activeDrivers: 0,
+    tachoLinkedDrivers: 0,
+    message: "Driver Master health could not be checked."
+  };
   const degradedSources: string[] = [];
-  const drivers = coreResults[0].status === "fulfilled" ? coreResults[0].value : (degradedSources.push("drivers"), []);
-  const runs = coreResults[1].status === "fulfilled" ? coreResults[1].value : (degradedSources.push("runs"), []);
-  const driverAuthority = coreResults[2].status === "fulfilled"
-    ? coreResults[2].value
-    : (degradedSources.push("equipment"), { drivers: [], vehicles: [], trailers: [], loads: [] } as DriverDispatchAuthority);
+  const driverAuthority = authorityResult[0].status === "fulfilled"
+    ? authorityResult[0].value
+    : (degradedSources.push("equipment", "drivers", "runs"), { drivers: [], vehicles: [], trailers: [], loads: [] } as DriverDispatchAuthority);
+  const requestedDrivers: DispatchDriverDto[] = [];
+  const runs = driverAuthority.loads.map(authorityRun);
+  // The Driver Master authority endpoint is a deliberately smaller, resilient
+  // roster. If the enriched dispatch roster is empty or unavailable, retain
+  // those identities rather than rendering an empty driver board.
+  const drivers = requestedDrivers.length > 0
+    ? requestedDrivers
+    : driverAuthority.drivers.map(authorityFallbackDriver);
+  if (requestedDrivers.length === 0 && driverAuthority.drivers.length > 0 && !degradedSources.includes("drivers")) {
+    degradedSources.push("drivers");
+  }
   // History and Samsara improve the board but are not needed to allocate safely.
   // Start both in parallel with the core requests and apply them when they finish;
   // a slow optional integration must not delay the Dispatch table.
   const optionalEnrichmentPromise = Promise.all([
     getDispatchHistory(planningDate, token).catch(() => [] as DispatchHistoryItem[]),
-    request<SamsaraDispatchStatusResponse>(`/api/v1/integrations/samsara/dispatch/status?date=${encoded}`, token, undefined, DISPATCH_SUPPORT_TIMEOUT_MS)
+    request<SamsaraDispatchStatusResponse>(`/api/v1/integrations/samsara/dispatch/status?date=${encoded}`, token, undefined, DISPATCH_READ_TIMEOUT_MS)
       .catch(() => ({
         planningDate,
         configured: false,
@@ -201,42 +303,42 @@ export async function getSmartDispatch(
   // slow or temporarily unavailable. An empty snapshot is deliberately
   // conservative: it does not promote anyone to available or clear a block.
   const [statusResponse, visibility, availability] = await Promise.all([
-    request<{ drivers: DispatchDriverStatusDto[] }>(`/api/v1/driver-dispatch-status?date=${encoded}`, token, undefined, DISPATCH_SUPPORT_TIMEOUT_MS)
-      .catch(() => {
-        degradedSources.push("status");
-        return { drivers: [] };
-      }),
-    getDispatchVisibility(planningDate, token, DISPATCH_SUPPORT_TIMEOUT_MS)
-      .catch(() => {
-        degradedSources.push("visibility");
-        return {
-          planningDate,
-          windowDays: 0,
-          cutoffDate: planningDate,
-          drivers: []
-        } as DispatchVisibilitySnapshot;
-      }),
-    getDriverAvailability(planningDate, token, DISPATCH_SUPPORT_TIMEOUT_MS)
-      .catch(() => {
-        degradedSources.push("availability");
-        return {
-          planningDate,
-          generatedAtUtc: new Date().toISOString(),
-          summary: {
-            employedAvailable: 0,
-            agencyConfirmed: 0,
-            agencyUnconfirmed: 0,
-            casualConfirmed: 0,
-            casualUnconfirmed: 0,
-            unavailableBlocked: 0,
-            driversRequired: 0,
-            availableDrivers: 0,
-            surplusShortfall: 0
-          },
-          drivers: [],
-          classificationMismatchCount: 0
-        } as DriverAvailabilitySnapshot;
-      })
+    supportFeed(
+      request<{ drivers: DispatchDriverStatusDto[] }>(`/api/v1/driver-dispatch-status?date=${encoded}`, token, undefined, DISPATCH_READ_TIMEOUT_MS),
+      { drivers: [] },
+      () => degradedSources.push("status")
+    ),
+    supportFeed(
+      getDispatchVisibility(planningDate, token),
+      {
+        planningDate,
+        windowDays: 0,
+        cutoffDate: planningDate,
+        drivers: []
+      } as DispatchVisibilitySnapshot,
+      () => degradedSources.push("visibility")
+    ),
+    supportFeed(
+      getDriverAvailability(planningDate, token),
+      {
+        planningDate,
+        generatedAtUtc: new Date().toISOString(),
+        summary: {
+          employedAvailable: 0,
+          agencyConfirmed: 0,
+          agencyUnconfirmed: 0,
+          casualConfirmed: 0,
+          casualUnconfirmed: 0,
+          unavailableBlocked: 0,
+          driversRequired: 0,
+          availableDrivers: 0,
+          surplusShortfall: 0
+        },
+        drivers: [],
+        classificationMismatchCount: 0
+      } as DriverAvailabilitySnapshot,
+      () => degradedSources.push("availability")
+    )
   ]);
   const visibilityByDriver = new Map(visibility.drivers.map(item => [item.driverId, item]));
   const availabilityByDriver = new Map(availability.drivers.map(item => [item.driverId, item]));
@@ -251,6 +353,9 @@ export async function getSmartDispatch(
     return {
       ...driver,
       dayNumber: authority?.dayNumber ?? driver.tachoData.currentDutyDay,
+      workingStyle: authority?.workingStyle,
+      recentLongRuns: authority?.recentLongRuns,
+      recentFurthestMiles: authority?.recentFurthestMiles,
       onLeave: authority?.onLeave === true,
       leaveType: authority?.leaveType,
       leaveDetails: authority?.leaveDetails,
@@ -270,6 +375,10 @@ export async function getSmartDispatch(
       availableFrom: sharedAvailability?.availableFromUtc ?? driver.availableFrom,
       availabilityUntil: sharedAvailability?.availableUntilUtc,
       availabilityConfirmed: sharedAvailability?.availabilityConfirmed,
+      availabilityState: (sharedAvailability
+        ? sharedAvailability.dispatchable === false ? "unavailable" : "available"
+        : "unknown") as DispatchDriverDto["availabilityState"],
+      availabilitySourceUpdatedAtUtc: availability.generatedAtUtc,
       availabilityDayCount: availabilityDayCount(sharedAvailability, planningDate),
       agencyName: sharedAvailability?.agencyName,
       placementEndDate: sharedAvailability?.placementEndDate,
@@ -345,7 +454,7 @@ export async function getSmartDispatch(
 
   return {
     drivers: annotateAvailability(enrichedDrivers),
-    runs: runs.map(run => runDetail(run, equipment)),
+    runs: sortRunsForDispatch(runs.map(run => runDetail(run, equipment))),
     equipment,
     availableTimes: [],
     statuses: Object.fromEntries(statusResponse.drivers.map(status => [status.driverId, status])),
@@ -355,7 +464,12 @@ export async function getSmartDispatch(
     samsaraConnectionMessage: "Samsara status is loading.",
     samsaraStaleRouteCount: 0,
     samsaraDispatch: {},
-    degradedSources
+    degradedSources,
+    rosterHealth: {
+      ...rosterHealth,
+      activeDrivers: rosterHealth.activeDrivers || drivers.length,
+      healthy: rosterHealth.healthy || drivers.length > 0
+    }
   };
 }
 

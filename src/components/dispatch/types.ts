@@ -90,6 +90,9 @@ export interface DispatchDriverDto {
   availabilityGroup?: string;
   availabilityUntil?: string;
   availabilityConfirmed?: boolean;
+  /** Roster visibility is independent from allocation eligibility. */
+  availabilityState?: "available" | "unavailable" | "unknown";
+  availabilitySourceUpdatedAtUtc?: string;
   agencyName?: string;
   placementEndDate?: string;
   classificationMismatch?: boolean;
@@ -106,6 +109,10 @@ export interface DispatchDriverDto {
   previousTrailerId?: string;
   previousTrailerNumber?: string;
   previousTrailerPlanningDate?: string;
+  /** Tramper, HalfTramper, Day or Night (Driver Master). */
+  workingStyle?: string;
+  recentLongRuns?: number;
+  recentFurthestMiles?: number;
 }
 
 export interface DispatchRunDto {
@@ -120,6 +127,14 @@ export interface DispatchRunDto {
   isSouthbound: boolean;
   firstCollectionTimeUtc?: string;
   finalDeliveryPoint?: DispatchCollectionPointDto;
+  /** Straight-line miles from Barnham to the furthest stop. */
+  furthestMiles?: number;
+  plannedStartUtc?: string;
+  plannedEndUtc?: string;
+  /** Estimated hours from leaving to being back at Barnham. */
+  spanHours?: number;
+  needsNightOut?: boolean;
+  isNightRun?: boolean;
   plannerNotes?: string;
   trailerSwapRequested?: boolean;
   relay?: DispatchRelayDto;
@@ -215,6 +230,15 @@ export interface DispatchDriverStatusDto {
   driveAvailablePlanningDayMinutes?: number;
   workAvailableWeekMinutes?: number;
   projectedDayNumber?: number;
+  /** 6 after a full 45h weekly rest, 5 after a reduced one (from Tacho). */
+  cycleLength?: number;
+  cycleNote?: string;
+  /** Sage HR work pattern name; source is "Sage HR", "Sage HR (entered)" or "Tacho" when none is recorded. */
+  workPatternName?: string;
+  workPatternSource?: string;
+  patternRestDay?: boolean;
+  tachoDayNumber?: number;
+  lastWeeklyRestType?: string;
   earliestStartUtc?: string;
   earliestStartSource?: string;
   earliestStartIsAssumption?: boolean;

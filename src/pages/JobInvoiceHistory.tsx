@@ -147,9 +147,8 @@ export function JobInvoiceHistory() {
   return <section>
     <div className="title-row">
       <div>
-        <p className="eyebrow">Accounts / operational history</p>
-        <h1>Invoice / Job History</h1>
-        <p className="intro">Search historic jobs by order, customer, run, driver or vehicle. The invoice-readiness flag is based on TMS job status plus run allocation/completion evidence.</p>
+        <h1>Job history &amp; invoicing</h1>
+        <p className="intro">Find any past job by order, customer, run, driver or vehicle, and see whether it is ready to invoice (completed and allocated).</p>
       </div>
       <button className="primary" type="button" onClick={exportCsv} disabled={!visibleRows.length}>Export CSV</button>
     </div>

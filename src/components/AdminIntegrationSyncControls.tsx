@@ -3,6 +3,9 @@ import { request } from '../lib/api';
 import { intelligenceApi } from '../lib/intelligenceApi';
 import { useAccessToken } from '../lib/auth';
 import { useApi } from '../lib/useApi';
+import { PlanningWipe } from './PlanningWipe';
+import { SageCalendarLink } from './SageCalendarLink';
+import { SamsaraReconcile } from './SamsaraReconcile';
 
 type SyncResult = { provider: string; success: boolean; completedAtUtc: string; message: string };
 
@@ -60,6 +63,8 @@ type IntegrationRuntimeStatus = {
     inProgress?: boolean;
     lastMessagesSeen?: number;
     lastMessagesIngested?: number;
+    outlookTagging?: string | null;
+    outlookLastTaggedUtc?: string | null;
   };
 };
 
@@ -207,116 +212,80 @@ export function AdminIntegrationSyncControls() {
     }
   };
 
-  return <section className="panel" style={{ marginBottom: 18 }}>
-    <div className="title-row admin-integration-heading">
+  const graph = runtimeStatus?.infoMailboxGraph;
+  const sources = feedHealth.data?.sources || [];
+  const attention = sources.filter(feed => feed.state !== 'green').length;
+
+  return <section className="ui-page system-health-page">
+    <div className="ui-page-head">
       <div>
-        <p className="eyebrow">Admin · API feeds</p>
-        <h2>API Feeds & Integrations</h2>
-        <p className="hint">This is the single TMS source for external API/feed health, connectivity and controlled refresh actions. Normal updates remain automatic.</p>
+        <h1>System health</h1>
+        <p>Every outside system the TMS reads from, whether it is up to date, and what it affects. Updates are automatic; refresh only if something looks stuck.</p>
       </div>
-      <div className="admin-integration-actions">
-        <button onClick={() => { void loadState(); void feedHealth.refresh(); }}>Check system state</button>
-        <button onClick={() => void pollGraph()} disabled={Boolean(busy)}>{busy === 'graph' ? 'Queueing mailbox poll…' : 'Poll Graph mailbox now'}</button>
-        <button onClick={() => void force('tacho')} disabled={Boolean(busy)}>{busy === 'tacho' ? 'Refreshing…' : 'Force TachoMaster'}</button>
-        <button onClick={() => void force('sage')} disabled={Boolean(busy)}>{busy === 'sage' ? 'Refreshing…' : 'Force Sage HR'}</button>
-        <button onClick={() => void force('fleetio')} disabled={Boolean(busy)}>{busy === 'fleetio' ? 'Refreshing…' : 'Force Fleetio'}</button>
-        <button className="primary" onClick={() => void force('all')} disabled={Boolean(busy)}>{busy === 'all' ? 'Refreshing all…' : 'Force refresh all systems'}</button>
+      <div className="ui-page-actions">
+        <button type="button" onClick={() => { void loadState(); void feedHealth.refresh(); }}>Check now</button>
+        <button type="button" className="primary" onClick={() => void force('all')} disabled={Boolean(busy)}>{busy === 'all' ? 'Refreshing all…' : 'Refresh all'}</button>
       </div>
     </div>
-
-    <div className="admin-card" style={{ marginBottom: 14 }}>
-      <div className="title-row" style={{ marginBottom: 8 }}>
-        <div>
-          <p className="eyebrow">Authoritative feed health</p>
-          <h3>API and provider feeds</h3>
-        </div>
-        {feedHealth.data?.generatedAtUtc && <small>Checked {new Date(feedHealth.data.generatedAtUtc).toLocaleTimeString('en-GB')}</small>}
-      </div>
-      {feedHealth.error && <p className="notice inline-notice">Feed receipt health could not refresh: {feedHealth.error}</p>}
-      <div className="admin-grid">
-        {feedHealth.data?.sources.map((feed) => <article className="admin-card" key={feed.name}>
-          <span className={`integration-state ${feed.state === 'green' ? 'ready' : 'pending'}`}>{feed.state === 'green' ? 'Current' : feed.state === 'amber' ? 'Check' : 'Attention'}</span>
-          <h3>{feed.name}</h3>
-          <p>{feed.detail}</p>
-          <small>Last receipt: {lastReceipt(feed.lastUpdatedUtc)}{feed.cadence ? ` · ${feed.cadence}` : ''}</small>
-        </article>)}
-      </div>
-    </div>
-
-    <div className="admin-card" style={{ marginBottom: 14 }}>
-      <div className="title-row" style={{ marginBottom: 8 }}>
-        <div>
-          <p className="eyebrow">RoadTech / DOT diagnostics</p>
-          <h3>Tracking runtime status</h3>
-        </div>
-        {trackingState && <span className={trackingState.className}>{trackingState.label}</span>}
-      </div>
-      {!roadTech && !roadTechError && <p className="hint">Checking RoadTech runtime settings and live connectivity…</p>}
-      {roadTech && <>
-        <p>{roadTech.message}</p>
-        {!roadTech.configured && roadTech.missingSettings.length > 0 && <div className="notice inline-notice"><strong>Specific settings to amend:</strong> {roadTech.missingSettings.join(' · ')}</div>}
-        {roadTech.configured && !roadTech.connected && <div className="notice inline-notice"><strong>Configuration is present.</strong> RoadTech is not currently returning live vehicle records. This is a connectivity/credentials/provider-data issue rather than missing setup.</div>}
-        {roadTech.connected && <p className="hint"><strong>{roadTech.recordCount}</strong> live RoadTech vehicle record{roadTech.recordCount === 1 ? '' : 's'} returned{roadTech.latestEventUtc ? ` · latest event ${new Date(roadTech.latestEventUtc).toLocaleString('en-GB')}` : ''}.</p>}
-      </>}
-      {roadTechError && <p className="notice inline-notice"><strong>Diagnostic request failed:</strong> {roadTechError}</p>}
-    </div>
-
-
-    <div className="admin-grid" style={{ marginBottom: 14 }}>
-      <article className="admin-card">
-        <div className="title-row" style={{ marginBottom: 8 }}>
-          <div>
-            <p className="eyebrow">Samsara</p>
-            <h3>Routes / Dispatch</h3>
-          </div>
-          <span className={samsara?.connected ? 'integration-state ready' : 'integration-state pending'}>
-            {samsara?.connected ? 'Connected' : samsara?.configured ? 'Configured · check link' : 'Setup incomplete'}
-          </span>
-        </div>
-        <p>{samsara?.message || 'Checking Samsara API token and route access…'}</p>
-        {samsara && !samsara.configured && samsara.missingSettings.length > 0 &&
-          <div className="notice inline-notice"><strong>Specific settings to amend:</strong> {samsara.missingSettings.join(' · ')}</div>}
-        {samsara?.connected &&
-          <small>{samsara.vehicleCount} vehicles · {samsara.driverCount} drivers visible to the token</small>}
-        {samsaraSites && <>
-          <p className="hint" style={{ marginTop: 10 }}>{samsaraSites.message}</p>
-          <small>{samsaraSites.alreadyMapped} already mapped · {samsaraSites.pending} pending · {samsaraSites.missingCoordinates} need coordinates · {samsaraSites.missingAddress} need address text</small>
-          <div style={{ marginTop: 10 }}>
-            <button className="primary" onClick={() => void syncSamsaraMasterData()} disabled={Boolean(busy) || !samsara?.connected || !samsara.assetSyncEnabled}>
-              {busy === 'samsara-master-data' ? 'Synchronising Master Data…' : 'Sync Sites, Vehicles & Trailers'}
-            </button>{' '}
-            <button className="primary" onClick={() => void syncSamsaraSiteAddresses()} disabled={Boolean(busy) || !samsara?.connected || !samsaraSites.addressSyncEnabled || samsaraSites.eligibleSites === 0}>
-              {busy === 'samsara-sites' ? 'Synchronising sites…' : `Sync Master Sites to Samsara${samsaraSites.eligibleSites ? ` (${samsaraSites.eligibleSites})` : ''}`}
-            </button>
-          </div>
-        </>}
-      </article>
-
-      <article className="admin-card">
-        <div className="title-row" style={{ marginBottom: 8 }}>
-          <div>
-            <p className="eyebrow">Microsoft Graph</p>
-            <h3>Info mailbox intake</h3>
-          </div>
-          <span className={runtimeStatus?.infoMailboxGraph?.lastSuccessUtc ? 'integration-state ready' : 'integration-state pending'}>
-            {runtimeStatus?.infoMailboxGraph?.lastSuccessUtc
-              ? 'Polling'
-              : runtimeStatus?.infoMailboxGraph?.configured
-                ? 'Configured · awaiting poll'
-                : 'Setup incomplete'}
-          </span>
-        </div>
-        <p>{runtimeStatus?.infoMailboxGraph?.mailbox || 'Info mailbox'} · direct outbound Graph polling from the local API.</p>
-        {runtimeStatus?.infoMailboxGraph?.lastSuccessUtc &&
-          <small>Last success: {lastReceipt(runtimeStatus.infoMailboxGraph.lastSuccessUtc)} · {runtimeStatus.infoMailboxGraph.lastMessagesSeen ?? 0} seen · {runtimeStatus.infoMailboxGraph.lastMessagesIngested ?? 0} ingested</small>}
-        {runtimeStatus?.infoMailboxGraph?.lastError &&
-          <div className="notice inline-notice"><strong>Last Graph error:</strong> {runtimeStatus.infoMailboxGraph.lastError}{runtimeStatus.infoMailboxGraph.lastFailureStage ? ` · stage: ${runtimeStatus.infoMailboxGraph.lastFailureStage}` : ''}{runtimeStatus.infoMailboxGraph.inProgress ? ' · a retry is currently running' : ''}</div>}
-        {!runtimeStatus?.infoMailboxGraph?.lastError && runtimeStatus?.infoMailboxGraph?.inProgress && <p className="hint">A Graph mailbox poll is currently running; the next refresh will show its receipt.</p>}
-      </article>
-    </div>
-
-    <p className="hint">Automatic cadence: TachoMaster every 20 minutes · Sage HR 05:00 and 14:00 UK daily · Fleetio hourly · DOT/Falcon continuous. Status refreshes on screen every 60 seconds.</p>
-    {state && <p className="hint">Platform state: <strong>{state.status}</strong>{state.lastPlatformUpdateUtc ? ` · last update ${new Date(state.lastPlatformUpdateUtc).toLocaleString('en-GB')}` : ''}</p>}
     {message && <p className="notice inline-notice">{message}</p>}
+
+    <section className="ui-card">
+      <div className="ui-card-head"><h2>Data feeds</h2>{feedHealth.data && <span className={`ui-chip ${attention ? 'amber' : 'green'}`}>{attention ? `${attention} need attention` : 'All current'}</span>}</div>
+      {feedHealth.error && <p className="ui-error">{feedHealth.error}</p>}
+      <div className="ui-table-wrap"><table className="ui-table">
+        <thead><tr><th>Feed</th><th>Status</th><th>Last received</th><th>Affects</th><th /></tr></thead>
+        <tbody>{sources.map(feed => {
+          const action = feedAction(feed.name);
+          return <tr key={feed.name}>
+            <td><strong>{feed.name}</strong>{feed.cadence && <><br /><small>{feed.cadence}</small></>}</td>
+            <td><span className={`ui-chip ${feed.state}`}>{feed.state === 'green' ? 'Current' : feed.state === 'amber' ? 'Late' : 'Not updating'}</span>{feed.state !== 'green' && feed.detail && <><br /><small>{feed.detail}</small></>}</td>
+            <td>{lastReceipt(feed.lastUpdatedUtc)}</td>
+            <td><small>{action.affects}</small></td>
+            <td>{action.provider ? <button type="button" onClick={() => void force(action.provider!)} disabled={Boolean(busy)}>{busy === action.provider ? 'Refreshing…' : 'Refresh'}</button>
+              : action.mailbox ? <button type="button" onClick={() => void pollGraph()} disabled={Boolean(busy)}>{busy === 'graph' ? 'Checking…' : 'Check mailbox'}</button> : null}</td>
+          </tr>;
+        })}</tbody>
+      </table></div>
+      {graph?.lastError && <p className="notice inline-notice"><strong>Mailbox:</strong> {graph.lastError}{graph.lastFailureStage ? ` (${graph.lastFailureStage})` : ''}{graph.inProgress ? ' · retrying now' : ''}</p>}
+    </section>
+
+    <div className="ui-grid">
+      <article className="ui-card">
+        <div className="ui-card-head"><h2>Samsara</h2><span className={`ui-chip ${samsara?.connected ? 'green' : 'amber'}`}>{samsara?.connected ? 'Connected' : samsara?.configured ? 'Check link' : 'Not set up'}</span></div>
+        <p className="hint">Routes sent to drivers, and live ETAs back.{samsara?.connected ? ` ${samsara.vehicleCount} vehicles · ${samsara.driverCount} drivers visible.` : ''}</p>
+        {samsara && !samsara.configured && (samsara.missingSettings ?? []).length > 0 && <p className="ui-error">Missing settings: {samsara.missingSettings.join(' · ')}</p>}
+        {samsaraSites && <p className="hint">Sites: {samsaraSites.alreadyMapped} in Samsara · {samsaraSites.pending} to send · {samsaraSites.missingCoordinates} need a map location · {samsaraSites.missingAddress} need an address.</p>}
+        <div className="ui-page-actions">
+          <button type="button" onClick={() => void syncSamsaraMasterData()} disabled={Boolean(busy) || !samsara?.connected || !samsara.assetSyncEnabled}>{busy === 'samsara-master-data' ? 'Sending…' : 'Send sites, vehicles & trailers'}</button>
+          <button type="button" onClick={() => void syncSamsaraSiteAddresses()} disabled={Boolean(busy) || !samsara?.connected || !samsaraSites?.addressSyncEnabled || !samsaraSites?.eligibleSites}>{busy === 'samsara-sites' ? 'Sending…' : `Send site addresses${samsaraSites?.eligibleSites ? ` (${samsaraSites.eligibleSites})` : ''}`}</button>
+        </div>
+      </article>
+      <article className="ui-card">
+        <div className="ui-card-head"><h2>Vehicle tracking (RoadTech / DOT)</h2>{trackingState && <span className={`ui-chip ${trackingState.className.includes('ready') ? 'green' : 'amber'}`}>{trackingState.label}</span>}</div>
+        {roadTech ? <p className="hint">{roadTech.connected ? `${roadTech.recordCount} vehicles reporting${roadTech.latestEventUtc ? `, latest ${new Date(roadTech.latestEventUtc).toLocaleString('en-GB')}` : ''}.` : roadTech.message}</p> : !roadTechError && <p className="hint">Checking…</p>}
+        {roadTech && !roadTech.configured && (roadTech.missingSettings ?? []).length > 0 && <p className="ui-error">Missing settings: {roadTech.missingSettings.join(' · ')}</p>}
+        {roadTechError && <p className="ui-error">{roadTechError}</p>}
+      </article>
+      <article className="ui-card">
+        <div className="ui-card-head"><h2>Info mailbox</h2><span className={`ui-chip ${graph?.lastSuccessUtc ? 'green' : 'amber'}`}>{graph?.lastSuccessUtc ? 'Reading' : graph?.configured ? 'Waiting for first read' : 'Not set up'}</span></div>
+        {graph?.outlookTagging ? <p className="ui-error">{graph.outlookTagging}</p> : <p className="hint">Outlook tags: each email in info@ gets a category: <strong style={{ color: '#1d7a3a' }}>TMS: orders in</strong>, <strong style={{ color: '#b42318' }}>TMS: needs attention</strong> or <strong>TMS: no orders</strong>.{graph?.outlookLastTaggedUtc ? ` Last tagged ${lastReceipt(graph.outlookLastTaggedUtc)}.` : ''}</p>}
+        <p className="hint">{graph?.mailbox || 'info@'}: read every few minutes.{graph?.lastSuccessUtc ? ` Last read ${lastReceipt(graph.lastSuccessUtc)}, ${graph.lastMessagesSeen ?? 0} seen, ${graph.lastMessagesIngested ?? 0} new.` : ''}</p>
+      </article>
+    </div>
+    <SamsaraReconcile />
+    <SageCalendarLink />
+    <PlanningWipe />
+    {state && <p className="hint">Platform {state.status}{state.lastPlatformUpdateUtc ? ` · last update ${new Date(state.lastPlatformUpdateUtc).toLocaleString('en-GB')}` : ''}. Automatic: TachoMaster every 20 minutes · Sage HR 05:00 and 14:00 · Fleetio hourly · tracking continuous.</p>}
   </section>;
+}
+
+function feedAction(name: string): { affects: string; provider?: 'tacho' | 'sage' | 'fleetio'; mailbox?: boolean } {
+  const key = name.toLowerCase();
+  if (key.includes('tacho')) return { affects: 'Driver hours, weekly rest and Day x of y on Dispatch', provider: 'tacho' };
+  if (key.includes('sage')) return { affects: 'Leave on Drivers and Dispatch', provider: 'sage' };
+  if (key.includes('fleetio')) return { affects: 'Walkround checks and vehicles off road', provider: 'fleetio' };
+  if (key.includes('mail')) return { affects: 'Orders from info@ into Orders', mailbox: true };
+  if (key.includes('samsara')) return { affects: 'Routes to drivers and live ETAs' };
+  if (key.includes('dot') || key.includes('falcon') || key.includes('roadtech') || key.includes('track')) return { affects: 'Live vehicle positions and first movement for Vehicle checks' };
+  return { affects: '' };
 }

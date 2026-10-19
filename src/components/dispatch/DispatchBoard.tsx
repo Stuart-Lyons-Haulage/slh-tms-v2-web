@@ -81,7 +81,7 @@ function RouteSidebar({ runs, owners, allocatedRunIds, drivers, allDrivers, vehi
       <strong>Routes</strong>
       <span>{runs.length}</span>
     </div>
-    <p>First collection → final delivery. Best-fit suggestions use the driver’s last known position plus first collection proximity, skills and continuity.</p>
+    <p>Furthest first. Suggestions weigh distance to the first collection, skills, driver type (trampers for nights out; day and night drivers must get back in shift) and who has had the fewest long runs in the last 2 weeks.</p>
     <div className="smart-run-card-list">
       {[...runs].sort((left, right) => {
         const leftTime = left.firstCollectionTimeUtc ? Date.parse(left.firstCollectionTimeUtc) : Number.POSITIVE_INFINITY;
@@ -106,7 +106,7 @@ function RouteSidebar({ runs, owners, allocatedRunIds, drivers, allDrivers, vehi
             <strong>{run.reference}</strong>
             <span>{allocated ? "Dispatched" : owner ? "Selected" : run.isBackload ? "Backload" : "Available"}</span>
           </div>
-          <div className="smart-run-time">{runTime(run.firstCollectionTimeUtc)}</div>
+          <div className="smart-run-time">{runTime(run.firstCollectionTimeUtc)}{run.furthestMiles != null && <small> · {run.furthestMiles} mi out</small>}{run.spanHours != null && <small> · ~{run.spanHours}h</small>}{run.needsNightOut && <small className="smart-run-nightout"> · night out</small>}{run.isNightRun && <small> · night run</small>}</div>
           <div className="smart-run-route">
             <span><b>Collect</b>{run.collectionPoint.name}</span>
             <span><b>Deliver</b>{run.finalDeliveryPoint?.name || "Final stop not set"}</span>
@@ -261,24 +261,31 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
     });
   }, [availableTimes, snapshot]);
 
+  // Always render the active Driver Master roster. Availability feeds control
+  // allocation eligibility, never whether a driver exists on the board.
+  const rosterDrivers = useMemo(() => {
+    if (!snapshot) return [];
+    return snapshot.drivers;
+  }, [snapshot]);
+
   const visibleDrivers = useMemo(() => {
-    const workforce = filterDriversByEmploymentType(availableWorkforce, employmentFilter);
+    const workforce = filterDriversByEmploymentType(rosterDrivers, employmentFilter);
     const searched = filterDriversByDriverSearch(workforce, driverSearch);
     return filterDispatchDrivers(searched, filter, selections, snapshot?.runs || [], availableTimes, failures);
-  }, [availableTimes, availableWorkforce, driverSearch, employmentFilter, failures, filter, selections, snapshot]);
+  }, [availableTimes, driverSearch, employmentFilter, failures, filter, rosterDrivers, selections, snapshot]);
 
   const filterCounts = useMemo(() => {
-    const searched = filterDriversByDriverSearch(availableWorkforce, driverSearch);
+    const searched = filterDriversByDriverSearch(rosterDrivers, driverSearch);
     return Object.fromEntries(filterValues.map(value => [
       value,
       filterDispatchDrivers(searched, value, selections, snapshot?.runs || [], availableTimes, failures).length
     ])) as Record<DispatchFilter, number>;
-  }, [availableTimes, availableWorkforce, driverSearch, failures, selections, snapshot]);
+  }, [availableTimes, driverSearch, failures, rosterDrivers, selections, snapshot]);
 
   const employmentCounts = useMemo(() => Object.fromEntries(employmentFilterValues.map(value => [
     value,
-    filterDriversByEmploymentType(availableWorkforce, value).length
-  ])) as Record<DispatchEmploymentFilter, number>, [availableWorkforce]);
+    filterDriversByEmploymentType(rosterDrivers, value).length
+  ])) as Record<DispatchEmploymentFilter, number>, [rosterDrivers]);
 
   const samsaraExportCandidates = useMemo(() => {
     if (!snapshot) return [];
@@ -662,6 +669,13 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
         Dispatch is in limited mode: {snapshot.degradedSources.join(", ")} data could not be refreshed. Existing allocations remain visible; verify availability before assigning new work.
       </div>
     ) : null}
+    {!snapshot.rosterHealth.healthy || snapshot.rosterHealth.activeDrivers === 0 ? (
+      <div className="smart-dispatch-error inline" role="alert">
+        <strong>Driver Master unavailable or empty.</strong>{" "}
+        {snapshot.rosterHealth.message} Refresh TachoMaster/Driver Master before allocating work.
+        {snapshot.rosterHealth.latestTachoSyncUtc ? ` Last successful sync: ${new Date(snapshot.rosterHealth.latestTachoSyncUtc).toLocaleString("en-GB")}.` : " No successful TachoMaster sync is recorded."}
+      </div>
+    ) : null}
     {error && <div className="smart-dispatch-error inline" role="alert">{error}</div>}
     {globalLockFailures.map((failure, index) => <div className="smart-dispatch-error inline" role="alert" key={`${failure.reason}-${index}`}>{failure.reason}</div>)}
 
@@ -693,10 +707,10 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
     <div className="smart-dispatch-workspace dispatch-run-workspace">
       <details className="smart-dispatch-table-wrap dispatch-driver-pool dispatch-driver-pool-collapse" aria-label="Available drivers" open>
         <summary className="dispatch-driver-pool-heading">
-          <div><span>PLAN FROM THE WORKFORCE</span><strong>Available drivers</strong></div>
+          <div><span>PLAN FROM THE WORKFORCE</span><strong>Driver roster</strong></div>
           <b>{visibleDrivers.length}</b>
         </summary>
-        <p className="dispatch-driver-pool-help">Employed drivers are listed first. Legal start, Sage availability and working-pattern position are shown before allocating a run.</p>
+        <p className="dispatch-driver-pool-help">All active Driver Master records remain visible. Green is available, red is blocked and hatched is unknown or stale until Sage/Tacho refreshes.</p>
         <table className="smart-dispatch-table authoritative">
           <thead>
             <tr>

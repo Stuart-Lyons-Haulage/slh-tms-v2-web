@@ -61,6 +61,15 @@
 .bulk-source-line { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; padding-top: 4px; color: #647985; font-size: .8rem; }
 .bulk-source-line strong { display: inline; color: #3e5966; }
 .bulk-source-line a { margin-left: auto; font-weight: 800; }
+.site-mapping-actions { display: flex; gap: 5px; flex-wrap: wrap; }
+.site-mapping-actions button { padding: 4px 7px; min-height: 28px; font-size: .72rem; text-transform: none; letter-spacing: 0; }
+.site-mapping-modal { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 18px; background: rgb(8 35 46 / 45%); }
+.site-mapping-modal-card { width: min(620px, 100%); display: grid; gap: 12px; padding: 20px; border: 1px solid #cbdde1; border-radius: 14px; background: #fff; box-shadow: 0 20px 60px rgb(7 45 60 / 25%); }
+.site-mapping-modal-card h3, .site-mapping-modal-card p { margin: 0; }
+.site-mapping-modal-card label { display: grid; gap: 5px; font-size: .78rem; font-weight: 800; color: #506975; text-transform: uppercase; letter-spacing: .02em; }
+.site-mapping-modal-card input, .site-mapping-modal-card select, .site-mapping-modal-card textarea { width: 100%; box-sizing: border-box; }
+.site-mapping-help { padding: 9px 11px; border-radius: 8px; background: #f4faf9; color: #56717a; font-size: .84rem; }
+.site-mapping-modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
 
 @media (max-width: 1100px) {
   .order-date-strip { grid-template-columns: repeat(11, minmax(82px, 1fr)); }

@@ -68,6 +68,11 @@ export type MasterDispatchData = {
   sites: MasterSite[];
 };
 
+/** Driver Master only (document expiries); much smaller than the full dispatch set. */
+export function getMasterDrivers(token: string): Promise<MasterDriver[]> {
+  return request<MasterDriver[]>("/api/master/drivers", token);
+}
+
 export async function getMasterDispatchData(token: string): Promise<MasterDispatchData> {
   const [drivers, vehicles, trailers, customers, sites] = await Promise.all([
     request<MasterDriver[]>("/api/master/drivers", token),

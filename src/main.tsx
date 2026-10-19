@@ -1,13 +1,11 @@
-import { StrictMode } from 'react';
+import { StrictMode, Suspense, lazy } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MsalProvider } from '@azure/msal-react';
 import { PublicClientApplication } from '@azure/msal-browser';
 import { App } from './App';
-import { E2eHarness } from './E2eHarness';
+const E2eHarness = lazy(() => import('./E2eHarness').then(m => ({ default: m.E2eHarness })));
 import { DataIntegrityBoundary } from './components/DataIntegrityBoundary';
-import { DispatchCalculatedStartsPortal } from './pages/DispatchCalculatedStartsPortal';
 import { cacheLocationForRoute, isPublicTvLink, isTvRoute } from './tvBootstrap';
-import { installOperationalUiEnhancements } from './operationalUiEnhancements';
 import { installPollingPolicy } from './lib/pollingPolicy';
 import { installPerformanceTelemetry } from './lib/performanceTelemetry';
 import './styles.css';
@@ -32,6 +30,7 @@ import './ui-navigation-refresh.css';
 import './table-header-viewport-fix.css';
 import './driver-timesheets.css';
 import './staffing.css';
+import './workflow-ui.css';
 
 installPollingPolicy();
 installPerformanceTelemetry();
@@ -39,7 +38,6 @@ installPerformanceTelemetry();
 if (window.location.pathname === '/' || window.location.pathname === '/tracking' || window.location.pathname === '/planner') {
   void import('azure-maps-control/dist/atlas.min.css');
 }
-installOperationalUiEnhancements();
 
 const clientId = import.meta.env.VITE_ENTRA_CLIENT_ID;
 const tenantId = import.meta.env.VITE_ENTRA_TENANT_ID;
@@ -80,7 +78,7 @@ function installLocalTestBanner() {
 function renderApp() {
   const root = document.getElementById('root');
   if (!root) throw new Error('TMS root element is missing.');
-  const content = e2eAuth ? <E2eHarness /> : <><App /><DispatchCalculatedStartsPortal /></>;
+  const content = e2eAuth ? <Suspense fallback={null}><E2eHarness /></Suspense> : <App />;
   createRoot(root).render(<StrictMode><MsalProvider instance={msal}><DataIntegrityBoundary>{content}</DataIntegrityBoundary></MsalProvider></StrictMode>);
   installLocalTestBanner();
 }

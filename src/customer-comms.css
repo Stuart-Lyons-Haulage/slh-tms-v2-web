@@ -1,0 +1,119 @@
+.customer-comms-page {
+  display: grid;
+  gap: 16px;
+  padding: 16px;
+}
+
+.customer-comms-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.customer-comms-header h2 {
+  margin: 2px 0 4px;
+}
+
+.customer-comms-header p {
+  margin: 0;
+  color: #475467;
+}
+
+.customer-comms-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.customer-messages {
+  background: #fff;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.customer-messages-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.customer-messages-head h3 {
+  margin: 0 0 4px;
+}
+
+.customer-message-list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.customer-message {
+  border: 1px solid #e4e7ec;
+  border-left: 4px solid #98a2b3;
+  border-radius: 6px;
+  padding: 10px 12px;
+  display: grid;
+  gap: 6px;
+}
+
+.customer-message.purpose-request { border-left-color: #1d4ed8; }
+.customer-message.purpose-etaupdate { border-left-color: #0e9384; }
+.customer-message.purpose-exception { border-left-color: #dc6803; }
+.customer-message.purpose-bookingchange { border-left-color: #b42318; }
+
+.customer-message-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.customer-message-meta small {
+  color: #667085;
+}
+
+.customer-message-pill {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  background: #f2f4f7;
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+.customer-message-subject {
+  font-weight: 600;
+}
+
+.customer-message-text {
+  margin: 0;
+  white-space: pre-wrap;
+  color: #344054;
+  max-height: 9em;
+  overflow: auto;
+}
+
+.customer-message-orders {
+  font-size: 0.875rem;
+  color: #475467;
+}
+
+.customer-message-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+}
+
+@media (max-width: 640px) {
+  .customer-comms-page { padding: 12px; }
+  .customer-comms-actions { width: 100%; }
+}
