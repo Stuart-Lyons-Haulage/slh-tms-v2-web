@@ -82,7 +82,7 @@ function RunPlannerLineView({
   const deliveryByName = new Map<string, { destination: string; pallets: number }>();
   availableOrders
     .filter(order => Boolean(order.collection?.trim()) && Boolean(order.destination?.trim()))
-    .filter((order) => normalise(order.collection!) === collectionKey)
+    .filter((order) => normalise(order.collection!).includes(collectionKey))
     .forEach((order) => {
       const destination = order.destination!.trim();
       const key = normalise(destination);
