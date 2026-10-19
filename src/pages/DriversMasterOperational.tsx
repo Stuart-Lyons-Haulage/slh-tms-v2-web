@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, request, type Driver } from '../lib/api';
 import { useAccessToken } from '../lib/auth';
+import { WorkPatternEditor, type PatternData } from '../components/WorkPatternEditor';
+import { todayIsoDate } from '../lib/dateUtils';
 
 type DriverRecord = Driver & {
   cpcExpiry?: string;
@@ -139,6 +141,15 @@ export function DriversMasterOperational() {
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [notice, setNotice] = useState<string>();
+  // Sage HR work patterns (moved here from Staffing → Driver files).
+  const [patterns, setPatterns] = useState<PatternData>({ patterns: [], library: [] });
+  const [patternFor, setPatternFor] = useState<string>();
+  const loadPatterns = useCallback(async () => {
+    try { setPatterns(await request<PatternData>(`/api/v1/driver-work-patterns?date=${encodeURIComponent(todayIsoDate())}`, await token())); }
+    catch { setPatterns({ patterns: [], library: [] }); }
+  }, [token]);
+  useEffect(() => { void loadPatterns(); }, [loadPatterns]);
+  const patternByDriver = useMemo(() => new Map(patterns.patterns.map(item => [item.driverId, item])), [patterns]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -279,7 +290,7 @@ export function DriversMasterOperational() {
         <table>
           <thead>
             <tr>
-              <th>Tacho status</th><th>Driver</th><th>Employee</th><th>Type / group</th><th>Tacho member / DB</th><th>Card</th><th>Licence</th><th>Last Tacho</th><th></th>
+              <th>Tacho status</th><th>Driver</th><th>Employee</th><th>Type / group</th><th>Tacho member / DB</th><th>Card</th><th>Licence</th><th>Work pattern (Sage HR)</th><th>Last Tacho</th><th></th>
             </tr>
             <tr className="table-filter-row">
               <th>
@@ -293,6 +304,7 @@ export function DriversMasterOperational() {
               <th><input value={filters.member} onChange={event => setFilter('member', event.target.value)} placeholder="Filter member" aria-label="Filter Tacho member" /></th>
               <th><input value={filters.card} onChange={event => setFilter('card', event.target.value)} placeholder="Filter card" aria-label="Filter Tacho card" /></th>
               <th><input value={filters.licence} onChange={event => setFilter('licence', event.target.value)} placeholder="Filter licence" aria-label="Filter licence" /></th>
+              <th></th>
               <th><input value={filters.lastTacho} onChange={event => setFilter('lastTacho', event.target.value)} placeholder="Filter sync" aria-label="Filter last Tacho sync" /></th>
               <th></th>
             </tr>
@@ -308,11 +320,18 @@ export function DriversMasterOperational() {
                 <td>{driver.tachoMasterDriverId || <strong style={{ color: '#92400e' }}>Review</strong>}</td>
                 <td>{driver.tachoCardNumber || '—'}</td>
                 <td>{driver.drivingLicenceNumber || '—'}<div className="hint">{driver.licenceExpiry || ''}</div></td>
+                <td style={{ minWidth: 170 }}>{(() => {
+                  const pattern = patternByDriver.get(driver.id);
+                  if (patternFor === driver.id) return <WorkPatternEditor driverId={driver.id} current={pattern} library={patterns.library} onDone={saved => { setPatternFor(undefined); if (saved) void loadPatterns(); }} />;
+                  const employed = /employ/i.test(driver.driverType || '');
+                  return <>{pattern ? <><strong>{pattern.name || pattern.blocks}</strong><div className="hint">{pattern.description}</div></> : <span className="hint">{employed ? 'Not set (Tacho only)' : 'Not needed'}</span>}
+                    {(employed || pattern) && <div><button type="button" onClick={() => setPatternFor(driver.id)}>{pattern ? 'Change' : 'Set'}</button></div>}</>;
+                })()}</td>
                 <td>{formatDateTime(driver.lastTachoSyncUtc)}</td>
                 <td><button onClick={() => openEdit(driver)}>Edit</button></td>
               </tr>;
             })}
-            {!loading && filtered.length === 0 && <tr><td colSpan={9} className="hint">No drivers match these column filters.</td></tr>}
+            {!loading && filtered.length === 0 && <tr><td colSpan={10} className="hint">No drivers match these column filters.</td></tr>}
           </tbody>
         </table>
       </div>
