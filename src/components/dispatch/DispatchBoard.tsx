@@ -83,7 +83,11 @@ function RouteSidebar({ runs, owners, allocatedRunIds, drivers, allDrivers, vehi
     </div>
     <p>Furthest first. Suggestions weigh distance to the first collection, skills, driver type (trampers for nights out; day and night drivers must get back in shift) and who has had the fewest long runs in the last 2 weeks.</p>
     <div className="smart-run-card-list">
-      {runs.map(run => {
+      {[...runs].sort((left, right) => {
+        const leftTime = left.firstCollectionTimeUtc ? Date.parse(left.firstCollectionTimeUtc) : Number.POSITIVE_INFINITY;
+        const rightTime = right.firstCollectionTimeUtc ? Date.parse(right.firstCollectionTimeUtc) : Number.POSITIVE_INFINITY;
+        return leftTime - rightTime || left.reference.localeCompare(right.reference);
+      }).map(run => {
         const ownerId = owners[run.runId];
         const owner = ownerId ? allDrivers.find(driver => driver.driverId === ownerId) : undefined;
         const suggestedDrivers = drivers.filter(driver => driver.suggestedRunId === run.runId);
