@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Navigate, useSearchParams } from "react-router-dom";
 import * as XLSX from "xlsx";
 import { request } from "../lib/api";
 import { useAccessToken } from "../lib/auth";
@@ -7,8 +7,6 @@ import type { DriverAvailabilityItem, DriverAvailabilitySnapshot } from "../comp
 import { DriverTimesheets } from "./DriverTimesheets";
 import { DriverAssignments } from "./Pages";
 import { useWorkingDate, workingDateLabel } from "../lib/workingDate";
-import { todayIsoDate } from "../lib/dateUtils";
-import { getMasterDrivers } from "../api/master";
 
 type ImportRow = { driverName: string; date: string; status: string; source: string; agencyName: string };
 type ImportIssue = { row: string; reason: string };
@@ -140,8 +138,8 @@ function calendarState(driver: DriverAvailabilityItem | undefined) {
   return { label: driver.employmentType === "Employed" ? "PATTERN" : "—", className: "pattern" };
 }
 
-type Section = "cover" | "availability" | "files" | "timesheets" | "history";
-const sections: Array<[Section, string]> = [["cover", "Cover"], ["availability", "Availability"], ["files", "Driver files"], ["timesheets", "Timesheets"], ["history", "Run history"]];
+type Section = "cover" | "availability" | "timesheets" | "history";
+const sections: Array<[Section, string]> = [["cover", "Cover"], ["availability", "Availability"], ["timesheets", "Timesheets"], ["history", "Run history"]];
 
 /**
  * Drivers: who we need, who we have, each driver's file, timesheets and run history.
@@ -156,6 +154,8 @@ export function Staffing() {
     if (next === "cover") updated.delete("tab"); else updated.set("tab", next);
     setParams(updated, { replace: true });
   }
+  // Driver files moved into Master Data → Drivers (work patterns live there now).
+  if (requested === "files") return <Navigate to="/drivers" replace />;
   return <section className="ui-page staffing-page">
     <div className="ui-page-head"><div><h1>Drivers</h1><p>Who we need, who we have, and each driver's file. Employment type remains controlled by Master Data.</p></div></div>
     <div className="ui-tabs" role="tablist" aria-label="Driver sections">
@@ -163,7 +163,6 @@ export function Staffing() {
     </div>
     {section === "cover" && <DriverForecast />}
     {section === "availability" && <AvailabilitySection />}
-    {section === "files" && <DriverFiles />}
     {section === "timesheets" && <DriverTimesheets embedded />}
     {section === "history" && <DriverAssignments embedded />}
   </section>;
@@ -270,7 +269,7 @@ function AvailabilitySection() {
           <button type="button" className="primary" onClick={() => setImportOpen(value => !value)}>{importOpen ? "Close import" : "Import agency spreadsheet"}</button>
         </div>
       </div>
-      <p className="hint">Employed drivers: leave and rest days come from Sage HR (rest days from Sage HR working patterns, set per driver in Driver files), then Tacho for what has actually been worked. Drivers with no pattern set show PATTERN. Agency and casual: from imported agency spreadsheets, and you can set a day by clicking it.</p>
+      <p className="hint">Employed drivers: leave and rest days come from Sage HR (rest days from Sage HR working patterns, set per driver in Master Data → Drivers), then Tacho for what has actually been worked. Drivers with no pattern set show PATTERN. Agency and casual: from imported agency spreadsheets, and you can set a day by clicking it.</p>
       {importOpen && <div className="staffing-import-panel">
         <h3>Import agency availability</h3>
         <p className="hint">Upload the agency booking spreadsheets. Names are matched to Driver Master; new agency names are added as agency drivers.</p>
@@ -356,109 +355,9 @@ function DriverForecast() {
   </section>;
 }
 
-type FileDriver = { driverId: string; displayName?: string; employeeNumber?: string; driverType?: string; driverGroup?: string; skills?: string; workingStyle?: string; recentRuns?: number; recentLongRuns?: number; recentFurthestMiles?: number; onLeave: boolean; leaveType?: string };
-type FileStatus = { driverId: string; projectedDayNumber?: number; cycleLength?: number; cycleNote?: string; weeklyRestStatus?: string; availabilityStatus?: string; availabilityMessage?: string; workPatternSource?: string; patternRestDay?: boolean; tachoDayNumber?: number };
-type WorkPattern = { driverId: string; name: string; blocks: string; cycleStart: string; source: string; updatedBy?: string; updatedAtUtc: string; description: string; working?: boolean; day?: number; blockLength?: number };
-type PatternLibraryItem = { name: string; blocks: string; cycleStart: string; drivers: number };
-type PatternData = { patterns: WorkPattern[]; library: PatternLibraryItem[] };
 
-function expiryChip(label: string, value: string | undefined, today: string) {
-  if (!value) return <span key={label} className="ui-chip">{label} not recorded</span>;
-  const days = Math.round((Date.parse(`${value.slice(0, 10)}T12:00:00Z`) - Date.parse(`${today}T12:00:00Z`)) / 86_400_000);
-  const tone = days < 0 ? "red" : days <= 30 ? "amber" : "green";
-  const text = days < 0 ? `${label} expired` : days <= 30 ? `${label} ${days}d` : `${label} ok`;
-  return <span key={label} className={`ui-chip ${tone}`} title={`${label} expires ${value.slice(0, 10)}`}>{text}</span>;
-}
 
-const styleLabel: Record<string, string> = { Tramper: "Tramper (nights out)", HalfTramper: "Half tramper", Day: "Day driver", Night: "Night driver" };
 
-function DriverFiles() {
-  const token = useAccessToken();
-  const [date] = useWorkingDate();
-  const today = todayIsoDate();
-  const [search, setSearch] = useState("");
-  const [problemsOnly, setProblemsOnly] = useState(false);
-  const [state, setState] = useState<{ drivers: FileDriver[]; statuses: Record<string, FileStatus>; master: { drivers: Awaited<ReturnType<typeof getMasterDrivers>> } | undefined; error?: string; loading: boolean }>({ drivers: [], statuses: {}, master: undefined, loading: true });
-  const [patterns, setPatterns] = useState<PatternData>({ patterns: [], library: [] });
-  const [editing, setEditing] = useState<string>();
-  const [reload, setReload] = useState(0);
-  useEffect(() => {
-    let active = true;
-    void (async () => {
-      try { const result = await request<PatternData>(`/api/v1/driver-work-patterns?date=${encodeURIComponent(date)}`, await token()); if (active) setPatterns(result); }
-      catch { if (active) setPatterns({ patterns: [], library: [] }); }
-    })();
-    return () => { active = false; };
-  }, [date, token, reload]);
-  const patternByDriver = useMemo(() => new Map(patterns.patterns.map(item => [item.driverId, item])), [patterns]);
-  const employedWithoutPattern = state.drivers.filter(driver => /employ/i.test(driver.driverType || "") && !patternByDriver.has(driver.driverId)).length;
-
-  useEffect(() => {
-    let active = true;
-    setState(current => ({ ...current, loading: true }));
-    void (async () => {
-      const accessToken = await token();
-      const [dispatch, status, master] = await Promise.allSettled([
-        request<{ drivers: FileDriver[] }>(`/api/v1/driver-dispatch?date=${encodeURIComponent(date)}`, accessToken, undefined, 60000),
-        request<{ drivers: FileStatus[] }>(`/api/v1/driver-dispatch-status?date=${encodeURIComponent(date)}`, accessToken, undefined, 60000),
-        getMasterDrivers(accessToken).then(drivers => ({ drivers })),
-      ]);
-      if (!active) return;
-      setState({
-        drivers: dispatch.status === "fulfilled" ? dispatch.value.drivers : [],
-        statuses: status.status === "fulfilled" ? Object.fromEntries(status.value.drivers.map(item => [item.driverId, item])) : {},
-        master: master.status === "fulfilled" ? master.value : undefined,
-        error: dispatch.status === "rejected" ? "Driver list could not be loaded." : undefined,
-        loading: false,
-      });
-    })();
-    return () => { active = false; };
-  }, [date, token, reload]);
-
-  const rows = useMemo(() => {
-    const masterById = new Map((state.master?.drivers || []).map(driver => [driver.driverId, driver]));
-    return state.drivers.map(driver => {
-      const master = masterById.get(driver.driverId);
-      const docs = [master?.licenceExpiry, master?.cpcExpiry, master?.digitalTachoCardExpiry];
-      const docDays = docs.filter(Boolean).map(value => Math.round((Date.parse(`${value!.slice(0, 10)}T12:00:00Z`) - Date.parse(`${today}T12:00:00Z`)) / 86_400_000));
-      const status = state.statuses[driver.driverId];
-      const problem = docDays.some(days => days <= 30) || status?.availabilityStatus === "Unavailable" || status?.weeklyRestStatus === "Overdue";
-      return { driver, master, status, problem, worstDoc: docDays.length ? Math.min(...docDays) : 9999 };
-    })
-      .filter(row => !problemsOnly || row.problem)
-      .filter(row => !search.trim() || `${row.driver.displayName} ${row.driver.employeeNumber} ${row.driver.skills}`.toLowerCase().includes(search.trim().toLowerCase()))
-      .sort((a, b) => Number(b.problem) - Number(a.problem) || a.worstDoc - b.worstDoc || (a.driver.displayName || "").localeCompare(b.driver.displayName || ""));
-  }, [problemsOnly, search, state, today]);
-
-  return <section className="ui-card">
-    <div className="ui-card-head">
-      <h2>Driver files</h2>
-      <div className="ui-filters">
-        <label>Search<input value={search} onChange={event => setSearch(event.target.value)} placeholder="Name, number or skill" /></label>
-        <label className="checkbox-label"><input type="checkbox" checked={problemsOnly} onChange={event => setProblemsOnly(event.target.checked)} /> Only drivers needing attention</label>
-      </div>
-    </div>
-    <p className="hint">Work pattern comes from Sage HR and sets the planned block; Tacho then shows what has actually been worked and decides what is legal (for {workingDateLabel(date)}). Long runs are 120+ miles from Barnham in the last 14 days, so the far work is shared fairly.</p>
-    {employedWithoutPattern > 0 && <p className="notice inline-notice">{employedWithoutPattern} employed driver{employedWithoutPattern === 1 ? " has" : "s have"} no work pattern yet, so their block is worked out from Tacho alone. Set each one to match Sage HR.</p>}
-    {state.error && <p className="ui-error">{state.error}</p>}
-    {state.loading ? <div className="ui-empty">Loading driver files…</div> : rows.length === 0 ? <div className="ui-empty">No drivers match.</div> : <div className="ui-table-wrap"><table className="ui-table">
-      <thead><tr><th>Driver</th><th>Works as</th><th>Work pattern</th><th>Block</th><th>Last 14 days</th><th>Documents</th><th>Skills</th></tr></thead>
-      <tbody>{rows.map(({ driver, master, status }) => <tr key={driver.driverId}>
-        <td><strong>{driver.displayName || master?.preferredName || master?.fullName || driver.employeeNumber}</strong><br /><small>{driver.employeeNumber || "No employee number"} · {driver.driverType || master?.employmentType || "Type not set"}{master?.agencyName ? ` · ${master.agencyName}` : ""}</small></td>
-        <td>{driver.workingStyle ? styleLabel[driver.workingStyle] || driver.workingStyle : <span className="ui-chip">Not set</span>}</td>
-        <td>
-          {(() => { const pattern = patternByDriver.get(driver.driverId); return editing === driver.driverId
-            ? <WorkPatternEditor driverId={driver.driverId} current={pattern} library={patterns.library} onDone={saved => { setEditing(undefined); if (saved) setReload(value => value + 1); }} />
-            : <>{pattern ? <><strong>{pattern.name}</strong><br /><small>{pattern.description} · {pattern.source}</small></> : <span className="ui-chip">{/employ/i.test(driver.driverType || "") ? "Not set: using Tacho" : "Not needed"}</span>}<br /><button type="button" className="link-button" onClick={() => setEditing(driver.driverId)}>{pattern ? "Change" : "Set from Sage"}</button></>; })()}
-        </td>
-        <td>{driver.onLeave ? <span className="ui-chip blue">{driver.leaveType || "Leave"}</span> : status?.patternRestDay ? <span className="ui-chip blue">Rest day</span> : status?.projectedDayNumber ? <span className={`ui-chip ${status.availabilityStatus === "Unavailable" ? "red" : status.projectedDayNumber >= (status.cycleLength || 6) ? "amber" : "green"}`}>Day {status.projectedDayNumber} of {status.cycleLength || 6}</span> : <span className="ui-chip">No Tacho block</span>}{status?.cycleNote && <><br /><small>{status.cycleNote}</small></>}</td>
-        <td>{driver.recentRuns ?? 0} runs · {driver.recentLongRuns ?? 0} long{driver.recentFurthestMiles ? <><br /><small>furthest {Math.round(driver.recentFurthestMiles)} mi</small></> : null}</td>
-        <td><div className="ui-page-actions">{expiryChip("Licence", master?.licenceExpiry, today)}{expiryChip("CPC", master?.cpcExpiry, today)}{expiryChip("Tacho card", master?.digitalTachoCardExpiry, today)}</div></td>
-        <td><small>{driver.skills || "—"}</small></td>
-      </tr>)}</tbody>
-    </table></div>}
-  </section>;
-}
 
 function AvailabilityCalendar({ weekStart, snapshots, onChanged, filter }: { weekStart: string; snapshots: Record<string, DriverAvailabilitySnapshot>; onChanged: () => void; filter: CalendarFilter }) {
   const token = useAccessToken();
@@ -498,36 +397,3 @@ function StaffingRow({ driver, onChanged }: { driver: DriverAvailabilityItem; on
   return <article><div><strong>{driver.displayName}</strong><small>{driver.employeeNumber || "No employee number"} · {driver.employmentType}{driver.agencyName ? ` · ${driver.agencyName}` : ""}</small></div><div><span>{driver.availableFromUtc && driver.availableUntilUtc ? `${new Date(driver.availableFromUtc).toLocaleString("en-GB")} → ${new Date(driver.availableUntilUtc).toLocaleString("en-GB")}` : "No confirmed window"}</span><small>{driver.skills || "Skills not recorded"}{driver.placementEndDate ? ` · placement ends ${driver.placementEndDate}` : ""}</small></div><div><span>{driver.blockReasons.join(" · ") || "Available"}</span><small>{driver.currentAllocationReference ? `Allocated · ${driver.currentAllocationReference}` : "Not allocated"}</small></div>{(driver.employmentType === "Agency" || driver.employmentType === "Casual") && <button type="button" onClick={() => setOpen(value => !value)}>{open ? "Close" : "Amend availability"}</button>}{open && <div className="staffing-inline-editor"><label>From<input type="datetime-local" value={from} onChange={event => setFrom(event.target.value)} /></label><label>Until<input type="datetime-local" value={until} onChange={event => setUntil(event.target.value)} /></label><label><input type="checkbox" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} /> Confirmed</label><label>Notes<textarea value={notes} onChange={event => setNotes(event.target.value)} /></label><button className="primary" type="button" onClick={() => void save()}>Save</button></div>}</article>;
 }
 
-function WorkPatternEditor({ driverId, current, library, onDone }: { driverId: string; current?: WorkPattern; library: PatternLibraryItem[]; onDone: (saved: boolean) => void }) {
-  const token = useAccessToken();
-  const [name, setName] = useState(current?.name || "");
-  const [blocks, setBlocks] = useState(current?.blocks || "5-2,6-1");
-  const [cycleStart, setCycleStart] = useState(current?.cycleStart || todayIsoDate());
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
-  const weekdays = /[a-z]/i.test(blocks);
-  async function save(clear = false) {
-    setBusy(true); setError(undefined);
-    try {
-      await request(`/api/v1/driver-work-patterns/${driverId}`, await token(), { method: "PUT", body: JSON.stringify(clear ? { blocks: "" } : { name: name || null, blocks, cycleStart }) });
-      onDone(true);
-    } catch (exception) { setError(exception instanceof Error ? exception.message : "Could not save."); }
-    finally { setBusy(false); }
-  }
-  return <div className="work-pattern-editor">
-    {library.length > 0 && <label>Same as<select value="" onChange={event => { const item = library[Number(event.target.value)]; if (item) { setName(item.name); setBlocks(item.blocks); setCycleStart(item.cycleStart); } }}>
-      <option value="">Pick a pattern already used…</option>
-      {library.map((item, index) => <option key={`${item.name}-${item.blocks}-${item.cycleStart}`} value={index}>{item.name} (from {item.cycleStart}, {item.drivers} driver{item.drivers === 1 ? "" : "s"})</option>)}
-    </select></label>}
-    <label>Name in Sage HR<input value={name} onChange={event => setName(event.target.value)} placeholder="e.g. 5 on 2 off / 6 on 1 off" /></label>
-    <label>Pattern<input value={blocks} onChange={event => setBlocks(event.target.value)} placeholder="5-2,6-1 or Mon,Tue,Wed,Thu,Fri" /></label>
-    {!weekdays && <label>First day of the first block<input type="date" value={cycleStart} onChange={event => setCycleStart(event.target.value)} /></label>}
-    <small className="hint">Days on-off in order, e.g. 5-2,6-1 is 5 on, 2 off, then 6 on, 1 off. Or list fixed days: Mon,Tue,Wed,Thu,Fri.</small>
-    {error && <p className="ui-error">{error}</p>}
-    <div className="ui-page-actions">
-      <button type="button" className="primary" disabled={busy || !blocks.trim()} onClick={() => void save()}>{busy ? "Saving…" : "Save"}</button>
-      {current && <button type="button" disabled={busy} onClick={() => void save(true)}>Remove</button>}
-      <button type="button" disabled={busy} onClick={() => onDone(false)}>Cancel</button>
-    </div>
-  </div>;
-}
