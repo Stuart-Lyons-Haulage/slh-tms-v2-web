@@ -6,6 +6,7 @@ import { useApi } from '../lib/useApi';
 import { PlanningWipe } from './PlanningWipe';
 import { SageCalendarLink } from './SageCalendarLink';
 import { SamsaraReconcile } from './SamsaraReconcile';
+import { SlowEndpoints } from './SlowEndpoints';
 
 type SyncResult = { provider: string; success: boolean; completedAtUtc: string; message: string };
 
@@ -273,6 +274,7 @@ export function AdminIntegrationSyncControls() {
       </article>
     </div>
     <SamsaraReconcile />
+    <SlowEndpoints />
     <SageCalendarLink />
     <PlanningWipe />
     {state && <p className="hint">Platform {state.status}{state.lastPlatformUpdateUtc ? ` · last update ${new Date(state.lastPlatformUpdateUtc).toLocaleString('en-GB')}` : ''}. Automatic: TachoMaster every 20 minutes · Sage HR 05:00 and 14:00 · Fleetio hourly · tracking continuous.</p>}
