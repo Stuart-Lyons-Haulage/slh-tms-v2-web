@@ -128,6 +128,11 @@ export function UndatedOrderReviewQueue() {
 
   const undatedRows = useMemo(() => records.map(parse).filter((row): row is PendingRow => Boolean(row)), [records]);
   const datedCount = records.length - undatedRows.length;
+  // Any card that came from an email can be re-read, whether or not the email list loaded.
+  const emailRows = useMemo(() => undatedRows.filter(row => {
+    const evidence = resolveSourceEvidence(row.payload);
+    return Boolean(unread[row.item.id] || evidence.messageId || evidence.internetMessageId);
+  }), [undatedRows, unread]);
 
   async function beginFix(row: PendingRow) {
     setBusyId(row.item.id);
@@ -206,7 +211,7 @@ export function UndatedOrderReviewQueue() {
   }
 
   async function rereadAll() {
-    const ids = undatedRows.filter(row => unread[row.item.id]).map(row => row.item.id);
+    const ids = emailRows.map(row => row.item.id);
     let cleared = 0;
     setError(undefined); setNotice(undefined);
     for (const [index, id] of ids.entries()) {
@@ -264,8 +269,8 @@ export function UndatedOrderReviewQueue() {
       <article><span>Total pending</span><strong>{total}</strong><small>API queue total</small></article>
     </div>
 
-    {Object.keys(unread).length > 0 && <div className="bulk-source-line" style={{ margin: "8px 0" }}>
-      <span>{Object.keys(unread).length} of these are customer emails the TMS couldn't read. Each card shows who sent it and whether its orders are already in.</span>
+    {emailRows.length > 0 && <div className="bulk-source-line" style={{ margin: "8px 0" }}>
+      <span>{emailRows.length} of these came from customer emails. Re-read runs each email back through the TMS for every date in it.</span>
       <button type="button" className="primary" onClick={() => void rereadAll()} disabled={Boolean(busyId) || Boolean(rereadingAll)}>{rereadingAll || "Re-read all"}</button>
     </div>}
     {notice && <p className="notice inline-notice">{notice}</p>}
@@ -293,7 +298,7 @@ export function UndatedOrderReviewQueue() {
           <div className="bulk-order-actions">
             {hasSource && <button type="button" className="source-email-review-button" onClick={() => setSourceEmailStagingId(row.item.id)} disabled={Boolean(busyId)}>Review source email</button>}
             {unread[row.item.id] && unread[row.item.id].capturedOrders > 0 && !isEditing && <button type="button" className="primary" onClick={() => void closeCaptured(row)} disabled={Boolean(busyId)}>Close: already in Orders</button>}
-            {unread[row.item.id] && unread[row.item.id].evidenceKept && unread[row.item.id].capturedOrders === 0 && !isEditing && <button type="button" className="primary" onClick={() => void rereadOne(row)} disabled={Boolean(busyId) || Boolean(rereadingAll)}>{rowBusy ? "Re-reading…" : "Re-read email"}</button>}
+            {(unread[row.item.id] ? unread[row.item.id].evidenceKept : hasSource) && !isEditing && <button type="button" className="primary" onClick={() => void rereadOne(row)} disabled={Boolean(busyId) || Boolean(rereadingAll)}>{rowBusy ? "Re-reading…" : "Re-read email"}</button>}
             {!isEditing && <button type="button" onClick={() => void beginFix(row)} disabled={Boolean(busyId)}>{rowBusy ? "Loading…" : "Amend from source"}</button>}
             {!isEditing && <button type="button" className="reject-button" onClick={() => void rejectRow(row)} disabled={Boolean(busyId)}>{rowBusy ? "Working…" : "Reject"}</button>}
             {isEditing && <>
