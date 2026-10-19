@@ -99,6 +99,7 @@ export function UndatedOrderReviewQueue() {
   const [unread, setUnread] = useState<Record<string, UnreadEmail>>({});
   const [notice, setNotice] = useState<string>();
   const [rereadingAll, setRereadingAll] = useState<string>();
+  const [rowError, setRowError] = useState<{ id: string; message: string }>();
 
   const refresh = useCallback(async () => {
     try {
@@ -149,32 +150,39 @@ export function UndatedOrderReviewQueue() {
 
   async function saveAmendment(row: PendingRow) {
     if (!editing || editing.id !== row.item.id) return;
+    const fail = (message: string) => setRowError({ id: row.item.id, message });
+    setRowError(undefined);
     const collectionDate = text(editing.payload.collectionDate);
     const deliveryDate = text(editing.payload.deliveryDate);
-    if (!isUsableDate(collectionDate) && !isUsableDate(deliveryDate)) {
-      setError("Enter a valid collection or delivery date before saving.");
+    if (!isUsableDate(collectionDate)) {
+      fail(isUsableDate(deliveryDate) ? "Enter the collection date too (the day we pick up)." : "Enter a collection date before saving.");
       return;
     }
+    const customerCode = text(editing.payload.customerCode);
+    const collectionSite = text(editing.payload.collectionSite) || text(editing.payload.sellerName);
+    const deliverySite = text(editing.payload.deliverySite) || text(editing.payload.stallNumber);
+    const missing = [!customerCode && "customer", !collectionSite && "collection site", !deliverySite && "delivery site"].filter(Boolean);
+    if (missing.length) { fail(`Fill in the ${missing.join(", ")} before saving.`); return; }
+    const pallets = Number(text(editing.payload.pallets));
+    if (!Number.isFinite(pallets) || pallets <= 0) { fail("Enter the number of pallets before saving."); return; }
+    // No reference on the email: make a readable one rather than blocking the save.
+    const reference = text(editing.payload.poNumber) || text(editing.payload.customerPo) ||
+      `${customerCode}-${collectionDate.replaceAll("-", "").slice(2)}-${collectionSite.replace(/[^A-Za-z0-9]/g, "").slice(0, 8).toUpperCase()}`;
 
     setBusyId(row.item.id);
-    setError(undefined);
     try {
-      const reference = text(editing.payload.poNumber) || text(editing.payload.customerPo);
-      const customerCode = text(editing.payload.customerCode);
-      const collectionSite = text(editing.payload.collectionSite) || text(editing.payload.sellerName);
-      const deliverySite = text(editing.payload.deliverySite) || text(editing.payload.stallNumber);
-      if (!reference || !customerCode || !collectionSite || !deliverySite) {
-        setError("Reference, customer, collection site and delivery site are required before saving an amended order.");
-        return;
-      }
       const amendedPayload: Payload = {
         ...editing.payload,
         poNumber: reference,
         customerCode,
         collectionSite,
+        collectionSiteName: collectionSite,
         deliverySite,
+        deliverySiteName: deliverySite,
         sellerName: collectionSite,
         stallNumber: deliverySite,
+        pallets,
+        deliveryDate: isUsableDate(deliveryDate) ? deliveryDate : collectionDate,
         plannerReady: true,
         plannerReviewAcknowledged: true,
         intakeConfidence: "High",
@@ -188,13 +196,25 @@ export function UndatedOrderReviewQueue() {
         }),
       });
       setEditing(undefined);
+      setNotice(`Saved ${reference}. It's now in Orders for ${collectionDate.split("-").reverse().join("/")}.`);
       await refresh();
       window.dispatchEvent(new Event(SILENT_API_REFRESH_EVENT));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "The corrected dates could not be saved.");
+      fail(err instanceof Error ? err.message : "The order could not be saved.");
     } finally {
       setBusyId(undefined);
     }
+  }
+
+  /** One email, two or more orders: adds another card from the same email to fill in. */
+  async function addAnotherFromEmail(row: PendingRow) {
+    setBusyId(row.item.id); setRowError(undefined);
+    try {
+      await request(`/api/v1/staging/${row.item.id}/copy-undated`, await token(), { method: "POST" });
+      setNotice("Added another card from the same email below. Fill it in and save it.");
+      await refresh();
+    } catch (err) { setRowError({ id: row.item.id, message: err instanceof Error ? err.message : "Couldn't add another card." }); }
+    finally { setBusyId(undefined); }
   }
 
   /** Runs the email back through the full intake for every date it covers. */
@@ -308,10 +328,12 @@ export function UndatedOrderReviewQueue() {
             {!isEditing && <button type="button" onClick={() => void beginFix(row)} disabled={Boolean(busyId)}>{rowBusy ? "Loading…" : "Amend from source"}</button>}
             {!isEditing && <button type="button" className="reject-button" onClick={() => void rejectRow(row)} disabled={Boolean(busyId)}>{rowBusy ? "Working…" : "Reject"}</button>}
             {isEditing && <>
-              <button type="button" onClick={() => setEditing(undefined)} disabled={rowBusy}>Cancel</button>
+              <button type="button" onClick={() => { setEditing(undefined); setRowError(undefined); }} disabled={rowBusy}>Cancel</button>
+              <button type="button" onClick={() => void addAnotherFromEmail(row)} disabled={rowBusy} title="For an email with more than one order">Add another order from this email</button>
               <button type="button" className="primary" onClick={() => void saveAmendment(row)} disabled={rowBusy}>{rowBusy ? "Saving…" : "Save amended order"}</button>
             </>}
           </div>
+          {rowError?.id === row.item.id && <p className="review-error" role="alert" style={{ gridColumn: "1 / -1", margin: "4px 0" }}>{rowError.message}</p>}
           {isEditing && <div className="bulk-order-editor">
             <div className="bulk-editor-grid">
               <label>Reference<input value={text(payload.poNumber) || text(payload.customerPo)} onChange={(event) => setEditing((current) => current ? { ...current, payload: { ...current.payload, poNumber: event.target.value, customerPo: event.target.value } } : current)} /></label>
