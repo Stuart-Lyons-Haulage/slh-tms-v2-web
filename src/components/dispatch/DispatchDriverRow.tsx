@@ -61,7 +61,7 @@ function statusTone(status?: string): string {
   return "empty";
 }
 
-function DispatchAssetTypeahead({ value, options, placeholder, ariaLabel, disabled, onChange }: {
+export function DispatchAssetTypeahead({ value, options, placeholder, ariaLabel, disabled, onChange }: {
   value: string;
   options: DispatchAssetSearchOption[];
   placeholder: string;
@@ -77,6 +77,7 @@ function DispatchAssetTypeahead({ value, options, placeholder, ariaLabel, disabl
   useEffect(() => setText(selected?.label || ""), [selected?.label, value]);
 
   function choose(option: DispatchAssetSearchOption) {
+    if (option.disabled) return;
     setText(option.label);
     onChange(option.id);
     setOpen(false);
@@ -113,7 +114,7 @@ function DispatchAssetTypeahead({ value, options, placeholder, ariaLabel, disabl
     {open && !disabled && <div className="dispatch-asset-typeahead-menu">
       {matches.length === 0
         ? <span>No matching asset</span>
-        : matches.map(option => <button type="button" key={option.id} className={option.id === value ? "selected" : ""} onMouseDown={event => event.preventDefault()} onClick={() => choose(option)}>{option.label}</button>)}
+        : matches.map(option => <button type="button" key={option.id} disabled={option.disabled} className={`${option.id === value ? "selected " : ""}${option.disabled ? "disabled" : ""}`} onMouseDown={event => event.preventDefault()} onClick={() => choose(option)}>{option.label}</button>)}
     </div>}
   </div>;
 }

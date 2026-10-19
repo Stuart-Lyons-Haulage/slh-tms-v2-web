@@ -413,6 +413,9 @@
 }
 
 .smart-run-allocation-grid { align-items: end; }
+.smart-run-allocation-grid .dispatch-asset-typeahead { position: relative; width: 100%; min-width: 0; }
+.smart-run-allocation-grid .dispatch-asset-typeahead input { width: 100%; min-height: 32px; box-sizing: border-box; padding: 4px 6px; border: 1px solid #b9cad6; border-radius: 5px; background: #fff; color: #234154; }
+.smart-run-allocation-grid .dispatch-asset-typeahead input:focus { outline: 2px solid #75a9ce; outline-offset: 1px; }
 .smart-run-allocation-grid label,
 .smart-run-allocation-status { display: grid; gap: 3px; color: #637987; font-size: .68rem; font-weight: 800; }
 .smart-run-allocation-grid select { width: 100%; min-height: 32px; padding: 4px 6px; border: 1px solid #b9cad6; border-radius: 5px; background: #fff; color: #234154; }

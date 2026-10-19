@@ -2,6 +2,7 @@ export type DispatchAssetSearchOption = {
   id: string;
   label: string;
   search?: string;
+  disabled?: boolean;
 };
 
 function compact(value: string) {

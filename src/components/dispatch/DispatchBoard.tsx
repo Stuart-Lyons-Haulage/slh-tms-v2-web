@@ -2,7 +2,8 @@ import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } fro
 import { useAccessToken } from "../../lib/auth";
 import { updateRunRelay } from "../../api/runs";
 import "../../smart-dispatch.css";
-import { DispatchDriverRow } from "./DispatchDriverRow";
+import { DispatchAssetTypeahead, DispatchDriverRow } from "./DispatchDriverRow";
+import type { DispatchAssetSearchOption } from "./dispatchAssetSearch";
 import { DispatchSnapshotCache } from "./dispatchSnapshotCache";
 import { DispatchFilters } from "./DispatchFilters";
 import { rankDriversForRun } from "./dispatchRunRanking";
@@ -99,6 +100,10 @@ function RouteSidebar({ runs, owners, allocatedRunIds, drivers, allDrivers, vehi
         const rowFailures = failures.filter(failure => failure.runId === run.runId);
         const selectableDrivers = drivers;
         const ownerAvailable = Boolean(ownerId && drivers.some(driver => driver.driverId === ownerId));
+        const driverOptions: DispatchAssetSearchOption[] = selectableDrivers.map(driver => ({ id: driver.driverId, label: `${driver.name} · ${driver.driverCode}`, search: `${driver.name} ${driver.driverCode} ${driver.employmentType}` }));
+        if (owner && !ownerAvailable) driverOptions.unshift({ id: owner.driverId, label: `${owner.name} · currently allocated · unavailable`, search: `${owner.name} ${owner.driverCode}`, disabled: true });
+        const vehicleOptions: DispatchAssetSearchOption[] = vehicles.filter(vehicle => vehicle.active !== false).map(vehicle => ({ id: vehicle.id, label: `${vehicle.registration}${vehicle.fleetNumber ? ` · ${vehicle.fleetNumber}` : ""}`, search: `${vehicle.registration} ${vehicle.fleetNumber || ""}` }));
+        const trailerOptions: DispatchAssetSearchOption[] = trailers.filter(trailer => trailer.active !== false).map(trailer => ({ id: trailer.id, label: `${trailer.trailerNumber}${trailer.type ? ` · ${trailer.type}` : ""}`, search: `${trailer.trailerNumber} ${trailer.type || ""}` }));
         const canExport = Boolean(ownerAvailable && selected.runId && selected.vehicleId);
         const allocated = allocatedRunIds.has(run.runId);
         return <article className={`smart-run-card ${allocated ? "allocated" : "available"}`} key={run.runId}>
@@ -112,24 +117,13 @@ function RouteSidebar({ runs, owners, allocatedRunIds, drivers, allDrivers, vehi
             <span><b>Deliver</b>{run.finalDeliveryPoint?.name || "Final stop not set"}</span>
           </div>
           <div className="smart-run-allocation-grid">
-            <label>Driver<select aria-label={`Driver for ${run.reference}`} value={ownerId || ""} onChange={event => {
-              const driverId = event.target.value;
+            <label>Driver<DispatchAssetTypeahead ariaLabel={`Driver for ${run.reference}`} value={ownerId || ""} options={driverOptions} placeholder="Select driver…" onChange={driverId => {
               if (!driverId) return;
               onSelectionChange(driverId, { runId: run.runId });
-            }}>
-              <option value="">Select driver…</option>
-              {owner && !ownerAvailable && <option value={owner.driverId} disabled>{owner.name} · currently allocated · unavailable</option>}
-              {selectableDrivers.map(driver => <option key={driver.driverId} value={driver.driverId}>{driver.name} · {driver.driverCode}</option>)}
-            </select></label>
+            }} /></label>
             {owner && !ownerAvailable && <small className="smart-run-warning">{statuses[owner.driverId]?.availabilityMessage || "This route remains allocated, but the current driver is not available for a new dispatch."}</small>}
-            <label>Vehicle<select aria-label={`Vehicle for ${run.reference}`} value={selected.vehicleId} disabled={!ownerId} onChange={event => ownerId && onSelectionChange(ownerId, { vehicleId: event.target.value })}>
-              <option value="">Select vehicle…</option>
-              {vehicles.filter(vehicle => vehicle.active !== false).map(vehicle => <option key={vehicle.id} value={vehicle.id}>{vehicle.registration}{vehicle.fleetNumber ? ` · ${vehicle.fleetNumber}` : ""}</option>)}
-            </select></label>
-            <label>Trailer<select aria-label={`Trailer for ${run.reference}`} value={selected.trailerId} disabled={!ownerId} onChange={event => ownerId && onSelectionChange(ownerId, { trailerId: event.target.value })}>
-              <option value="">Select trailer…</option>
-              {trailers.filter(trailer => trailer.active !== false).map(trailer => <option key={trailer.id} value={trailer.id}>{trailer.trailerNumber}{trailer.type ? ` · ${trailer.type}` : ""}</option>)}
-            </select></label>
+            <label>Vehicle<DispatchAssetTypeahead ariaLabel={`Vehicle for ${run.reference}`} value={selected.vehicleId} options={vehicleOptions} placeholder="Select vehicle…" disabled={!ownerId} onChange={vehicleId => ownerId && onSelectionChange(ownerId, { vehicleId })} /></label>
+            <label>Trailer<DispatchAssetTypeahead ariaLabel={`Trailer for ${run.reference}`} value={selected.trailerId} options={trailerOptions} placeholder="Select trailer…" disabled={!ownerId} onChange={trailerId => ownerId && onSelectionChange(ownerId, { trailerId })} /></label>
             <div className="smart-run-allocation-status"><small>Status</small><strong>{allocated ? (status?.operationalStatus || "Dispatched") : "Available"}</strong></div>
           </div>
           {rowFailures.map((failure, index) => <small className="smart-run-warning" key={`${failure.reason}-${index}`}>{failure.reason}</small>)}

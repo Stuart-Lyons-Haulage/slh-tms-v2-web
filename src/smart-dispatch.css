@@ -407,6 +407,7 @@
 .dispatch-asset-typeahead-menu button:hover,
 .dispatch-asset-typeahead-menu button:focus,
 .dispatch-asset-typeahead-menu button.selected { background: #eaf3f8; outline: 0; }
+.dispatch-asset-typeahead-menu button.disabled { color: #8a969e; cursor: not-allowed; background: #f5f7f8; }
 .dispatch-asset-typeahead-menu span { color: #647484; }
 
 .smart-blocked-label {
