@@ -160,6 +160,7 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
   const [notice, setNotice] = useState<string>();
   const [relayBusyId, setRelayBusyId] = useState<string>();
   const [collapsedDrivers, setCollapsedDrivers] = useState<Set<string>>(new Set());
+  const didDefaultCollapse = useRef(false);
   const refreshGeneration = useRef(0);
 
   const refresh = useCallback(async (force = false) => {
@@ -268,6 +269,15 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
     const searched = filterDriversByDriverSearch(workforce, driverSearch);
     return filterDispatchDrivers(searched, filter, selections, snapshot?.runs || [], availableTimes, failures);
   }, [availableTimes, driverSearch, employmentFilter, failures, filter, rosterDrivers, selections, snapshot]);
+
+  // With a big roster, start compact so planners see everyone; they can expand any driver.
+  useEffect(() => {
+    if (didDefaultCollapse.current || visibleDrivers.length === 0) return;
+    didDefaultCollapse.current = true;
+    if (visibleDrivers.length > 12) setCollapsedDrivers(new Set(visibleDrivers.map(driver => driver.driverId)));
+  }, [visibleDrivers]);
+  const allCollapsed = visibleDrivers.length > 0 && visibleDrivers.every(driver => collapsedDrivers.has(driver.driverId));
+  const toggleAllCollapsed = () => setCollapsedDrivers(allCollapsed ? new Set() : new Set(visibleDrivers.map(driver => driver.driverId)));
 
   const filterCounts = useMemo(() => {
     const searched = filterDriversByDriverSearch(rosterDrivers, driverSearch);
@@ -703,7 +713,10 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
       <details className="smart-dispatch-table-wrap dispatch-driver-pool dispatch-driver-pool-collapse" aria-label="Available drivers" open>
         <summary className="dispatch-driver-pool-heading">
           <div><span>PLAN FROM THE WORKFORCE</span><strong>Driver roster</strong></div>
-          <b>{visibleDrivers.length}</b>
+          <div className="dispatch-pool-tools">
+            <button type="button" className="smart-action ghost" onClick={event => { event.preventDefault(); event.stopPropagation(); toggleAllCollapsed(); }}>{allCollapsed ? "Expand all" : "Collapse all"}</button>
+            <b>{visibleDrivers.length}</b>
+          </div>
         </summary>
         <p className="dispatch-driver-pool-help">All active Driver Master records remain visible. Green is available, red is blocked and hatched is unknown or stale until Sage/Tacho refreshes.</p>
         <table className="smart-dispatch-table authoritative">

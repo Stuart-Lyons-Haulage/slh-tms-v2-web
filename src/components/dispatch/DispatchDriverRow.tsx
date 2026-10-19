@@ -210,6 +210,15 @@ export function DispatchDriverRow({
         <button type="button" className="smart-driver-collapse" aria-label={`${collapsed ? "Expand" : "Collapse"} ${driver.name}`} aria-expanded={!collapsed} onClick={onToggleCollapse}>{collapsed ? "＋" : "−"}</button>
         <div><strong>{driver.name}</strong><span className={`smart-day ${dayTone(driver)}`}>Day {status?.projectedDayNumber || driver.dayNumber || driver.tachoData.currentDutyDay}</span></div>
       </div>
+      {collapsed && <div className="smart-collapsed-summary">
+        <span className="employment-badge">{employmentLabel(driver.employmentType)}</span>
+        <span className={`smart-status-pill ${statusTone(status?.operationalStatus || dispatchStatus)}`}>{status?.operationalStatus || dispatchStatusLabel}</span>
+        {selectedRun && <span className="smart-collapsed-run">{selectedRun.reference}</span>}
+        {driver.onLeave ? <small className="smart-inline-error">{driver.leaveType || "Leave"}</small>
+          : blocked ? <small className="smart-inline-error">Blocked</small>
+          : availabilityUnknown ? <small className="smart-inline-warning">Availability unknown</small>
+          : <small className="smart-muted">{driver.availableFrom ? `From ${ukTime(driver.availableFrom)}` : status?.earliestStartUtc ? `From ${ukTime(status.earliestStartUtc)}` : "Available"}</small>}
+      </div>}
       <div className="smart-driver-meta">
         <span className="employment-badge">{employmentLabel(driver.employmentType)}</span>
         {driver.driverCode?.trim() && <small>{driver.driverCode.trim()}</small>}
