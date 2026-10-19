@@ -358,6 +358,7 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
   // collection and delivery choices shown to the planner.
   const availableOrders = useMemo(() => effectiveOrders.filter(order => order.outstandingPallets > 0), [effectiveOrders]);
   const liveCollections = useMemo(() => [...new Set(availableOrders.filter(order => Boolean(order.collection?.trim())).map(order => order.collection!.trim()).filter(Boolean))].sort((left, right) => left.localeCompare(right)), [availableOrders]);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const matchingLiveOrders = useCallback((collection: string, delivery: string) => {
     const collectionKey = normalise(collection);
     const deliveryKey = normalise(delivery);
