@@ -41,7 +41,7 @@ describe("operations housekeeping contract", () => {
     expect(palletControl).toContain('matrix("toPlan", "To Plan"');
     expect(palletControl).toContain('matrix("planned", "Planned"');
     expect(palletControl).toContain('matrix("summary", "Pallet Summary"');
-    expect(palletControl).toContain("data.summary.ordered");
+    expect(palletControl).toContain("palletTotals.ordered");
     expect(palletControl).toContain("pallet-control-stack");
     expect(palletControl).toContain("destinationLabels");
     expect(palletControl).toContain("pallet-destination-heading");
