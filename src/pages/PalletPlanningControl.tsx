@@ -55,11 +55,7 @@ export function PalletPlanningControl() {
 
   useEffect(() => {
     const unsubscribe = subscribePlanningChanges(() => { void refreshControl(); void refreshRegions(); });
-    const stopReconciliation = startVisiblePolling(() => {
-      return Promise.allSettled([refreshControl(), refreshRegions()])
-        .then(() => undefined)
-        .catch(error => console.error('Pallet Planning Control refresh failed:', error instanceof Error ? error.message : 'Unknown error'));
-    }, 30_000);
+    const stopReconciliation = startVisiblePolling(() => Promise.allSettled([refreshControl(), refreshRegions()]).then(() => undefined), 30_000);
     return () => { unsubscribe(); stopReconciliation(); };
   }, [refreshControl, refreshRegions]);
 
