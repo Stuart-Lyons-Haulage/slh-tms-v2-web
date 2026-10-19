@@ -24,6 +24,8 @@ type Payload = Record<string, unknown> & {
   sourceSubject?: string;
 };
 
+type UnreadEmail = { id: string; sender?: string; subject?: string; receivedAtUtc?: string; warning?: string; customer?: string; capturedOrders: number; evidenceKept: boolean };
+
 type PendingRow = {
   item: StagedImport;
   payload: Payload;
@@ -94,6 +96,9 @@ export function UndatedOrderReviewQueue() {
   const [busyId, setBusyId] = useState<string>();
   const [editing, setEditing] = useState<{ id: string; payload: Payload }>();
   const [sourceEmailStagingId, setSourceEmailStagingId] = useState<string>();
+  const [unread, setUnread] = useState<Record<string, UnreadEmail>>({});
+  const [notice, setNotice] = useState<string>();
+  const [rereadingAll, setRereadingAll] = useState<string>();
 
   const refresh = useCallback(async () => {
     try {
@@ -103,6 +108,10 @@ export function UndatedOrderReviewQueue() {
       setRecords(result.records);
       setTotal(result.total);
       setComplete(result.complete);
+      try {
+        const emails = await request<UnreadEmail[]>("/api/v1/order-intake/unread-emails", accessToken);
+        setUnread(Object.fromEntries(emails.map(email => [email.id, email])));
+      } catch { /* the cards still work without the extra detail */ }
     } catch (err) {
       setError(err instanceof Error ? err.message : "The pending order queue could not be loaded.");
     } finally {
@@ -183,6 +192,42 @@ export function UndatedOrderReviewQueue() {
     }
   }
 
+  /** Runs the email back through the full intake for every date it covers. */
+  async function reread(id: string): Promise<string> {
+    const result = await request<{ orders: number; cleared: boolean; message: string }>(`/api/v1/order-intake/unread-emails/${id}/reread`, await token(), { method: "POST" }, 120000);
+    return result.message;
+  }
+
+  async function rereadOne(row: PendingRow) {
+    setBusyId(row.item.id); setError(undefined); setNotice(undefined);
+    try { setNotice(await reread(row.item.id)); await refresh(); window.dispatchEvent(new Event(SILENT_API_REFRESH_EVENT)); }
+    catch (err) { setError(err instanceof Error ? err.message : "The email could not be re-read."); }
+    finally { setBusyId(undefined); }
+  }
+
+  async function rereadAll() {
+    const ids = undatedRows.filter(row => unread[row.item.id]).map(row => row.item.id);
+    let cleared = 0;
+    setError(undefined); setNotice(undefined);
+    for (const [index, id] of ids.entries()) {
+      setRereadingAll(`Re-reading ${index + 1} of ${ids.length}…`);
+      try { if ((await reread(id)).includes("now in Orders")) cleared++; } catch { /* keep going */ }
+    }
+    setRereadingAll(undefined);
+    setNotice(`Re-read ${ids.length} email${ids.length === 1 ? "" : "s"}: ${cleared} now in Orders, ${ids.length - cleared} still need adding by hand.`);
+    await refresh();
+    window.dispatchEvent(new Event(SILENT_API_REFRESH_EVENT));
+  }
+
+  async function closeCaptured(row: PendingRow) {
+    setBusyId(row.item.id); setError(undefined);
+    try {
+      await request(`/api/v1/order-intake/unread-emails/${row.item.id}/close-captured`, await token(), { method: "POST" });
+      await refresh();
+    } catch (err) { setError(err instanceof Error ? err.message : "The card could not be closed."); }
+    finally { setBusyId(undefined); }
+  }
+
   async function rejectRow(row: PendingRow) {
     setBusyId(row.item.id);
     setError(undefined);
@@ -219,6 +264,11 @@ export function UndatedOrderReviewQueue() {
       <article><span>Total pending</span><strong>{total}</strong><small>API queue total</small></article>
     </div>
 
+    {Object.keys(unread).length > 0 && <div className="bulk-source-line" style={{ margin: "8px 0" }}>
+      <span>{Object.keys(unread).length} of these are customer emails the TMS couldn't read. Each card shows who sent it and whether its orders are already in.</span>
+      <button type="button" className="primary" onClick={() => void rereadAll()} disabled={Boolean(busyId) || Boolean(rereadingAll)}>{rereadingAll || "Re-read all"}</button>
+    </div>}
+    {notice && <p className="notice inline-notice">{notice}</p>}
     {!complete && <p className="review-error">The queue contains more records than this safety view loaded. Review paging is required before the queue can be reconciled completely.</p>}
     {error && <p className="review-error">{error}</p>}
     {loading && <div className="state">Checking pending orders for missing planning dates…</div>}
@@ -233,9 +283,17 @@ export function UndatedOrderReviewQueue() {
         return <article className="bulk-order-row held" key={row.item.id} role="listitem">
           <span className="bulk-order-ref"><strong>{displayReference(row.payload)}</strong><small>{text(row.payload.poNumber) || "TMS reference missing"}</small></span>
           <span><strong>{text(row.payload.customerCode) || "Customer / mapping missing"}</strong><small>{text(row.payload.sellerName) || "Collection site missing"} → {text(row.payload.stallNumber) || "Destination missing"}</small></span>
-          <span className="bulk-order-status blocked">{row.reason}</span>
+          {unread[row.item.id] ? <span className="bulk-order-status blocked" style={{ whiteSpace: "normal" }}>
+            <strong>Email couldn't be read</strong><br />
+            <small>{unread[row.item.id].sender || "Unknown sender"} · {unread[row.item.id].subject || "No subject"}{unread[row.item.id].receivedAtUtc ? ` · ${new Date(unread[row.item.id].receivedAtUtc!).toLocaleString("en-GB", { weekday: "short", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}` : ""}</small><br />
+            {unread[row.item.id].capturedOrders > 0
+              ? <small style={{ color: "#1d7a3a" }}>Already captured: {unread[row.item.id].capturedOrders} order{unread[row.item.id].capturedOrders === 1 ? "" : "s"} from this email are in Orders. Safe to close.</small>
+              : <small>No orders from this email are in the TMS yet.{unread[row.item.id].warning ? ` ${unread[row.item.id].warning}` : ""}</small>}
+          </span> : <span className="bulk-order-status blocked">{row.reason}</span>}
           <div className="bulk-order-actions">
             {hasSource && <button type="button" className="source-email-review-button" onClick={() => setSourceEmailStagingId(row.item.id)} disabled={Boolean(busyId)}>Review source email</button>}
+            {unread[row.item.id] && unread[row.item.id].capturedOrders > 0 && !isEditing && <button type="button" className="primary" onClick={() => void closeCaptured(row)} disabled={Boolean(busyId)}>Close: already in Orders</button>}
+            {unread[row.item.id] && unread[row.item.id].evidenceKept && unread[row.item.id].capturedOrders === 0 && !isEditing && <button type="button" className="primary" onClick={() => void rereadOne(row)} disabled={Boolean(busyId) || Boolean(rereadingAll)}>{rowBusy ? "Re-reading…" : "Re-read email"}</button>}
             {!isEditing && <button type="button" onClick={() => void beginFix(row)} disabled={Boolean(busyId)}>{rowBusy ? "Loading…" : "Amend from source"}</button>}
             {!isEditing && <button type="button" className="reject-button" onClick={() => void rejectRow(row)} disabled={Boolean(busyId)}>{rowBusy ? "Working…" : "Reject"}</button>}
             {isEditing && <>
