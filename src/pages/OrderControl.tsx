@@ -136,7 +136,10 @@ function OrderReviewDateStrip({ selectedDate, onChange }: { selectedDate: string
           authToken,
         );
         setCounts(result);
-      }).catch(() => undefined);
+      }).catch((error) => {
+        // Silent refresh failure - keep previous counts visible
+        console.error('Order date counts refresh failed:', error instanceof Error ? error.message : 'Unknown error');
+      });
     };
     window.addEventListener(SILENT_API_REFRESH_EVENT, refresh);
     return () => window.removeEventListener(SILENT_API_REFRESH_EVENT, refresh);
