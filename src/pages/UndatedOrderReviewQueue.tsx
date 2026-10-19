@@ -212,14 +212,20 @@ export function UndatedOrderReviewQueue() {
 
   async function rereadAll() {
     const ids = emailRows.map(row => row.item.id);
-    let cleared = 0;
+    let inOrders = 0, notOrders = 0, failed = 0;
     setError(undefined); setNotice(undefined);
     for (const [index, id] of ids.entries()) {
       setRereadingAll(`Re-reading ${index + 1} of ${ids.length}…`);
-      try { if ((await reread(id)).includes("now in Orders")) cleared++; } catch { /* keep going */ }
+      try {
+        const message = await reread(id);
+        if (message.includes("now in Orders")) inOrders++;
+        else if (message.startsWith("Not an order email")) notOrders++;
+      } catch { failed++; }
     }
     setRereadingAll(undefined);
-    setNotice(`Re-read ${ids.length} email${ids.length === 1 ? "" : "s"}: ${cleared} now in Orders, ${ids.length - cleared} still need adding by hand.`);
+    const stillOpen = ids.length - inOrders - notOrders - failed;
+    setNotice(`Re-read ${ids.length} email${ids.length === 1 ? "" : "s"}: ${inOrders} now in Orders, ${notOrders} closed as not orders, ${stillOpen} still need adding by hand` +
+      (failed ? `, ${failed} couldn't be reached (try Re-read all again).` : "."));
     await refresh();
     window.dispatchEvent(new Event(SILENT_API_REFRESH_EVENT));
   }
