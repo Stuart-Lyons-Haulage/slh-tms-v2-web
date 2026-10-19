@@ -83,7 +83,11 @@ function RouteSidebar({ runs, owners, allocatedRunIds, drivers, allDrivers, vehi
     </div>
     <p>First collection → final delivery. Best-fit suggestions use the driver’s last known position plus first collection proximity, skills and continuity.</p>
     <div className="smart-run-card-list">
-      {runs.map(run => {
+      {[...runs].sort((left, right) => {
+        const leftTime = left.firstCollectionTimeUtc ? Date.parse(left.firstCollectionTimeUtc) : Number.POSITIVE_INFINITY;
+        const rightTime = right.firstCollectionTimeUtc ? Date.parse(right.firstCollectionTimeUtc) : Number.POSITIVE_INFINITY;
+        return leftTime - rightTime || left.reference.localeCompare(right.reference);
+      }).map(run => {
         const ownerId = owners[run.runId];
         const owner = ownerId ? allDrivers.find(driver => driver.driverId === ownerId) : undefined;
         const suggestedDrivers = drivers.filter(driver => driver.suggestedRunId === run.runId);

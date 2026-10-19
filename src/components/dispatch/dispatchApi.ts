@@ -16,6 +16,10 @@ import { availabilityDayCount } from "./availabilityDayCount";
 import { isPotentiallyDispatchAvailable } from "./dispatchBoardState";
 
 const DISPATCH_READ_TIMEOUT_MS = 60_000;
+// Supporting feeds must not hold the authoritative Dispatch board hostage.
+// They are useful enrichments, but a slow Sage/Tacho/visibility source should
+// degrade the board explicitly rather than leave planners on a spinner.
+const DISPATCH_SUPPORT_TIMEOUT_MS = 10_000;
 const DISPATCH_TACHO_TIMEOUT_MS = 180_000;
 
 export type SamsaraDispatchResult = {
@@ -91,17 +95,17 @@ export type SmartDispatchOptionalEnrichment = {
   samsaraDispatch: Record<string, SamsaraDispatchState>;
 };
 
-export async function getDispatchVisibility(planningDate: string, token: string): Promise<DispatchVisibilitySnapshot> {
+export async function getDispatchVisibility(planningDate: string, token: string, timeoutMs = DISPATCH_READ_TIMEOUT_MS): Promise<DispatchVisibilitySnapshot> {
   return request<DispatchVisibilitySnapshot>(
     `/api/dispatch/driver-visibility?date=${encodeURIComponent(planningDate)}`,
     token,
     undefined,
-    DISPATCH_READ_TIMEOUT_MS
+    timeoutMs
   );
 }
 
-export async function getDriverAvailability(planningDate: string, token: string): Promise<DriverAvailabilitySnapshot> {
-  return request<DriverAvailabilitySnapshot>(`/api/v1/driver-availability?date=${encodeURIComponent(planningDate)}`, token, undefined, DISPATCH_READ_TIMEOUT_MS);
+export async function getDriverAvailability(planningDate: string, token: string, timeoutMs = DISPATCH_READ_TIMEOUT_MS): Promise<DriverAvailabilitySnapshot> {
+  return request<DriverAvailabilitySnapshot>(`/api/v1/driver-availability?date=${encodeURIComponent(planningDate)}`, token, undefined, timeoutMs);
 }
 
 export async function getDispatchHistory(planningDate: string, token: string): Promise<DispatchHistoryItem[]> {
@@ -128,7 +132,10 @@ function runDetail(run: DispatchRunDto, equipment: DispatchEquipmentWorkbench): 
   const trailerSwapRequested = /(?:trailer\s*(?:swap|change)|swap\s*trailer|change\s*trailer|drop\s*trailer|pick\s*up\s*(?:a\s*)?(?:different|new)\s*trailer)/i.test(notes);
   return {
     ...run,
-    firstCollectionTimeUtc: collection?.plannedArrivalUtc || load.plannedStartUtc,
+    // Dispatch displays the latest permitted collection access from Site Master
+    // when available; the planned stop time remains the fallback for unmapped
+    // or incomplete timing rules.
+    firstCollectionTimeUtc: collection?.latestAccessTimeUtc || collection?.plannedArrivalUtc || load.plannedStartUtc,
     finalDeliveryPoint: delivery ? {
       name: cleanStopName(delivery.name) || delivery.name,
       latitude: delivery.latitude,
@@ -180,7 +187,7 @@ export async function getSmartDispatch(
   // a slow optional integration must not delay the Dispatch table.
   const optionalEnrichmentPromise = Promise.all([
     getDispatchHistory(planningDate, token).catch(() => [] as DispatchHistoryItem[]),
-    request<SamsaraDispatchStatusResponse>(`/api/v1/integrations/samsara/dispatch/status?date=${encoded}`, token, undefined, DISPATCH_READ_TIMEOUT_MS)
+    request<SamsaraDispatchStatusResponse>(`/api/v1/integrations/samsara/dispatch/status?date=${encoded}`, token, undefined, DISPATCH_SUPPORT_TIMEOUT_MS)
       .catch(() => ({
         planningDate,
         configured: false,
@@ -194,12 +201,12 @@ export async function getSmartDispatch(
   // slow or temporarily unavailable. An empty snapshot is deliberately
   // conservative: it does not promote anyone to available or clear a block.
   const [statusResponse, visibility, availability] = await Promise.all([
-    request<{ drivers: DispatchDriverStatusDto[] }>(`/api/v1/driver-dispatch-status?date=${encoded}`, token, undefined, DISPATCH_READ_TIMEOUT_MS)
+    request<{ drivers: DispatchDriverStatusDto[] }>(`/api/v1/driver-dispatch-status?date=${encoded}`, token, undefined, DISPATCH_SUPPORT_TIMEOUT_MS)
       .catch(() => {
         degradedSources.push("status");
         return { drivers: [] };
       }),
-    getDispatchVisibility(planningDate, token)
+    getDispatchVisibility(planningDate, token, DISPATCH_SUPPORT_TIMEOUT_MS)
       .catch(() => {
         degradedSources.push("visibility");
         return {
@@ -209,7 +216,7 @@ export async function getSmartDispatch(
           drivers: []
         } as DispatchVisibilitySnapshot;
       }),
-    getDriverAvailability(planningDate, token)
+    getDriverAvailability(planningDate, token, DISPATCH_SUPPORT_TIMEOUT_MS)
       .catch(() => {
         degradedSources.push("availability");
         return {

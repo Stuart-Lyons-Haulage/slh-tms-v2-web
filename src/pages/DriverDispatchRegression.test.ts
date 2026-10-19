@@ -186,7 +186,7 @@ describe("Driver Dispatch UI contract", () => {
     expect(authoritativeSource).toContain("run.collectionPoint.name");
     expect(authoritativeSource).toContain("run.finalDeliveryPoint?.name");
     expect(authoritativeSource).toContain("drivers.filter(driver => driver.suggestedRunId === run.runId)");
-    expect(apiSource).toContain("firstCollectionTimeUtc: collection?.plannedArrivalUtc || load.plannedStartUtc");
+    expect(apiSource).toContain("firstCollectionTimeUtc: collection?.latestAccessTimeUtc || collection?.plannedArrivalUtc || load.plannedStartUtc");
     expect(apiSource).toContain("finalDeliveryPoint: delivery ?");
     expect(authoritativeCss).toContain(".smart-dispatch-workspace");
     expect(authoritativeCss).toContain(".smart-run-card-list");

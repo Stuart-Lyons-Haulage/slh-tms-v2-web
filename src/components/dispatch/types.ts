@@ -177,6 +177,7 @@ export interface LegacyDispatchStop {
   latitude?: number;
   longitude?: number;
   plannedArrivalUtc?: string;
+  latestAccessTimeUtc?: string;
   plannerNote?: string;
 }
 
