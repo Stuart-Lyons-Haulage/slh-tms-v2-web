@@ -80,12 +80,15 @@ function RunPlannerLineView({
     .filter((collection) => !line.collectionSite || normalise(collection).includes(collectionKey))
     .slice(0, 8);
   const deliveryByName = new Map<string, { destination: string; pallets: number }>();
-  availableOrders.filter((order) => normalise(order.collection) === collectionKey).forEach((order) => {
-    const destination = order.destination.trim();
-    const key = normalise(destination);
-    const current = deliveryByName.get(key);
-    deliveryByName.set(key, { destination, pallets: (current?.pallets || 0) + Math.max(order.outstandingPallets, 0) });
-  });
+  availableOrders
+    .filter(order => Boolean(order.collection?.trim()) && Boolean(order.destination?.trim()))
+    .filter((order) => normalise(order.collection!) === collectionKey)
+    .forEach((order) => {
+      const destination = order.destination!.trim();
+      const key = normalise(destination);
+      const current = deliveryByName.get(key);
+      deliveryByName.set(key, { destination, pallets: (current?.pallets || 0) + Math.max(order.outstandingPallets, 0) });
+    });
   const deliverySuggestions = [...deliveryByName.values()].sort((left, right) => left.destination.localeCompare(right.destination));
   const collectionPickerKey = `${run.key}:${line.key}:collection`;
   const deliveryPickerKey = `${run.key}:${line.key}:delivery`;

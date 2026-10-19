@@ -357,7 +357,7 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
   // remains useful for addresses/geocoding, but must not be the source of the
   // collection and delivery choices shown to the planner.
   const availableOrders = useMemo(() => effectiveOrders.filter(order => order.outstandingPallets > 0), [effectiveOrders]);
-  const liveCollections = useMemo(() => [...new Set(availableOrders.map(order => order.collection.trim()).filter(Boolean))].sort((left, right) => left.localeCompare(right)), [availableOrders]);
+  const liveCollections = useMemo(() => [...new Set(availableOrders.filter(order => Boolean(order.collection?.trim())).map(order => order.collection!.trim()).filter(Boolean))].sort((left, right) => left.localeCompare(right)), [availableOrders]);
   const matchingLiveOrders = useCallback((collection: string, delivery: string) => {
     const collectionKey = normalise(collection);
     const deliveryKey = normalise(delivery);
