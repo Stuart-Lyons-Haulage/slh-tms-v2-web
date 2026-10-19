@@ -4,7 +4,7 @@ import { useAccessToken } from "../lib/auth";
 
 type Status = {
   linked: boolean; link?: string; linkSavedBy?: string; lastReadUtc?: string; problem?: string;
-  events: number; matched: number; unmatched: string[]; types: Record<string, number>;
+  events: number; matched: number; unmatched: string[]; archivedDrivers?: string[]; ignored?: number; types: Record<string, number>;
   driversOffToday: Array<{ driverName: string; kind: string; type: string }>; leaveDays: number; nonWorkingDays: number;
 };
 
@@ -59,6 +59,8 @@ export function SageCalendarLink() {
       {types.length > 0 && <p className="hint">Types found: {types.map(([type, count]) => `${type} (${count})`).join(", ")}</p>}
       {status.driversOffToday.length > 0 && <p className="hint">Off today: {status.driversOffToday.map((item) => `${item.driverName} (${item.type})`).join(", ")}</p>}
       {status.unmatched.length > 0 && <p className="hint"><strong>Not matched to a driver ({status.unmatched.length}):</strong> {status.unmatched.join(", ")}. Office staff are expected here; for a driver, check the name on Driver Master.</p>}
+      {(status.archivedDrivers?.length || 0) > 0 && <p className="hint"><strong>Archived drivers still in Sage ({status.archivedDrivers!.length}):</strong> {status.archivedDrivers!.join(", ")}. If they've left, end them in Sage; if they're back, restore them on Driver Master.</p>}
+      {(status.ignored || 0) > 0 && <p className="hint">{status.ignored} birthdays, anniversaries and company holidays skipped (not absences).</p>}
     </>}
   </article>;
 }
