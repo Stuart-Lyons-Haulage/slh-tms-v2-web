@@ -61,6 +61,8 @@ type IntegrationRuntimeStatus = {
     inProgress?: boolean;
     lastMessagesSeen?: number;
     lastMessagesIngested?: number;
+    outlookTagging?: string | null;
+    outlookLastTaggedUtc?: string | null;
   };
 };
 
@@ -264,6 +266,7 @@ export function AdminIntegrationSyncControls() {
       </article>
       <article className="ui-card">
         <div className="ui-card-head"><h2>Info mailbox</h2><span className={`ui-chip ${graph?.lastSuccessUtc ? 'green' : 'amber'}`}>{graph?.lastSuccessUtc ? 'Reading' : graph?.configured ? 'Waiting for first read' : 'Not set up'}</span></div>
+        {graph?.outlookTagging ? <p className="ui-error">{graph.outlookTagging}</p> : <p className="hint">Outlook tags: each email in info@ gets a category: <strong style={{ color: '#1d7a3a' }}>TMS: orders in</strong>, <strong style={{ color: '#b42318' }}>TMS: needs attention</strong> or <strong>TMS: no orders</strong>.{graph?.outlookLastTaggedUtc ? ` Last tagged ${lastReceipt(graph.outlookLastTaggedUtc)}.` : ''}</p>}
         <p className="hint">{graph?.mailbox || 'info@'}: read every few minutes.{graph?.lastSuccessUtc ? ` Last read ${lastReceipt(graph.lastSuccessUtc)}, ${graph.lastMessagesSeen ?? 0} seen, ${graph.lastMessagesIngested ?? 0} new.` : ''}</p>
       </article>
     </div>
