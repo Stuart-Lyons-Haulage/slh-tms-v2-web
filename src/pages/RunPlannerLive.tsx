@@ -875,11 +875,18 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
     const currentRun = runsRef.current.find((item) => item.key === run.key) || run;
     const timerKey = `${run.key}:${line.key}`;
     if (saveTimers.current[timerKey]) { window.clearTimeout(saveTimers.current[timerKey]); delete saveTimers.current[timerKey]; }
-    const remaining = currentRun.lines.length === 1 ? [blankLine()] : currentRun.lines.filter((item) => item.key !== line.key);
-    updateRun(run.key, (current) => ({ ...current, lines: remaining }));
     const ids = lineOrderIds(line);
-    if (!ids.length || !currentRun.loadId) return;
+    const remaining = currentRun.lines.length === 1 ? [blankLine()] : currentRun.lines.filter((item) => item.key !== line.key);
+
+    // Don't remove from UI yet - only set busy state and show message
+    if (!ids.length || !currentRun.loadId) {
+      // No allocation needed, safe to remove immediately
+      updateRun(run.key, (current) => ({ ...current, lines: remaining }));
+      return;
+    }
+
     setBusyKey(timerKey);
+    setMessage("Removing movement from run...");
     try {
       await enqueueRunMutation(run.key, async () => {
         const access = await token();
@@ -892,11 +899,16 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
           await updateRunStatus(currentRun.loadId!, "Cancelled", access);
         }
       });
+      // Only remove from UI after API call succeeds
+      updateRun(run.key, (current) => ({ ...current, lines: remaining }));
       dirtyRunKeys.current.delete(run.key);
       signalPlanningChange();
       setMessage("Movement removed from the run and its remaining pallets returned to Pallet Order.");
       void refreshControl().catch(() => undefined);
-    } catch (error) { setMessage(error instanceof Error ? error.message : "Movement could not be removed from the run."); await refreshAll().catch(() => undefined); }
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Movement could not be removed from the run.");
+      await refreshAll().catch(() => undefined);
+    }
     finally { setBusyKey(undefined); }
   }
 
