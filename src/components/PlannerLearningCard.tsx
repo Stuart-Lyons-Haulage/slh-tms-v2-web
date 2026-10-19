@@ -14,7 +14,7 @@ type Insights = { generatedAtUtc: string; days: number; decisions: number; custo
 export function PlannerLearningCard() {
   const token = useAccessToken();
   const insights = useApi(useCallback(async () => request<Insights>("/api/v1/planner/learning?days=90", await token()), [token]));
-  const data = insights.data;
+  const data = insights.data && Array.isArray(insights.data.preferences) ? insights.data : undefined;
 
   return <details className="panel pallet-control-learning" style={{ marginTop: 16 }}>
     <summary><strong>What the planner has learned</strong>{data ? ` · ${data.preferences.length} usual patterns from ${data.decisions} decisions · ${data.consistency}% consistent` : ""}</summary>

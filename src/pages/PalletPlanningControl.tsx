@@ -117,7 +117,7 @@ export function PalletPlanningControl() {
     const raw = columnRaw.get(destination) ?? destination;
     return regions.data?.destinationLabels?.[raw] || raw;
   }, [columnRaw, regions.data]);
-  const hintByOrder = useMemo(() => new Map((learningHints.data || []).map(hint => [hint.orderId, hint])), [learningHints.data]);
+  const hintByOrder = useMemo(() => new Map((Array.isArray(learningHints.data) ? learningHints.data : []).map(hint => [hint.orderId, hint])), [learningHints.data]);
   const cellMap = useMemo(() => {
     const map = new Map<string, PlanningCell>();
     for (const order of orders) {
