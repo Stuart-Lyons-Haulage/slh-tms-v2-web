@@ -41,7 +41,7 @@ export function SouthboundCollections({ date, confirmedOrders }: { date: string;
 
     <section className="ui-card">
       <div className="ui-card-head"><h2>Confirmed collections for {formatDateLong(date)}</h2></div>
-      {confirmedOrders.length === 0 ? <div className="ui-empty">No confirmed crate or tray collections for this date.</div> : <div className="ui-table-wrap"><table className="ui-table"><thead><tr><th>Collect from</th><th>Take to</th><th>Units</th><th>Run</th><th>Reference</th></tr></thead><tbody>
+      {confirmedOrders.length === 0 ? <div className="ui-empty">Nothing coming back to Runcton, Selsey, Drayton, Merston or Sefter for this date, and no crate or tray collections.</div> : <div className="ui-table-wrap"><table className="ui-table"><thead><tr><th>Collect from</th><th>Take to</th><th>Units</th><th>Run</th><th>Reference</th></tr></thead><tbody>
         {confirmedOrders.map(order => <tr key={order.id}>
           <td><strong>{order.collection}</strong><br /><small>{order.customerCode}</small></td>
           <td>{order.destination}</td>
