@@ -214,6 +214,16 @@
 .dispatch-driver-pool .smart-dispatch-table tbody tr.allocated { border-left-color: #dc9a18; background: #fff8e8; }
 .dispatch-driver-pool .smart-dispatch-table tbody tr.samsara-sent { border-left-color: #229268; background: #f0fbf5; }
 
+.smart-driver-heading { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.smart-driver-heading > div { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; min-width: 0; }
+.smart-driver-heading strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.smart-driver-collapse { width: 22px; height: 22px; padding: 0; border: 1px solid #b8cbd7; border-radius: 5px; background: #fff; color: #174e70; font-size: 1rem; line-height: 1; cursor: pointer; }
+.smart-driver-heading .smart-day { display: inline-flex; margin: 0; padding: 3px 6px; font-size: .62rem; }
+.dispatch-driver-pool .smart-dispatch-row.collapsed td:not(:first-child) { display: none; }
+.dispatch-driver-pool .smart-dispatch-row.collapsed td:first-child { border-bottom: 0; padding: 7px 9px; }
+.dispatch-driver-pool .smart-dispatch-row.collapsed .smart-driver-meta,
+.dispatch-driver-pool .smart-dispatch-row.collapsed .smart-driver-cell > small { display: none; }
+
 .dispatch-driver-pool-help {
   margin: 0;
   padding: 10px 14px;
@@ -362,7 +372,8 @@
 
 .smart-run-route {
   display: grid;
-  gap: 5px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
 }
 
 .smart-run-route span {
@@ -372,6 +383,10 @@
   font-size: .7rem;
   line-height: 1.2;
 }
+
+.smart-run-route span { min-width: 0; padding: 6px 7px; border: 1px solid #e1e9ee; border-radius: 6px; background: #fff; }
+.smart-run-route span:not(:last-child) { border-left: 3px solid #5d9a78; }
+.smart-run-route span:last-child { border-left: 3px solid #4f81a5; }
 
 .smart-run-route b {
   color: #78909f;
@@ -396,6 +411,8 @@
   gap: 6px;
   margin-top: 10px;
 }
+
+.smart-run-allocation-grid { align-items: end; }
 .smart-run-allocation-grid label,
 .smart-run-allocation-status { display: grid; gap: 3px; color: #637987; font-size: .68rem; font-weight: 800; }
 .smart-run-allocation-grid select { width: 100%; min-height: 32px; padding: 4px 6px; border: 1px solid #b9cad6; border-radius: 5px; background: #fff; color: #234154; }

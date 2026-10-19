@@ -165,6 +165,7 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
   const [relayBusyId, setRelayBusyId] = useState<string>();
+  const [collapsedDrivers, setCollapsedDrivers] = useState<Set<string>>(new Set());
   const refreshGeneration = useRef(0);
 
   const refresh = useCallback(async (force = false) => {
@@ -733,6 +734,12 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
               samsaraState={selections[driver.driverId]?.runId ? snapshot.samsaraDispatch[selections[driver.driverId].runId] : undefined}
               samsaraConfigured={snapshot.samsaraConfigured}
               failures={rowFailures(failures, driver.driverId)}
+              collapsed={collapsedDrivers.has(driver.driverId)}
+              onToggleCollapse={() => setCollapsedDrivers(current => {
+                const next = new Set(current);
+                if (next.has(driver.driverId)) next.delete(driver.driverId); else next.add(driver.driverId);
+                return next;
+              })}
               busy={busyDriverId === driver.driverId}
               onSelectionChange={changeSelection}
               onDispatch={(row, selection) => void prepareDispatch(row, selection)}
