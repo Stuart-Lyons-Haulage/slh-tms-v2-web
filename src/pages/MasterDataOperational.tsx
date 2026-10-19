@@ -77,7 +77,7 @@ export function MasterDataOperational({ initialTab = 'drivers', showCategoryButt
             planningProfileSource: profile?.source || 'No planning profile',
             addressCompleteness: !String(site.collectionAddress || '').trim()
               ? 'Missing'
-              : /\\b[A-Z]{1,2}\\d[A-Z\\d]?\\s*\\d[A-Z]{2}\\b/i.test(String(site.collectionAddress))
+              : /\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b/i.test(String(site.collectionAddress))
                 ? 'Complete'
                 : 'Partial',
           } as Row;
