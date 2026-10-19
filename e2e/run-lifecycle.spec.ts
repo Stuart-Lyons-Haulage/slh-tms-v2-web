@@ -203,6 +203,8 @@ async function installApi(page: Page, state: State) {
     if (path === '/api/v1/planner/summary' && method === 'GET') return json(route, {});
     if (path === '/api/v1/planner/assistant' && method === 'GET') return json(route, []);
     if (path === '/api/v1/planner/suggestions' && method === 'GET') return json(route, []);
+    if (path === '/api/v1/planner/learning/orders' && method === 'GET') return json(route, []);
+    if (path === '/api/v1/planner/learning' && method === 'GET') return json(route, { generatedAtUtc: new Date().toISOString(), days: 90, decisions: 0, customers: 0, consistency: 0, preferences: [] });
     if (path === '/api/v1/planner-starts' && method === 'GET') return json(route, { planningDate: state.planningDate, rows: [] });
 
     // Current Operations Wallboard contract: the board is anchored by planned-runs and
