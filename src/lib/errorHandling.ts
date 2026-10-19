@@ -24,7 +24,7 @@ export async function executeAsyncWork<T>(
   }
 ): Promise<void> {
   const timeoutMs = options.timeout ?? 15000;
-  let timeoutHandle: NodeJS.Timeout | undefined;
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
 
   try {
     // Set up timeout

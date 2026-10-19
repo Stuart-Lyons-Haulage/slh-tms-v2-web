@@ -9,7 +9,6 @@ import { useApi } from "../lib/useApi";
 import { startVisiblePolling } from "../lib/visiblePolling";
 import { planningDeliveryLocation } from "../lib/planningLocations";
 import { useWorkingDate } from "../lib/workingDate";
-import { safePromise } from "../lib/errorHandling";
 
 type Allocation = { loadId: string; loadReference?: string; pallets: number; updatedAtUtc: string; updatedBy?: string };
 type SourceLine = { sourceLineId: string; sourcePalletType?: string; palletType?: string; loadUnitType?: string; palletColourKey?: string; orderedPallets: number; plannedPallets: number; outstandingPallets: number };

@@ -186,6 +186,7 @@ export function ApprovedOrdersList({ date, token }: { date: string; token: Retur
   }, [date, token]);
 
   useEffect(() => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     let active = true;
     void refresh();
     return () => { active = false; };
