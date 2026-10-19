@@ -533,14 +533,26 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
     });
   }
 
-  async function allocate(orderId: string, loadId: string, pallets: number, access: string) {
+  async function allocateWithRetry(orderId: string, loadId: string, pallets: number, access: string, attempt = 0): Promise<AllocationResult> {
     // The key belongs to this save operation: retries reuse it, while a later
     // edit back to a previously used quantity must create a new ledger event.
     const idempotencyKey = crypto.randomUUID();
-    return request<AllocationResult>("/api/v1/planning-control/allocations", access, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ orderId, loadId, date, pallets, idempotencyKey, note: "Auto-saved from live Run Planner" }) });
+    const maxAttempts = 3;
+    const delayMs = Math.min(1000 * Math.pow(2, attempt), 8000); // Exponential backoff: 1s, 2s, 4s
+    try {
+      return await request<AllocationResult>("/api/v1/planning-control/allocations", access, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ orderId, loadId, date, pallets, idempotencyKey, note: "Auto-saved from live Run Planner" }) });
+    } catch (error) {
+      const isTimeout = error instanceof Error && (error.message.includes("504") || error.message.includes("timeout") || error.message.includes("failed"));
+      const shouldRetry = attempt < maxAttempts && isTimeout;
+      if (shouldRetry) {
+        await new Promise(resolve => window.setTimeout(resolve, delayMs));
+        return allocateWithRetry(orderId, loadId, pallets, access, attempt + 1);
+      }
+      throw error;
+    }
   }
 
-  async function allocateBatch(entries: Array<[string, number]>, loadId: string, access: string) {
+  async function allocateBatchWithRetry(entries: Array<[string, number]>, loadId: string, access: string, attempt = 0): Promise<AllocationResult[]> {
     const allocations = entries.map(([orderId, pallets]) => ({
       orderId,
       loadId,
@@ -549,11 +561,31 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
       idempotencyKey: crypto.randomUUID(),
       note: "Auto-saved from live Run Planner",
     }));
-    return request<AllocationResult[]>("/api/v1/planning-control/allocations/bulk", access, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(allocations),
-    });
+    const maxAttempts = 3;
+    const delayMs = Math.min(1000 * Math.pow(2, attempt), 8000); // Exponential backoff: 1s, 2s, 4s
+    try {
+      return await request<AllocationResult[]>("/api/v1/planning-control/allocations/bulk", access, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(allocations),
+      });
+    } catch (error) {
+      const isTimeout = error instanceof Error && (error.message.includes("504") || error.message.includes("timeout") || error.message.includes("failed"));
+      const shouldRetry = attempt < maxAttempts && isTimeout;
+      if (shouldRetry) {
+        await new Promise(resolve => window.setTimeout(resolve, delayMs));
+        return allocateBatchWithRetry(entries, loadId, access, attempt + 1);
+      }
+      throw error;
+    }
+  }
+
+  async function allocate(orderId: string, loadId: string, pallets: number, access: string) {
+    return allocateWithRetry(orderId, loadId, pallets, access);
+  }
+
+  async function allocateBatch(entries: Array<[string, number]>, loadId: string, access: string) {
+    return allocateBatchWithRetry(entries, loadId, access);
   }
 
   async function syncStops(loadId: string, lines: RunLine[], access: string) {
