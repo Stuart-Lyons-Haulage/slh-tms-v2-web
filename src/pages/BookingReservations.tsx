@@ -1,3 +1,4 @@
+import { describeQuantity } from "../lib/loadQuantity";
 import { useCallback, useMemo, useState } from 'react';
 import { api, type BookingCandidateOrder, type BookingReservation } from '../lib/api';
 import { useAccessToken } from '../lib/auth';
@@ -6,7 +7,7 @@ import { useApi } from '../lib/useApi';
 
 const dateLabel = (value?: string) => value ? formatDateLong(value) : 'TBC';
 
-export type SouthboundOrder = { id: string; reference: string; customerCode: string; collection: string; destination: string; orderedPallets: number; plannedPallets: number; outstandingPallets: number; loadUnitType?: string; palletType?: string; allocations: Array<{ loadReference?: string }> };
+export type SouthboundOrder = { id: string; reference: string; customerCode: string; collection: string; destination: string; orderedPallets: number; plannedPallets: number; outstandingPallets: number; loadUnitType?: string; palletType?: string; unitCount?: number; unitCountType?: string; palletsStated?: boolean; allocations: Array<{ loadReference?: string }> };
 
 /**
  * Crates, trays and IFCO collected southbound on the way back from a delivery.
@@ -24,7 +25,9 @@ export function SouthboundCollections({ date, confirmedOrders }: { date: string;
   const visible = useMemo(() => (rows.data || []).filter(row => status !== 'open' || (!/cancel/i.test(row.status) && row.assignedUnits < row.reservedUnits)), [rows.data, status]);
   const waiting = (rows.data || []).filter(row => !/cancel/i.test(row.status) && row.assignedUnits < row.reservedUnits);
   const unitsWaiting = waiting.reduce((sum, row) => sum + Math.max(0, row.reservedUnits - row.assignedUnits), 0);
-  const toPlan = confirmedOrders.filter(order => order.outstandingPallets > 0);
+  // No pallet figure from the customer (only a tray/crate count) still needs planning.
+  const needsPlan = (order: SouthboundOrder) => order.outstandingPallets > 0 || (order.orderedPallets <= 0 && order.plannedPallets <= 0);
+  const toPlan = confirmedOrders.filter(needsPlan);
 
   async function cancel() {
     if (!selected || !window.confirm(`Cancel booking ${selected.collectionReference || selected.stableBookingKey}?`)) return;
@@ -35,18 +38,18 @@ export function SouthboundCollections({ date, confirmedOrders }: { date: string;
   return <section className="ui-page southbound-page">
     <div className="ui-grid">
       <div className={`ui-metric ${waiting.length ? 'amber' : 'green'}`}><span>Bookings waiting for an order</span><strong>{waiting.length}</strong><small>{Math.round(unitsWaiting)} units not yet confirmed</small></div>
-      <div className={`ui-metric ${toPlan.length ? 'amber' : 'green'}`}><span>Confirmed, still to plan</span><strong>{toPlan.length}</strong><small>{toPlan.reduce((sum, order) => sum + order.outstandingPallets, 0)} units to put on a run</small></div>
+      <div className={`ui-metric ${toPlan.length ? 'amber' : 'green'}`}><span>Confirmed, still to plan</span><strong>{toPlan.length}</strong><small>{toPlan.reduce((sum, order) => sum + order.outstandingPallets, 0)} pallets to put on a run{toPlan.some(order => order.orderedPallets <= 0) ? ` + ${toPlan.filter(order => order.orderedPallets <= 0).length} with spaces not stated` : ''}</small></div>
       <div className="ui-metric"><span>On runs</span><strong>{confirmedOrders.filter(order => order.plannedPallets > 0).length}</strong><small>collected on the way back</small></div>
     </div>
 
     <section className="ui-card">
       <div className="ui-card-head"><h2>Confirmed collections for {formatDateLong(date)}</h2></div>
-      {confirmedOrders.length === 0 ? <div className="ui-empty">Nothing coming back to Runcton, Selsey, Drayton, Merston or Sefter for this date, and no crate or tray collections.</div> : <div className="ui-table-wrap"><table className="ui-table"><thead><tr><th>Collect from</th><th>Take to</th><th>Units</th><th>Run</th><th>Reference</th></tr></thead><tbody>
+      {confirmedOrders.length === 0 ? <div className="ui-empty">Nothing coming back to Runcton, Selsey, Drayton, Merston or Sefter for this date, and no crate or tray collections.</div> : <div className="ui-table-wrap"><table className="ui-table"><thead><tr><th>Collect from</th><th>Take to</th><th>Quantity</th><th>Run</th><th>Reference</th></tr></thead><tbody>
         {confirmedOrders.map(order => <tr key={order.id}>
           <td><strong>{order.collection}</strong><br /><small>{order.customerCode}</small></td>
           <td>{order.destination}</td>
-          <td><strong>{order.orderedPallets}</strong> {order.loadUnitType && order.loadUnitType !== 'Pallet' ? order.loadUnitType : order.palletType || 'units'}</td>
-          <td>{order.outstandingPallets > 0 ? <span className="ui-chip amber">{order.outstandingPallets} to plan</span> : <span className="ui-chip green">{order.allocations.map(item => item.loadReference).filter(Boolean).join(', ') || 'Planned'}</span>}</td>
+          <td>{(() => { const quantity = describeQuantity({ pallets: order.orderedPallets, unitCount: order.unitCount, unitCountType: order.unitCountType, loadUnitType: order.loadUnitType, palletType: order.palletType }); return <><strong>{quantity.main}</strong>{quantity.detail && <><br /><small>{quantity.detail}</small></>}</>; })()}</td>
+          <td>{order.orderedPallets <= 0 && order.plannedPallets <= 0 ? <span className="ui-chip amber">To plan · work out spaces</span> : order.outstandingPallets > 0 ? <span className="ui-chip amber">{order.outstandingPallets} plt to plan</span> : <span className="ui-chip green">{order.allocations.map(item => item.loadReference).filter(Boolean).join(', ') || 'Planned'}</span>}</td>
           <td><small>{order.reference}</small></td>
         </tr>)}
       </tbody></table></div>}

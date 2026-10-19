@@ -1,3 +1,4 @@
+import { describeQuantity, payloadQuantity } from "../lib/loadQuantity";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApiError, api, request, type StagedImport } from "../lib/api";
 import { useAccessToken } from "../lib/auth";
@@ -278,7 +279,7 @@ function blockingReason(row: ParsedRow, date: string) {
   if (text(payload.collectionDate) !== date && !isPmOvernightCarryIn(payload, date)) return "Collection date does not match the selected planning date";
   if (!text(payload.poNumber)) return "TMS reference is missing";
   if (!text(payload.customerCode)) return "Customer is missing";
-  if (!isBackhaul(payload) && palletCount(payload) <= 0) return "Zero or missing pallets";
+  if (!isBackhaul(payload) && palletCount(payload) <= 0 && !describeQuantity(payloadQuantity(payload)).unitsStated) return "No pallets or tray/crate count";
   return undefined;
 }
 
@@ -851,7 +852,7 @@ export function OrderReviewBulk({ date }: { date: string }) {
           />
           <span className="bulk-order-ref"><strong>{displayReference(row.payload)}</strong><small>{text(row.payload.poNumber) || "TMS reference missing"}</small></span>
           <span><strong>{text(row.payload.customerCode) || "Customer missing"}</strong><small>{text(row.payload.sellerName) || "Collection site missing"} → {text(row.payload.stallNumber) || "Destination missing"}</small></span>
-          <span className="bulk-order-pallets"><strong>{isBackhaul(row.payload) && palletCount(row.payload) <= 0 ? "—" : palletCount(row.payload)}</strong><small>{isBackhaul(row.payload) && palletCount(row.payload) <= 0 ? "backhaul" : "pallets"}</small></span>
+          {(() => { const quantity = describeQuantity(payloadQuantity(row.payload)); const backhaulOnly = isBackhaul(row.payload) && !quantity.palletsStated && !quantity.unitsStated; return <span className="bulk-order-pallets"><strong>{backhaulOnly ? "—" : quantity.palletsStated ? palletCount(row.payload) : quantity.main}</strong><small>{backhaulOnly ? "backhaul" : quantity.palletsStated ? (quantity.detail ? `pallets · ${quantity.detail}` : "pallets") : quantity.detail}</small></span>; })()}
           <span className="bulk-order-planning"><strong>{planningWindow(row.payload)}</strong><small>Collect {shortOperationalDate(row.payload.collectionDate)} · Deliver {shortOperationalDate(row.payload.deliveryDate || row.payload.collectionDate)}</small><small>{temperature(row.payload)} · {orderType(row.payload)}</small></span>
           <span className={`bulk-order-status ${statusClass}`}>{statusText}{autoApprovalHint(row.payload) && <small className="auto-approval-hint">{autoApprovalHint(row.payload)}</small>}</span>
           <div className="bulk-order-actions">
