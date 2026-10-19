@@ -35,7 +35,7 @@ export function useApi<T>(load: () => Promise<T>): UseApiResult<T> {
   const rerunAfter = useRef<Promise<void> | null>(null);
   const mounted = useRef(true);
   const hasData = useRef(Boolean(initialData));
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (): Promise<void> => {
     // A changed dependency (for example a new timesheet date range) is a new
     // request even when the previous request is still resolving. Reusing the
     // old promise here leaves the new view displaying the previous range.
