@@ -163,8 +163,10 @@ export function UndatedOrderReviewQueue() {
     const deliverySite = text(editing.payload.deliverySite) || text(editing.payload.stallNumber);
     const missing = [!customerCode && "customer", !collectionSite && "collection site", !deliverySite && "delivery site"].filter(Boolean);
     if (missing.length) { fail(`Fill in the ${missing.join(", ")} before saving.`); return; }
-    const pallets = Number(text(editing.payload.pallets));
-    if (!Number.isFinite(pallets) || pallets <= 0) { fail("Enter the number of pallets before saving."); return; }
+    const pallets = Number(text(editing.payload.pallets)) || 0;
+    const unitCount = Number(text(editing.payload.unitCount).replace(/,/g, "")) || 0;
+    // Trays / crates are often given as a count with no pallet figure; either is enough.
+    if (pallets <= 0 && unitCount <= 0) { fail("Enter the pallets, or the tray / crate count if that's all the customer gave."); return; }
     // No reference on the email: make a readable one rather than blocking the save.
     const reference = text(editing.payload.poNumber) || text(editing.payload.customerPo) ||
       `${customerCode}-${collectionDate.replaceAll("-", "").slice(2)}-${collectionSite.replace(/[^A-Za-z0-9]/g, "").slice(0, 8).toUpperCase()}`;
@@ -182,6 +184,7 @@ export function UndatedOrderReviewQueue() {
         sellerName: collectionSite,
         stallNumber: deliverySite,
         pallets,
+        ...(unitCount > 0 ? { unitCount, unitCountType: text(editing.payload.unitCountType) || "Trays" } : {}),
         deliveryDate: isUsableDate(deliveryDate) ? deliveryDate : collectionDate,
         plannerReady: true,
         plannerReviewAcknowledged: true,
@@ -340,7 +343,9 @@ export function UndatedOrderReviewQueue() {
               <label>Customer code<input value={text(payload.customerCode)} onChange={(event) => setEditing((current) => current ? { ...current, payload: { ...current.payload, customerCode: event.target.value } } : current)} /></label>
               <label>Collection site<input value={text(payload.collectionSite) || text(payload.sellerName)} onChange={(event) => setEditing((current) => current ? { ...current, payload: { ...current.payload, collectionSite: event.target.value, sellerName: event.target.value } } : current)} /></label>
               <label>Delivery site<input value={text(payload.deliverySite) || text(payload.stallNumber)} onChange={(event) => setEditing((current) => current ? { ...current, payload: { ...current.payload, deliverySite: event.target.value, stallNumber: event.target.value } } : current)} /></label>
-              <label>Pallets<input inputMode="numeric" value={text(payload.pallets)} onChange={(event) => setEditing((current) => current ? { ...current, payload: { ...current.payload, pallets: event.target.value } } : current)} /></label>
+              <label>Pallets (spaces)<input inputMode="numeric" value={text(payload.pallets)} onChange={(event) => setEditing((current) => current ? { ...current, payload: { ...current.payload, pallets: event.target.value } } : current)} /></label>
+              <label>Trays / crates count<input inputMode="numeric" value={text(payload.unitCount)} placeholder="if no pallet figure" onChange={(event) => setEditing((current) => current ? { ...current, payload: { ...current.payload, unitCount: event.target.value } } : current)} /></label>
+              <label>Counted in<select value={text(payload.unitCountType) || "Trays"} onChange={(event) => setEditing((current) => current ? { ...current, payload: { ...current.payload, unitCountType: event.target.value } } : current)}><option>Trays</option><option>Crates</option><option>Shippers</option></select></label>
               <label>Collection date<input type="date" value={text(payload.collectionDate)} onChange={(event) => setEditing((current) => current ? { ...current, payload: { ...current.payload, collectionDate: event.target.value } } : current)} /></label>
               <label>Delivery date<input type="date" value={text(payload.deliveryDate)} onChange={(event) => setEditing((current) => current ? { ...current, payload: { ...current.payload, deliveryDate: event.target.value } } : current)} /></label>
             </div>
