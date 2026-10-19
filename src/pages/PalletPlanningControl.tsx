@@ -12,6 +12,9 @@ import { useWorkingDate } from "../lib/workingDate";
 type Allocation = { loadId: string; loadReference?: string; pallets: number; updatedAtUtc: string; updatedBy?: string };
 type SourceLine = { sourceLineId: string; sourcePalletType?: string; palletType?: string; loadUnitType?: string; palletColourKey?: string; orderedPallets: number; plannedPallets: number; outstandingPallets: number };
 type PlanningOrder = { id: string; reference: string; customerCode: string; collectionDate: string; deliveryDate?: string; deliveryWindowStartUtc?: string; deliveryWindowEndUtc?: string; orderedPallets: number; plannedPallets: number; outstandingPallets: number; overplannedPallets: number; collection: string; destination: string; originalDestination?: string; planningGroup: string; planningSection?: string; planningWindow?: string; suggestedRouteType?: string; runsOvernight?: boolean; temperature?: string; palletType?: string; loadUnitType?: string; palletColourKey?: string; source?: string; receivedAtUtc: string; lateAddition: boolean; sourceLines?: SourceLine[]; allocations: Allocation[] };
+const HOME_SITES = /\b(runcton|selsey|drayton|merston|sefter)\b/i;
+function isHomeSite(value?: string) { return Boolean(value && HOME_SITES.test(value)); }
+
 type PlanningCell = { planningGroup: string; destination: string; ordered: number; planned: number; outstanding: number; overplanned: number; orderIds: string[] };
 type PlanningRun = { id: string; reference: string; status: string; trailerId?: string; palletSpacesUsed?: number; totalPalletSpaces?: number; capacityType?: string; capacityStatus?: "Green" | "Amber" | "Red"; capacityUtilisationPercent?: number; stopCount: number };
 type PlanningControlData = { date: string; generatedAtUtc: string; summary: { ordered: number; planned: number; outstanding: number; overplanned: number; lateAdditions: number; orders: number; runs: number }; planningGroups: string[]; destinations: string[]; cells: PlanningCell[]; orders: PlanningOrder[]; runs: PlanningRun[] };
@@ -57,7 +60,12 @@ export function PalletPlanningControl() {
   const data = control.data;
   const orders = useMemo(() => data?.orders || [], [data?.orders]);
   const orderById = useMemo(() => new Map(orders.map(order => [order.id, order])), [orders]);
-  const southboundOrders = useMemo(() => orders.filter(order => order.planningGroup === "Southbound collections" || palletTone(order.palletColourKey, order.loadUnitType, order.palletType) === "traycrate"), [orders]);
+  // Southbound = anything coming back to the home sites (NWF Runcton, Selsey, Drayton,
+  // Merston and Barfoots Sefter), plus every tray and crate collection.
+  const southboundOrders = useMemo(() => orders.filter(order =>
+    order.planningGroup === "Southbound collections" ||
+    palletTone(order.palletColourKey, order.loadUnitType, order.palletType) === "traycrate" ||
+    isHomeSite(order.destination) || isHomeSite(order.originalDestination)), [orders]);
   const planningGroups = useMemo(() => [...new Set(orders.map(planningCollectionGroup).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [orders]);
   const liveDestinations = useMemo(() => [...new Set(orders.map(order => planningDeliveryLocation(order)).filter(Boolean))], [orders]);
   const orderedDestinations = useMemo(() => {
