@@ -441,9 +441,17 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
     };
     const nextLines = [...currentRun.lines.filter(line => lineOrderIds(line).length > 0 || line.collectionSite.trim() || line.deliverySite.trim() || line.pallets.trim()), nextLine];
     updateRun(run.key, current => ({ ...current, lines: nextLines }));
-    if (run.loadId) void enqueuePersistQuantity(run.key, nextLine.key, run.loadId, { [order.id]: quantity }, quantity, nextLines);
-    const runReference = run.loadId ? loads.find((load) => load.id === run.loadId)?.reference : undefined;
-    setMessage(run.loadId ? `Saving ${order.reference} to ${runReference || "the run"}…` : `${order.reference} added to the draft run.`);
+    if (currentRun.loadId) {
+      void enqueuePersistQuantity(run.key, nextLine.key, currentRun.loadId, { [order.id]: quantity }, quantity, nextLines);
+      const runReference = loads.find((load) => load.id === currentRun.loadId)?.reference;
+      setMessage(`Saving ${order.reference} to ${runReference || "the run"}…`);
+    } else {
+      // Suggested jobs must use the same immediate server save as a selected
+      // collection/delivery. Keeping only the React draft left Pallet Order
+      // unaware of this job until the planner manually retried the run.
+      setMessage(`Saving ${order.reference} to the new run…`);
+      void createPlanningRun({ ...currentRun, lines: nextLines });
+    }
   };
   const changeLineLocation = (runKey: string, line: RunLine, field: "collectionSite" | "deliverySite", value: string) => {
     const currentRun = runsRef.current.find((run) => run.key === runKey);
