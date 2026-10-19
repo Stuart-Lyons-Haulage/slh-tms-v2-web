@@ -28,6 +28,8 @@ type Props = {
   samsaraState?: SamsaraDispatchState;
   samsaraConfigured: boolean;
   failures: DispatchLockFailure[];
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
   busy: boolean;
   onSelectionChange: (driverId: string, patch: Partial<DispatchAllocationSelection>) => void;
   onDispatch: (driver: DispatchDriverDto, selection: DispatchAllocationSelection) => void;
@@ -130,6 +132,8 @@ export function DispatchDriverRow({
   samsaraState,
   samsaraConfigured,
   failures,
+  collapsed = false,
+  onToggleCollapse,
   busy,
   onSelectionChange,
   onDispatch,
@@ -199,9 +203,12 @@ export function DispatchDriverRow({
 
   const availabilityTone = driver.onLeave ? "on-leave" : blocked ? "blocked" : availabilityUnknown ? "availability-unknown" : driver.needsReturn ? "return-needed" : "available";
   const dispatchTone = samsaraState ? "samsara-sent" : lockedToDriver ? "allocated" : "";
-  return <tr className={`smart-dispatch-row ${availabilityTone} ${dispatchTone}`.trim()}>
+  return <tr className={`smart-dispatch-row ${availabilityTone} ${dispatchTone} ${collapsed ? "collapsed" : ""}`.trim()}>
     <td className="smart-driver-cell">
-      <strong>{driver.name}</strong>
+      <div className="smart-driver-heading">
+        <button type="button" className="smart-driver-collapse" aria-label={`${collapsed ? "Expand" : "Collapse"} ${driver.name}`} aria-expanded={!collapsed} onClick={onToggleCollapse}>{collapsed ? "＋" : "−"}</button>
+        <div><strong>{driver.name}</strong><span className={`smart-day ${dayTone(driver)}`}>Day {status?.projectedDayNumber || driver.dayNumber || driver.tachoData.currentDutyDay}</span></div>
+      </div>
       <div className="smart-driver-meta">
         <span className="employment-badge">{employmentLabel(driver.employmentType)}</span>
         {driver.driverCode?.trim() && <small>{driver.driverCode.trim()}</small>}
@@ -213,7 +220,7 @@ export function DispatchDriverRow({
       {!samsaraState && lockedToDriver && <small className="smart-inline-warning">Allocated</small>}
     </td>
 
-    <td>
+    <td className="smart-duty-cell">
       <span className={`smart-day ${dayTone(driver)}`} title={status?.workPatternName ? `Sage HR work pattern: ${status.workPatternName}${status.tachoDayNumber ? ` · Tacho: Day ${status.tachoDayNumber} since weekly rest` : ""}` : driver.availabilityDayCount ? "Confirmed staffing availability days this week" : "No Sage work pattern recorded: from Tacho"}>{status?.patternRestDay ? "Rest day" : <>Day {status?.projectedDayNumber || driver.dayNumber || driver.tachoData.currentDutyDay}{(status?.cycleLength || driver.availabilityDayCount || driver.contractedDays.length) > 0 ? ` of ${status?.cycleLength || driver.availabilityDayCount || driver.contractedDays.length}` : ""}</>}{status?.workPatternSource && <small className="smart-day-source"> · {status.workPatternSource === "Tacho" ? "Tacho" : "Sage"}</small>}</span>
       {status?.cycleNote && <small className="smart-inline-warning">{status.cycleNote}</small>}
       {driver.workingStyle && <small className="smart-working-style">{driver.workingStyle === "HalfTramper" ? "Half tramper" : driver.workingStyle}{driver.recentLongRuns ? ` · ${driver.recentLongRuns} long run${driver.recentLongRuns === 1 ? "" : "s"} / 2 wks` : ""}</small>}
