@@ -84,7 +84,7 @@ function RouteSidebar({ runs, owners, allocatedRunIds, drivers, allDrivers, vehi
       <strong>Routes</strong>
       <span>{runs.length}</span>
     </div>
-    <p>Furthest first. Suggestions weigh distance to the first collection, skills, driver type (trampers for nights out; day and night drivers must get back in shift) and who has had the fewest long runs in the last 2 weeks.</p>
+    <p>Earliest first collection first, using the Master Data access time. Driver suggestions weigh distance to collection, required skills, driver type, and recent long-run fairness. Miles shown are straight-line distance from Barnham to each run’s furthest stop.</p>
     <div className="smart-run-card-list">
       {[...runs].sort((left, right) => {
         const leftTime = left.firstCollectionTimeUtc ? Date.parse(left.firstCollectionTimeUtc) : Number.POSITIVE_INFINITY;
