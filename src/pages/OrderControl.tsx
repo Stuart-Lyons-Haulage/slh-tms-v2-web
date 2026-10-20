@@ -35,6 +35,7 @@ type CachedEmailResponse = {
   fromUtc?: string;
   toUtc?: string;
   count: number;
+  hasMore?: boolean;
   records: CachedEmailRecord[];
 };
 
@@ -220,13 +221,14 @@ function OrderIntakeCacheRecovery({ date }: { date: string }) {
     setReceivedThroughDate(date);
   }, [date]);
 
-  async function loadCache() {
+  async function loadCache(skip = 0) {
     setLoading(true);
     setError(undefined);
     try {
-      const result = await request<CachedEmailResponse>(`/api/v1/order-intake/cache?fromUtc=${encodeURIComponent(window.fromUtc)}&toUtc=${encodeURIComponent(window.toUtc)}&take=1000`, await token());
-      setData(result);
-      setNotice(`${result.count} cached emails found · ${result.records.filter(item => (item.existingOrderCount ?? 0) === 0).length} with no order row.`);
+      const result = await request<CachedEmailResponse>(`/api/v1/order-intake/cache?fromUtc=${encodeURIComponent(window.fromUtc)}&toUtc=${encodeURIComponent(window.toUtc)}&take=100&skip=${skip}`, await token());
+      const records = skip === 0 ? result.records : [...(data?.records ?? []), ...result.records];
+      setData({ ...result, count: records.length, records });
+      setNotice(`${records.length}${result.hasMore ? "+" : ""} cached emails loaded · ${records.filter(item => (item.existingOrderCount ?? 0) === 0).length} with no order row in the loaded pages.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load cached intake emails.");
     } finally {
@@ -320,8 +322,9 @@ function OrderIntakeCacheRecovery({ date }: { date: string }) {
         {data && <span className={missing.length ? "status warning" : "status approved"}>{missing.length} missing order rows</span>}
         <button type="button" onClick={() => void replayRetainedEvidence()} disabled={replaying || forcing !== undefined || loading}>{replaying ? "Re-parsing…" : `Re-parse ${date}`}</button>
         <button type="button" onClick={() => setOpen(value => !value)}>{open ? "Hide cached emails" : "Show cached emails"}</button>
-        {open && <button type="button" onClick={loadCache} disabled={loading}>{loading ? "Checking…" : "Refresh cache"}</button>}
-        {open && <button type="button" className="primary" onClick={forceAll} disabled={forcing !== undefined || missing.length === 0}>{forcing === "all" ? "Forcing…" : `Force all missing (${missing.length})`}</button>}
+        {open && <button type="button" onClick={() => void loadCache()} disabled={loading}>{loading ? "Checking…" : "Refresh cache"}</button>}
+        {open && data?.hasMore && <button type="button" onClick={() => void loadCache(data.records.length)} disabled={loading}>Load older emails</button>}
+        {open && <button type="button" className="primary" onClick={forceAll} disabled={forcing !== undefined || missing.length === 0 || data?.hasMore}>{forcing === "all" ? "Forcing…" : `Force all missing (${missing.length})`}</button>}
       </div>
     </div>
     {notice && <p className="notice inline-notice" style={{ marginTop: 12 }}>{notice}</p>}
