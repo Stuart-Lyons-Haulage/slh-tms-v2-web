@@ -61,7 +61,7 @@ function runTime(value?: string): string {
   return Number.isNaN(date.getTime()) ? "Time not set" : date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 }
 
-function RouteSidebar({ runs, owners, allocatedRunIds, drivers, allDrivers, vehicles, trailers, selections, statuses, samsaraDispatch, failures, busyDriverId, onSelectionChange, onDispatch, onSamsaraAndDispatch, onDownloadSamsaraCsv }: {
+function RouteSidebar({ runs, owners, allocatedRunIds, drivers, allDrivers, vehicles, trailers, selections, statuses, samsaraDispatch, busyDriverId, onSelectionChange, onDispatch, onSamsaraAndDispatch, onDownloadSamsaraCsv }: {
   runs: DispatchRunDto[];
   owners: Record<string, string | undefined>;
   allocatedRunIds: Set<string>;
@@ -72,7 +72,6 @@ function RouteSidebar({ runs, owners, allocatedRunIds, drivers, allDrivers, vehi
   selections: DispatchSelectionMap;
   statuses: SmartDispatchSnapshot["statuses"];
   samsaraDispatch: SmartDispatchSnapshot["samsaraDispatch"];
-  failures: DispatchLockFailure[];
   busyDriverId?: string;
   onSelectionChange: (driverId: string, patch: Partial<DispatchSelectionMap[string]>) => void;
   onDispatch: (driver: DispatchDriverDto, selection: DispatchSelectionMap[string]) => void;
@@ -101,7 +100,6 @@ function RouteSidebar({ runs, owners, allocatedRunIds, drivers, allDrivers, vehi
         const status = ownerId ? statuses[ownerId] : undefined;
         const samsaraState = samsaraDispatch[run.runId];
         const routeStatus = samsaraState?.requiresResend ? "Re-send due to amendment" : samsaraState ? "Dispatched to Samsara" : "Ready to Send";
-        const rowFailures = failures.filter(failure => failure.runId === run.runId);
         const ownerAvailable = Boolean(ownerId && drivers.some(driver => driver.driverId === ownerId));
         const reasonForUnavailableDriver = (driver: DispatchDriverDto): string[] => {
           const reasons: string[] = [];
@@ -137,7 +135,8 @@ function RouteSidebar({ runs, owners, allocatedRunIds, drivers, allDrivers, vehi
             <span className={samsaraState?.requiresResend ? "needs-resend" : samsaraState ? "sent" : "ready"}>{routeStatus}</span>
           </div>
           <div className="smart-run-time-row">
-            <span className="smart-run-time-bubble" title="Master Data access time for the first collection">Start {runTime(run.firstCollectionTimeUtc)}</span>
+            <span className="smart-run-time-bubble" title="Master Data planned collection time">{run.firstCollectionTimeUtc ? `Collect ${runTime(run.firstCollectionTimeUtc)}` : "Collect time not set"}</span>
+            {run.deliveryCutoffTimeUtc && <span className="smart-run-cutoff-bubble" title="Master Data deadline for the final delivery">Deliver by {runTime(run.deliveryCutoffTimeUtc)}</span>}
             <span className="smart-run-distance" title="Straight-line distance from Barnham to the furthest stop">{run.furthestMiles != null ? `Furthest stop: ${run.furthestMiles} mi from Barnham (straight line)` : ""}{run.spanHours != null ? ` · ~${run.spanHours}h` : ""}{run.needsNightOut ? " · night out" : ""}{run.isNightRun ? " · night run" : ""}</span>
           </div>
           <div className="smart-run-route">
@@ -149,12 +148,10 @@ function RouteSidebar({ runs, owners, allocatedRunIds, drivers, allDrivers, vehi
               if (!driverId) return;
               onSelectionChange(driverId, { runId: run.runId });
             }} /></label>
-            {owner && !ownerAvailable && <small className="smart-run-warning">{statuses[owner.driverId]?.availabilityMessage || "This route remains allocated, but the current driver is not available for a new dispatch."}</small>}
             <label>Vehicle<DispatchAssetTypeahead ariaLabel={`Vehicle for ${run.reference}`} value={selected.vehicleId} options={vehicleOptions} placeholder="Select vehicle…" disabled={!ownerId} onChange={vehicleId => ownerId && onSelectionChange(ownerId, { vehicleId })} /></label>
             <label>Trailer<DispatchAssetTypeahead ariaLabel={`Trailer for ${run.reference}`} value={selected.trailerId} options={trailerOptions} placeholder="Select trailer…" disabled={!ownerId} onChange={trailerId => ownerId && onSelectionChange(ownerId, { trailerId })} /></label>
             <div className="smart-run-allocation-status"><small>Status</small><strong>{allocated ? (status?.operationalStatus || "Dispatched") : "Available"}</strong></div>
           </div>
-          {rowFailures.map((failure, index) => <small className="smart-run-warning" key={`${failure.reason}-${index}`}>{failure.reason}</small>)}
           <div className="smart-run-actions">
             <button type="button" className="smart-action primary" disabled={!canExport || busyDriverId === ownerId} title={canExport ? "Validate and dispatch this run to the selected driver" : "Select an eligible driver and vehicle first"} onClick={() => selectedDriver && onDispatch(selectedDriver, selected)}>{busyDriverId === ownerId ? "Preparing…" : "Dispatch"}</button>
             <button type="button" className="smart-action ghost dark" disabled={!canExport || busyDriverId === ownerId} onClick={() => selectedDriver && onSamsaraAndDispatch(selectedDriver, selected)}>{busyDriverId === ownerId ? "Working…" : "Samsara"}</button>
@@ -164,9 +161,6 @@ function RouteSidebar({ runs, owners, allocatedRunIds, drivers, allDrivers, vehi
             <summary>Best driver matches</summary>
             <ol>{rankedDrivers.slice(0, 3).map(match => <li key={match.driver.driverId}><strong>{match.driver.name} · {match.score}/100</strong><small>{match.reasons.join(" · ")}</small></li>)}</ol>
           </details>}
-          {!owner && rankedDrivers.length === 0 && <div className="smart-run-warning"><strong>No eligible driver currently matches this route.</strong>{allDrivers.length === 0 ? <span>Driver Master returned no active drivers.</span> : <span>{allDrivers.filter(driver => reasonForUnavailableDriver(driver).length > 0).slice(0, 3).map(driver => `${driver.name}: ${reasonForUnavailableDriver(driver).join(", ")}`).join(" · ") || "Check Driver Master skills and current availability / Tacho validation."}</span>}</div>}
-          {run.relay?.enabled && <small className="smart-run-warning">Relay: collect → {run.relay.handoverSite || "handover site required"} → delivery</small>}
-          {!run.relay?.enabled && run.trailerSwapRequested && <small className="smart-run-warning">Planner note: trailer swap requested</small>}
         </article>;
       })}
     </div>
@@ -791,7 +785,6 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
         selections={selections}
         statuses={snapshot.statuses}
         samsaraDispatch={snapshot.samsaraDispatch}
-        failures={failures}
         busyDriverId={busyDriverId}
         onSelectionChange={changeSelection}
         onDispatch={(driver, selection) => void prepareDispatch(driver, selection)}
