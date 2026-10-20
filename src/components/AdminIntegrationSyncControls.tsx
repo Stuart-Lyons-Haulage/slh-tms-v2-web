@@ -69,6 +69,19 @@ type IntegrationRuntimeStatus = {
   };
 };
 
+type DriverMasterHealth = {
+  status: 'healthy' | 'review' | 'attention' | string;
+  activeDrivers: number;
+  activeWithMember: number;
+  activeWithCard: number;
+  reviewRequiredDrivers: number;
+  cardWarningDrivers: number;
+  duplicateMemberGroups: number;
+  duplicateCardGroups: number;
+  latestCanonicalSyncUtc?: string;
+  message: string;
+};
+
 function roadTechState(status: RoadTechStatus) {
   if (!status.configured) return { label: 'Setup incomplete', className: 'integration-state pending' };
   if (!status.connected && status.recordCount === 0) return { label: 'Configured · no live records', className: 'integration-state pending' };
@@ -92,6 +105,7 @@ export function AdminIntegrationSyncControls() {
   const [samsaraSites, setSamsaraSites] = useState<SamsaraSiteAddressStatus>();
   const [runtimeStatus, setRuntimeStatus] = useState<IntegrationRuntimeStatus>();
   const feedHealth = useApi(useCallback(async () => intelligenceApi.freshness(await token()), [token]));
+  const driverMasterHealth = useApi(useCallback(async () => request<DriverMasterHealth>('/api/v1/health/driver-master', await token()), [token]));
 
   const loadState = async () => {
     setRoadTechError(undefined);
@@ -116,7 +130,7 @@ export function AdminIntegrationSyncControls() {
 
   useEffect(() => { void loadState(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    const refresh = () => { void loadState(); void feedHealth.refresh(); };
+    const refresh = () => { void loadState(); void feedHealth.refresh(); void driverMasterHealth.refresh(); };
     const interval = window.setInterval(refresh, 60_000);
     const onFocus = () => refresh();
     const onVisibility = () => { if (document.visibilityState === 'visible') refresh(); };
@@ -127,7 +141,7 @@ export function AdminIntegrationSyncControls() {
       window.removeEventListener('focus', onFocus);
       document.removeEventListener('visibilitychange', onVisibility);
     };
-  }, [feedHealth.refresh]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [feedHealth.refresh, driverMasterHealth.refresh]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const force = async (provider: 'tacho' | 'sage' | 'fleetio' | 'all') => {
     setBusy(provider);
@@ -159,6 +173,7 @@ export function AdminIntegrationSyncControls() {
       setMessage(rows.map(item => `${item.provider}: ${item.message}`).join(' · '));
       await loadState();
       await feedHealth.refresh();
+      await driverMasterHealth.refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Force refresh failed.');
     } finally {
@@ -224,7 +239,7 @@ export function AdminIntegrationSyncControls() {
         <p>Every outside system the TMS reads from, whether it is up to date, and what it affects. Updates are automatic; refresh only if something looks stuck.</p>
       </div>
       <div className="ui-page-actions">
-        <button type="button" onClick={() => { void loadState(); void feedHealth.refresh(); }}>Check now</button>
+        <button type="button" onClick={() => { void loadState(); void feedHealth.refresh(); void driverMasterHealth.refresh(); }}>Check now</button>
         <button type="button" className="primary" onClick={() => void force('all')} disabled={Boolean(busy)}>{busy === 'all' ? 'Refreshing all…' : 'Refresh all'}</button>
       </div>
     </div>
@@ -271,6 +286,15 @@ export function AdminIntegrationSyncControls() {
         <div className="ui-card-head"><h2>Info mailbox</h2><span className={`ui-chip ${graph?.lastSuccessUtc ? 'green' : 'amber'}`}>{graph?.lastSuccessUtc ? 'Reading' : graph?.configured ? 'Waiting for first read' : 'Not set up'}</span></div>
         {graph?.outlookTagging ? <p className="ui-error">{graph.outlookTagging}</p> : <p className="hint">Outlook tags: each email in info@ gets a category: <strong style={{ color: '#1d7a3a' }}>TMS: orders in</strong>, <strong style={{ color: '#b42318' }}>TMS: needs attention</strong> or <strong>TMS: no orders</strong>.{graph?.outlookLastTaggedUtc ? ` Last tagged ${lastReceipt(graph.outlookLastTaggedUtc)}.` : ''}</p>}
         <p className="hint">{graph?.mailbox || 'info@'}: read every few minutes.{graph?.lastSuccessUtc ? ` Last read ${lastReceipt(graph.lastSuccessUtc)}, ${graph.lastMessagesSeen ?? 0} seen, ${graph.lastMessagesIngested ?? 0} new.` : ''}</p>
+      </article>
+      <article className="ui-card">
+        <div className="ui-card-head"><h2>Driver Master identity</h2>{driverMasterHealth.data && <span className={`ui-chip ${driverMasterHealth.data.status === 'healthy' ? 'green' : driverMasterHealth.data.status === 'attention' ? 'amber' : ''}`}>{driverMasterHealth.data.status === 'healthy' ? 'Clear' : driverMasterHealth.data.status === 'attention' ? 'Needs attention' : 'Review'}</span>}</div>
+        {driverMasterHealth.error && <p className="ui-error">{driverMasterHealth.error}</p>}
+        {driverMasterHealth.data ? <>
+          <p className="hint">{driverMasterHealth.data.message}</p>
+          <p className="hint">{driverMasterHealth.data.activeDrivers} active drivers · {driverMasterHealth.data.activeWithMember} matched to a Tacho member · {driverMasterHealth.data.activeWithCard} with card evidence.</p>
+          {(driverMasterHealth.data.duplicateMemberGroups > 0 || driverMasterHealth.data.duplicateCardGroups > 0) && <p className="ui-error">Duplicate Tacho identity: {driverMasterHealth.data.duplicateMemberGroups} member match group{driverMasterHealth.data.duplicateMemberGroups === 1 ? '' : 's'}, {driverMasterHealth.data.duplicateCardGroups} card group{driverMasterHealth.data.duplicateCardGroups === 1 ? '' : 's'}.</p>}
+        </> : !driverMasterHealth.loading && <p className="hint">Checking…</p>}
       </article>
     </div>
     <SamsaraReconcile />
