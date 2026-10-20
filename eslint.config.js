@@ -5,6 +5,8 @@ import reactRefresh from 'eslint-plugin-react-refresh';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
+  // TODO: MasterDataDuplicateReviewPanel.tsx and MasterDataHub.tsx are excluded from
+  // linting due to existing violations. These files need to be fixed and re-enabled.
   { ignores: ['dist', 'src/components/MasterDataDuplicateReviewPanel.tsx', 'src/pages/MasterDataHub.tsx'] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],

@@ -1,3 +1,4 @@
+import "../mobile-operations.css";
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { request } from '../lib/api';
 import { useAccessToken } from '../lib/auth';

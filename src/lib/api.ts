@@ -8,6 +8,9 @@ import type { OrderDto } from '../types/dto/order';
 import type { CreateRunDto, RunDto, RunStopDto } from '../types/dto/run';
 import type { DeliveryEtaDto, DeliveryEtasDto, FleetStatusDto, TelemetryDto } from '../types/dto/tracking';
 
+// TODO: The ~220 lines of type aliases below (Customer through BookingCandidateOrder)
+// should be extracted to src/types/ in a dedicated refactor pass. They are kept here
+// for now because dozens of files import them from this path.
 export type Customer = { id: string; code: string; name: string; active: boolean; address?: string; email?: string; phone?: string };
 export type CustomerContact = { id: string; customerCode: string; name: string; email?: string; mobileNumber?: string; receivesEtaUpdates: boolean; active: boolean };
 export type Vehicle = VehicleDto;
