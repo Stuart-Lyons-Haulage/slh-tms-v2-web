@@ -1,3 +1,4 @@
+import "../pallet-control.css";
 import { PlannerLearningCard } from "../components/PlannerLearningCard";
 import { quantityLabel } from "../lib/loadQuantity";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";

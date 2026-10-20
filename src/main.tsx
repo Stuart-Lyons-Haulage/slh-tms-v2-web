@@ -8,29 +8,35 @@ import { DataIntegrityBoundary } from './components/DataIntegrityBoundary';
 import { cacheLocationForRoute, isPublicTvLink, isTvRoute } from './tvBootstrap';
 import { installPollingPolicy } from './lib/pollingPolicy';
 import { installPerformanceTelemetry } from './lib/performanceTelemetry';
+/* --- Global CSS (loaded eagerly for every route) --- */
 import './styles.css';
+import './mobile.css';
+import './mobile-v2.css';
+import './navigation-scroll.css';
+import './ui-navigation-refresh.css';
+import './table-header-viewport-fix.css';
+/* Shell components rendered on every authenticated page */
+import './intelligence.css';
+import './workflow-ui.css';
+/* Cross-page utilities: hide legacy panels, generic tab bar, layout resets */
 import './orders.css';
+import './ops-cleanup.css';
+import './master-fleet.css';
+/* Styles whose owning component could not be conclusively identified as a single
+   lazy route — kept global until the classes can be audited and scoped further. */
 import './fuel-top.css';
 import './management.css';
 import './operational-status.css';
-import './navigation-scroll.css';
-import './intelligence.css';
 import './dashboard-command.css';
-import './mobile.css';
-import './ops-cleanup.css';
-import './mobile-v2.css';
-import './mobile-planner.css';
-import './mobile-operations.css';
-import './master-fleet.css';
 import './live-vehicle-popup.css';
 import './operations-housekeeping.css';
-import './pallet-control.css';
-import './source-email-evidence.css';
-import './ui-navigation-refresh.css';
-import './table-header-viewport-fix.css';
-import './driver-timesheets.css';
-import './staffing.css';
-import './workflow-ui.css';
+/* --- Page-scoped CSS has been moved into the lazy page components --- */
+/* pallet-control.css        → PalletPlanningControl.tsx */
+/* mobile-operations.css     → MobileOperations.tsx      */
+/* mobile-planner.css        → PlannerEnhanced.tsx        */
+/* staffing.css              → Staffing.tsx               */
+/* driver-timesheets.css     → DriverTimesheets.tsx        */
+/* source-email-evidence.css → SourceEmailEvidenceDrawer.tsx (was already imported there) */
 
 installPollingPolicy();
 installPerformanceTelemetry();

@@ -1,3 +1,4 @@
+import "../mobile-planner.css";
 import { RunPlannerLive } from "./RunPlannerLive";
 import { useWorkingDate } from "../lib/workingDate";
 
