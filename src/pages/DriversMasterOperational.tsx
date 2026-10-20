@@ -141,6 +141,10 @@ export function DriversMasterOperational() {
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [notice, setNotice] = useState<string>();
+  // Bulk delete (same control and endpoint as the Sites/Master Data bulk delete).
+  const [bulkDeleteMode, setBulkDeleteMode] = useState(false);
+  const [bulkDeletePassword, setBulkDeletePassword] = useState('');
+  const [bulkDeleteIds, setBulkDeleteIds] = useState<Set<string>>(() => new Set());
   // Sage HR work patterns (moved here from Staffing → Driver files).
   const [patterns, setPatterns] = useState<PatternData>({ patterns: [], library: [] });
   const [patternFor, setPatternFor] = useState<string>();
@@ -256,6 +260,61 @@ export function DriversMasterOperational() {
     }
   }
 
+  // Drop any ticked ids that are no longer in the loaded set (e.g. after a refresh).
+  useEffect(() => { setBulkDeleteIds(ids => new Set([...ids].filter(id => drivers.some(driver => driver.id === id)))); }, [drivers]);
+
+  const startBulkDelete = () => {
+    const password = window.prompt('Admin delete password');
+    if (!password) return;
+    setBulkDeletePassword(password);
+    setBulkDeleteMode(true);
+    setBulkDeleteIds(new Set());
+    setError(undefined);
+    setNotice(undefined);
+  };
+  const exitBulkDelete = () => { setBulkDeleteMode(false); setBulkDeletePassword(''); setBulkDeleteIds(new Set()); };
+  const toggleBulkDeleteRow = (id: string, checked: boolean) => {
+    setBulkDeleteIds(previous => {
+      const next = new Set(previous);
+      if (checked) next.add(id); else next.delete(id);
+      return next;
+    });
+  };
+  const toggleBulkDeleteAll = (checked: boolean) => {
+    setBulkDeleteIds(checked ? new Set(filtered.map(driver => driver.id)) : new Set());
+  };
+  const bulkDeleteSelected = async () => {
+    const ids = [...bulkDeleteIds];
+    if (!ids.length) { setError('Tick at least one driver to delete.'); return; }
+    if (!window.confirm(`Permanently delete ${ids.length} selected driver record${ids.length === 1 ? '' : 's'}?\n\nDrivers linked to live TMS history (loads, plans) will be blocked and kept.`)) return;
+    setSaving(true); setError(undefined); setNotice(undefined);
+    try {
+      const access = await token();
+      const result = await request<{
+        deleted: number;
+        blocked: number;
+        notFound: number;
+        message?: string;
+        blockedRows?: { label?: string; references?: { area?: string; count?: number }[] }[];
+      }>('/api/v1/master-data-cleanup/drivers/bulk-delete', access, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids, adminPassword: bulkDeletePassword }),
+      });
+      const blockedDetail = (result.blockedRows || [])
+        .slice(0, 8)
+        .map(row => {
+          const refs = (row.references || []).map(ref => `${ref.area || 'Reference'}${ref.count ? ` (${ref.count})` : ''}`).join(', ');
+          return `${row.label || 'Selected driver'}: ${refs || 'live/history reference'}`;
+        })
+        .join('; ');
+      setNotice(`${result.message || `${result.deleted} deleted. ${result.blocked} blocked. ${result.notFound} already removed.`}${blockedDetail ? ` Blocked: ${blockedDetail}` : ''}`);
+      setBulkDeleteIds(new Set());
+      await refresh();
+    } catch (e) { setError(e instanceof Error ? e.message : 'Bulk delete failed.'); }
+    finally { setSaving(false); }
+  };
+
   const reviewCount = drivers.filter(driver => tachoState(driver) !== 'Linked').length;
   const anyFilter = Object.values(filters).some(value => value.trim());
 
@@ -266,6 +325,10 @@ export function DriversMasterOperational() {
         <div className="actions">
           <button onClick={() => void refresh()} disabled={loading}>Refresh</button>
           <button className="primary" onClick={() => void syncTacho()} disabled={syncing}>{syncing ? 'Syncing…' : 'Sync TachoMaster'}</button>
+          {bulkDeleteMode ? <>
+            <button disabled={saving || bulkDeleteIds.size === 0} onClick={() => void bulkDeleteSelected()} style={{ borderColor: '#b42318', color: '#b42318', fontWeight: 800 }}>{`Delete selected (${bulkDeleteIds.size})`}</button>
+            <button disabled={saving} onClick={exitBulkDelete}>Exit delete</button>
+          </> : <button disabled={saving} onClick={startBulkDelete}>Mass delete</button>}
         </div>
       </div>
 
@@ -290,9 +353,11 @@ export function DriversMasterOperational() {
         <table>
           <thead>
             <tr>
+              {bulkDeleteMode && <th><input type="checkbox" aria-label="Select all shown drivers" checked={filtered.length > 0 && filtered.every(driver => bulkDeleteIds.has(driver.id))} onChange={event => toggleBulkDeleteAll(event.target.checked)} /></th>}
               <th>Tacho status</th><th>Driver</th><th>Employee</th><th>Type / group</th><th>Tacho member / DB</th><th>Card</th><th>Licence</th><th>Work pattern (Sage HR)</th><th>Last Tacho</th><th></th>
             </tr>
             <tr className="table-filter-row">
+              {bulkDeleteMode && <th></th>}
               <th>
                 <select value={filters.status} onChange={event => setFilter('status', event.target.value)} aria-label="Filter Tacho status">
                   <option value="">All</option><option value="Linked">Linked</option><option value="Review">Review</option><option value="No Card">No Card</option><option value="Stale">Stale</option>
@@ -313,6 +378,7 @@ export function DriversMasterOperational() {
             {filtered.map(driver => {
               const status = tachoState(driver);
               return <tr key={driver.id} style={status === 'Review' ? { background: '#fffbeb' } : undefined}>
+                {bulkDeleteMode && <td><input type="checkbox" aria-label={`Select ${driver.displayName}`} checked={bulkDeleteIds.has(driver.id)} onChange={event => toggleBulkDeleteRow(driver.id, event.target.checked)} /></td>}
                 <td><span style={{ ...statusStyle(status), borderRadius: 999, padding: '3px 9px', fontWeight: 700, whiteSpace: 'nowrap' }}>{status}</span></td>
                 <td><strong>{driver.displayName}</strong>{driver.tachoName && driver.tachoName !== driver.displayName ? <div className="hint">Tacho: {driver.tachoName}</div> : null}</td>
                 <td>{driver.employeeNumber}</td>
@@ -331,7 +397,7 @@ export function DriversMasterOperational() {
                 <td><button onClick={() => openEdit(driver)}>Edit</button></td>
               </tr>;
             })}
-            {!loading && filtered.length === 0 && <tr><td colSpan={10} className="hint">No drivers match these column filters.</td></tr>}
+            {!loading && filtered.length === 0 && <tr><td colSpan={bulkDeleteMode ? 11 : 10} className="hint">No drivers match these column filters.</td></tr>}
           </tbody>
         </table>
       </div>
