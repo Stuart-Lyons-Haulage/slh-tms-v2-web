@@ -568,3 +568,45 @@
 @media (max-width: 1100px) {
   .smart-run-card-list { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
 }
+
+
+/* Route board: one compact horizontal row per run, ordered by earliest first collection. */
+.smart-run-card-list {
+  display: flex !important;
+  flex-direction: column;
+  gap: 5px;
+  padding: 6px;
+}
+.smart-run-card {
+  display: grid;
+  grid-template-columns: minmax(90px, .65fr) minmax(170px, 1.15fr) minmax(150px, 1fr) minmax(330px, 2.4fr) minmax(132px, .75fr);
+  align-items: center;
+  gap: 7px;
+  padding: 6px 8px;
+}
+.smart-run-card-title, .smart-run-time-row, .smart-run-route, .smart-run-allocation-grid, .smart-run-actions {
+  min-width: 0;
+  margin: 0;
+}
+.smart-run-card-title { display: grid; gap: 3px; }
+.smart-run-time-row { align-content: center; }
+.smart-run-route { grid-template-columns: 1fr; gap: 3px; }
+.smart-run-route span { padding: 3px 5px; }
+.smart-run-allocation-grid {
+  grid-template-columns: minmax(110px, 1.25fr) minmax(90px, 1fr) minmax(90px, 1fr) minmax(65px, .65fr);
+}
+.smart-run-actions { display: flex; flex-wrap: wrap; gap: 3px; }
+.smart-run-actions .smart-action { min-height: 28px; padding: 4px 7px; font-size: .66rem; }
+.smart-run-warning, .smart-run-fit { grid-column: 1 / -1; }
+.smart-run-warning { display: grid !important; gap: 2px; }
+.smart-run-warning strong { color: #8a5c00; }
+.dispatch-asset-typeahead-menu { z-index: 20; }
+.smart-run-card .dispatch-asset-typeahead-menu { max-height: 240px; overflow-y: auto; }
+@media (max-width: 850px) {
+  .smart-run-card { grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); }
+  .smart-run-card-title, .smart-run-time-row, .smart-run-route, .smart-run-allocation-grid, .smart-run-actions {
+    grid-column: 1 / -1;
+  }
+  .smart-run-route { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .smart-run-allocation-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
