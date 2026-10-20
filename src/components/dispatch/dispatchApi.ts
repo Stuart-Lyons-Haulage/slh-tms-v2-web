@@ -109,7 +109,7 @@ const DISPATCH_TACHO_TIMEOUT_MS = 180_000;
 // Supporting feeds must not hold the authoritative driver board hostage. They
 // still complete in the background at the HTTP layer, but the UI uses a
 // conservative snapshot if they exceed this render budget.
-const DISPATCH_SUPPORT_TIMEOUT_MS = 5_000;
+const DISPATCH_SUPPORT_TIMEOUT_MS = 25_000;
 
 function supportFeed<T>(promise: Promise<T>, fallback: T, onDegraded: () => void): Promise<T> {
   return new Promise(resolve => {
@@ -292,7 +292,7 @@ function authorityRun(load: LegacyDispatchLoad): DispatchRunDto {
     isBackload: Boolean(load.southbound),
     isOvernightMarket: false,
     isSouthbound: Boolean(load.southbound),
-    firstCollectionTimeUtc: collection?.plannedCollectionTimeUtc || collection?.plannedArrivalUtc || load.plannedStartUtc,
+    firstCollectionTimeUtc: collection?.plannedCollectionTimeUtc || collection?.latestAccessTimeUtc || collection?.plannedArrivalUtc || load.plannedStartUtc,
     deliveryCutoffTimeUtc: delivery?.deliveryCutoffTimeUtc,
     finalDeliveryPoint: delivery ? { name: cleanStopName(delivery.name) || delivery.name, latitude: delivery.latitude, longitude: delivery.longitude } : undefined,
     plannerNotes: load.plannerNotes,
@@ -312,7 +312,7 @@ function runDetail(run: DispatchRunDto, equipment: DispatchEquipmentWorkbench): 
   return {
     ...run,
     ...runMetrics(load),
-    firstCollectionTimeUtc: collection?.plannedCollectionTimeUtc || collection?.plannedArrivalUtc || load.plannedStartUtc,
+    firstCollectionTimeUtc: collection?.plannedCollectionTimeUtc || collection?.latestAccessTimeUtc || collection?.plannedArrivalUtc || load.plannedStartUtc,
     deliveryCutoffTimeUtc: delivery?.deliveryCutoffTimeUtc,
     finalDeliveryPoint: delivery ? {
       name: cleanStopName(delivery.name) || delivery.name,
@@ -503,6 +503,9 @@ export async function getSmartDispatch(
   const annotateAvailability = (items: DispatchDriverDto[]) => items.map(driver => {
     const legal = availableTimeByDriver.get(driver.driverId);
     if (!legal?.breachDetail || driver.blockedReason?.includes(legal.breachDetail)) return driver;
+    // Missing Tacho duty evidence leaves the start time unconfirmed, but must not
+    // be shown as zero remaining hours or mark the driver unavailable.
+    if (/No completed TachoMaster duty is available/i.test(legal.breachDetail)) return driver;
     return {
       ...driver,
       isBlocked: true,
