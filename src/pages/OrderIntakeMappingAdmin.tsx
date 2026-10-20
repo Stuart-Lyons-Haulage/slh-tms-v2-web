@@ -4,6 +4,7 @@ import { useAccessToken } from '../lib/auth';
 import { useApi } from '../lib/useApi';
 import { AutoApprovalFormats } from '../components/AutoApprovalFormats';
 import { SiteNameFixes } from '../components/SiteNameFixes';
+import { useCustomers } from '../lib/lookupQueries';
 
 type Mapping = {
   id: string;
@@ -50,7 +51,7 @@ function customerLabel(customer: Customer) { return `${customer.code} · ${custo
 
 export function OrderIntakeMappingAdmin() {
   const token = useAccessToken();
-  const customers = useApi(useCallback(async () => api.customers(await token()), [token]));
+  const customers = useCustomers();
   const [mode, setMode] = useState<'formats' | 'names' | 'mappings' | 'rules'>(() => new URLSearchParams(window.location.search).get('tab') === 'names' ? 'names' : 'formats');
   const [mappings, setMappings] = useState<Mapping[]>([]);
   const [rules, setRules] = useState<RouteRule[]>([]);

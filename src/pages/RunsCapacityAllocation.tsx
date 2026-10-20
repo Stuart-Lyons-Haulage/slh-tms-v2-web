@@ -12,6 +12,7 @@ import { useAccessToken } from "../lib/auth";
 import { signalPlanningChange, subscribePlanningChanges } from "../lib/planningEvents";
 import { displayRunReference } from "../lib/runDisplay";
 import { useApi } from "../lib/useApi";
+import { useVehicles, useDrivers, useTrailers, useSites } from "../lib/lookupQueries";
 import "../runs-capacity-allocation.css";
 import { allocateRun, getRunDispatch, getRunRoute, listRuns, updateRunOperational, updateRunStops } from '../api/runs';
 import { sendRunToSamsara } from '../components/dispatch/dispatchApi';
@@ -521,16 +522,16 @@ export function RunsCapacityAllocation() {
   const token = useAccessToken();
   const [date, setDate] = useState(localDate());
   const loads = useApi(useCallback(async () => listRuns(date, await token()), [date, token]));
-  const vehicles = useApi(useCallback(async () => api.vehicles(await token()), [token]));
-  const drivers = useApi(useCallback(async () => api.drivers(await token()), [token]));
-  const trailers = useApi(useCallback(async () => api.trailers(await token()), [token]));
-  const sites = useApi(useCallback(async () => api.sites(await token()), [token]));
+  const vehicles = useVehicles();
+  const drivers = useDrivers();
+  const trailers = useTrailers();
+  const sites = useSites();
   const rows = loads.data || [];
   const refreshLoads = loads.refresh;
-  const refreshVehicles = vehicles.refresh;
-  const refreshDrivers = drivers.refresh;
-  const refreshTrailers = trailers.refresh;
-  const refreshSites = sites.refresh;
+  const refreshVehicles = vehicles.refetch;
+  const refreshDrivers = drivers.refetch;
+  const refreshTrailers = trailers.refetch;
+  const refreshSites = sites.refetch;
 
   const refreshAll = useCallback(async () => {
     await Promise.all([refreshLoads(), refreshVehicles(), refreshDrivers(), refreshTrailers(), refreshSites()]);
@@ -538,7 +539,7 @@ export function RunsCapacityAllocation() {
 
   useEffect(() => subscribePlanningChanges(() => void refreshAll()), [refreshAll]);
 
-  const error = loads.error || vehicles.error || drivers.error || trailers.error || sites.error;
+  const error = loads.error || vehicles.error?.message || drivers.error?.message || trailers.error?.message || sites.error?.message;
   return <section>
     <div className="title-row"><div><p className="eyebrow">Run allocation</p><h2>Driver, vehicle, trailer & load capacity</h2><p className="intro">Capacity remains visible on the run card. Driver text is kept operational and concise.</p></div><button type="button" onClick={() => void refreshAll()}>Refresh allocation</button></div>
     <div className="planner-toolbar"><label>Plan date <input type="date" value={date} onChange={event => setDate(event.target.value)} /></label><span>{rows.length} run{rows.length === 1 ? "" : "s"}</span></div>

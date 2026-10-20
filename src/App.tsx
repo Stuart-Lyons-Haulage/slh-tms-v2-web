@@ -1,6 +1,8 @@
 import { Component, lazy, Suspense, type ErrorInfo, type ReactNode, useEffect, useState } from 'react';
 import { useIsAuthenticated, useMsal } from '@azure/msal-react';
 import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { queryClient } from './lib/queryClient';
 
 const PlannerEnhanced = lazy(() => import('./pages/PlannerEnhanced').then(module => ({ default: module.PlannerEnhanced })));
 const PalletPlanningControl = lazy(() => import('./pages/PalletPlanningControl').then(module => ({ default: module.PalletPlanningControl })));
@@ -255,5 +257,5 @@ class RouteErrorBoundary extends Component<{ children: ReactNode }, RouteErrorBo
 }
 
 export function App() {
-  return <BrowserRouter><Shell /></BrowserRouter>;
+  return <QueryClientProvider client={queryClient}><BrowserRouter><Shell /></BrowserRouter></QueryClientProvider>;
 }

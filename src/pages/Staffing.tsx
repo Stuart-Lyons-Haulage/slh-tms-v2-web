@@ -1,12 +1,12 @@
 import "../staffing.css";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { Navigate, useSearchParams } from "react-router-dom";
 import * as XLSX from "xlsx";
 import { request } from "../lib/api";
 import { useAccessToken } from "../lib/auth";
 import type { DriverAvailabilityItem, DriverAvailabilitySnapshot } from "../components/dispatch/types";
 import { DriverTimesheets } from "./DriverTimesheets";
-import { DriverAssignments } from "./Pages";
+const DriverAssignments = lazy(() => import("./Pages").then(m => ({ default: m.DriverAssignments })));
 import { useWorkingDate, workingDateLabel } from "../lib/workingDate";
 
 type ImportRow = { driverName: string; date: string; status: string; source: string; agencyName: string };
@@ -165,7 +165,7 @@ export function Staffing() {
     {section === "cover" && <DriverForecast />}
     {section === "availability" && <AvailabilitySection />}
     {section === "timesheets" && <DriverTimesheets embedded />}
-    {section === "history" && <DriverAssignments embedded />}
+    {section === "history" && <Suspense fallback={<div className="state">Loading assignments…</div>}><DriverAssignments embedded /></Suspense>}
   </section>;
 }
 

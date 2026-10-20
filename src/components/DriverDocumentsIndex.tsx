@@ -1,12 +1,10 @@
-import { useCallback, useMemo, useState } from 'react';
-import { api, type Driver } from '../lib/api';
-import { useAccessToken } from '../lib/auth';
-import { useApi } from '../lib/useApi';
+import { useMemo, useState } from 'react';
+import { type Driver } from '../lib/api';
 import { MasterDocuments } from './MasterDocuments';
+import { useDrivers } from '../lib/lookupQueries';
 
 export function DriverDocumentsIndex() {
-  const token = useAccessToken();
-  const drivers = useApi(useCallback(async () => api.drivers(await token()), [token]));
+  const drivers = useDrivers();
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<Driver>();
   const visible = useMemo(() => {

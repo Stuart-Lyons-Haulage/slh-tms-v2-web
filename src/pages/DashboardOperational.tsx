@@ -1,20 +1,14 @@
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { Link } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { intelligenceApi } from "../lib/intelligenceApi";
 import { api, request } from "../lib/api";
-import { useAccessToken } from "../lib/auth";
 import { todayIsoDate } from "../lib/dateUtils";
-import { useApi } from "../lib/useApi";
-import { startVisiblePolling } from "../lib/visiblePolling";
+import { useTmsQuery } from "../lib/useTmsQuery";
 import { countsBetween, pendingReviewCounts } from "../lib/pendingReviewCounts";
 import type { PastDatedResponse } from "../components/PastDatedOrders";
 import { useWorkingDate, workingDateLabel, shiftIsoDate } from "../lib/workingDate";
 import { getMasterDrivers, type MasterDriver } from "../api/master";
-
-/**
- * Today: what needs someone now, worst first, each line opening the exact screen.
- * It shows exceptions only; the detail lives on the screen the line links to.
- */
 
 type Tone = "red" | "amber" | "green" | "grey";
 type Attention = { key: string; tone: Tone; count: number; title: string; detail: string; to: string; action: string };
@@ -53,39 +47,73 @@ function documentExpiries(drivers: MasterDriver[] | undefined, today: string) {
 function plural(count: number, word: string) { return `${count} ${word}${count === 1 ? "" : "s"}`; }
 function words(count: number, word: string) { return plural(count, word).replace(/^\d+\s/, ""); }
 
+const FAST_INTERVAL = 60_000;
+const SLOW_INTERVAL = 300_000;
+
 export function DashboardOperational() {
-  const token = useAccessToken();
   const [date] = useWorkingDate();
   const today = todayIsoDate();
+  const queryClient = useQueryClient();
 
-  const readiness = useApi(useCallback(async () => intelligenceApi.readiness(date, await token()), [date, token]));
-  const pallets = useApi(useCallback(async () => request<PalletSummary>(`/api/v1/planning-control/pallets?date=${encodeURIComponent(date)}`, await token(), undefined, 40000), [date, token]));
-  const reviewCounts = useApi(useCallback(async () => countsBetween(await pendingReviewCounts(token), shiftIsoDate(today, -3), shiftIsoDate(today, 10)), [today, token]));
-  const changes = useApi(useCallback(async () => request<OrderChange[]>("/api/v1/order-changes?open=true", await token()), [token]));
-  const forecast = useApi(useCallback(async () => request<ForecastDay[]>(`/api/v1/driver-forecast?from=${date}&to=${date}`, await token(), undefined, 30000), [date, token]));
-  const messages = useApi(useCallback(async () => api.customerCommunications(await token(), "PendingReview", undefined, 100), [token]));
-  const sync = useApi(useCallback(async () => request<SyncState>("/api/v1/system-sync/state", await token(), undefined, 30000), [token]));
-  const compliance = useApi(useCallback(async () => request<ComplianceSummary>(`/api/v1/daily-compliance/report?date=${encodeURIComponent(today)}`, await token(), undefined, 90000), [today, token]));
-  const master = useApi(useCallback(async () => ({ drivers: await getMasterDrivers(await token()) }), [token]));
-  const pastDated = useApi(useCallback(async () => request<PastDatedResponse>("/api/v1/staging/queue/past-dated", await token()), [token]));
-  const comms = useApi(useCallback(async () => request<CommsSchedule>("/api/v1/customer-load-plans/schedule", await token(), undefined, 60000), [token]));
+  const readiness = useTmsQuery(
+    ["dashboard", "readiness", date] as const,
+    useCallback((t: string) => intelligenceApi.readiness(date, t), [date]),
+    { refetchInterval: FAST_INTERVAL },
+  );
+  const pallets = useTmsQuery(
+    ["dashboard", "pallets", date] as const,
+    useCallback((t: string) => request<PalletSummary>(`/api/v1/planning-control/pallets?date=${encodeURIComponent(date)}`, t, undefined, 40000), [date]),
+    { refetchInterval: FAST_INTERVAL },
+  );
+  const reviewCounts = useTmsQuery(
+    ["dashboard", "reviewCounts", today] as const,
+    useCallback(async (t: string) => countsBetween(await pendingReviewCounts(async () => t), shiftIsoDate(today, -3), shiftIsoDate(today, 10)), [today]),
+    { refetchInterval: FAST_INTERVAL },
+  );
+  const changes = useTmsQuery(
+    ["dashboard", "changes"] as const,
+    useCallback((t: string) => request<OrderChange[]>("/api/v1/order-changes?open=true", t), []),
+    { refetchInterval: FAST_INTERVAL },
+  );
+  const forecast = useTmsQuery(
+    ["dashboard", "forecast", date] as const,
+    useCallback((t: string) => request<ForecastDay[]>(`/api/v1/driver-forecast?from=${date}&to=${date}`, t, undefined, 30000), [date]),
+    { refetchInterval: SLOW_INTERVAL },
+  );
+  const messages = useTmsQuery(
+    ["dashboard", "messages"] as const,
+    useCallback((t: string) => api.customerCommunications(t, "PendingReview", undefined, 100), []),
+    { refetchInterval: FAST_INTERVAL },
+  );
+  const sync = useTmsQuery(
+    ["dashboard", "sync"] as const,
+    useCallback((t: string) => request<SyncState>("/api/v1/system-sync/state", t, undefined, 30000), []),
+    { refetchInterval: FAST_INTERVAL },
+  );
+  const compliance = useTmsQuery(
+    ["dashboard", "compliance", today] as const,
+    useCallback((t: string) => request<ComplianceSummary>(`/api/v1/daily-compliance/report?date=${encodeURIComponent(today)}`, t, undefined, 90000), [today]),
+    { refetchInterval: SLOW_INTERVAL },
+  );
+  const master = useTmsQuery(
+    ["dashboard", "master-drivers"] as const,
+    useCallback(async (t: string) => ({ drivers: await getMasterDrivers(t) }), []),
+    { refetchInterval: SLOW_INTERVAL },
+  );
+  const pastDated = useTmsQuery(
+    ["dashboard", "past-dated"] as const,
+    useCallback((t: string) => request<PastDatedResponse>("/api/v1/staging/queue/past-dated", t), []),
+    { refetchInterval: SLOW_INTERVAL },
+  );
+  const comms = useTmsQuery(
+    ["dashboard", "comms"] as const,
+    useCallback((t: string) => request<CommsSchedule>("/api/v1/customer-load-plans/schedule", t, undefined, 60000), []),
+    { refetchInterval: SLOW_INTERVAL },
+  );
 
-  const { refresh: refreshReadiness } = readiness;
-  const { refresh: refreshPallets } = pallets;
-  const { refresh: refreshReviewCounts } = reviewCounts;
-  const { refresh: refreshChanges } = changes;
-  const { refresh: refreshMessages } = messages;
-  const { refresh: refreshSync } = sync;
-  const { refresh: refreshForecast } = forecast;
-  const { refresh: refreshCompliance } = compliance;
-  const { refresh: refreshMaster } = master;
-  const { refresh: refreshComms } = comms;
-  const { refresh: refreshPastDated } = pastDated;
-  const refreshFast = useCallback(() => Promise.allSettled([refreshReadiness(), refreshPallets(), refreshReviewCounts(), refreshChanges(), refreshMessages(), refreshSync()]).then(() => undefined),
-    [refreshReadiness, refreshPallets, refreshReviewCounts, refreshChanges, refreshMessages, refreshSync]);
-  const refreshSlow = useCallback(() => Promise.allSettled([refreshForecast(), refreshCompliance(), refreshMaster(), refreshComms(), refreshPastDated()]).then(() => undefined), [refreshForecast, refreshCompliance, refreshMaster, refreshComms, refreshPastDated]);
-  useEffect(() => startVisiblePolling(refreshFast, 60_000), [refreshFast]);
-  useEffect(() => startVisiblePolling(refreshSlow, 300_000), [refreshSlow]);
+  const refreshAll = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+  }, [queryClient]);
 
   const items = useMemo(() => {
     const list: Attention[] = [];
@@ -149,18 +177,11 @@ export function DashboardOperational() {
     return list.sort((a, b) => toneRank[a.tone] - toneRank[b.tone]);
   }, [comms.data, pastDated.data, changes.data, compliance.data, date, forecast.data, master.data, messages.data, pallets.data, readiness.data, reviewCounts.data, sync.data, today]);
 
-  const checks: Array<[string, { error?: string }]> = [["Runs", readiness], ["Pallet Order", pallets], ["Orders", reviewCounts], ["Order changes", changes], ["Driver cover", forecast], ["Customer messages", messages], ["Data feeds", sync]];
+  const checks: Array<[string, { error?: Error | null }]> = [["Runs", readiness], ["Pallet Order", pallets], ["Orders", reviewCounts], ["Order changes", changes], ["Driver cover", forecast], ["Customer messages", messages], ["Data feeds", sync]];
   const failedChecks = checks.filter(([, item]) => item.error).map(([name]) => name);
   const failures = failedChecks.length;
   const serverDown = failures >= 5;
-  // Most failures at once means the server is briefly unavailable (usually restarting after
-  // an update): retry every 15 seconds until it answers, rather than waiting a minute.
-  useEffect(() => {
-    if (failures === 0) return;
-    const timer = globalThis.setTimeout(() => void refreshFast(), 15_000);
-    return () => globalThis.clearTimeout(timer);
-  }, [failures, refreshFast, readiness.error, pallets.error, reviewCounts.error]);
-  const loading = [readiness, pallets, reviewCounts, changes].some(item => item.loading && !item.data);
+  const loading = [readiness, pallets, reviewCounts, changes].some(item => item.isLoading);
   const summary = pallets.data?.summary;
   const ready = readiness.data;
   const day = forecast.data?.[0];
@@ -172,7 +193,7 @@ export function DashboardOperational() {
         <h1>Today</h1>
         <p>{redCount ? `${plural(redCount, "thing")} need action now.` : items.length ? "Nothing urgent. A few things to check." : loading ? "Checking…" : "All clear."} Plan figures are for {workingDateLabel(date)}.</p>
       </div>
-      <div className="ui-page-actions"><button type="button" onClick={() => void Promise.allSettled([refreshFast(), refreshSlow()])}>Refresh</button></div>
+      <div className="ui-page-actions"><button type="button" onClick={refreshAll}>Refresh</button></div>
     </div>
 
     <div className="ui-grid today-strip">

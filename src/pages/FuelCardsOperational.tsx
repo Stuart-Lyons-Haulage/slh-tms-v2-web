@@ -1,9 +1,9 @@
-import { useCallback, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, type Vehicle } from "../lib/api";
 import { useAccessToken } from "../lib/auth";
-import { useApi } from "../lib/useApi";
 import { MasterDataExportButton } from "../components/MasterDataExportButton";
+import { useVehicles } from "../lib/lookupQueries";
 
 function text(value: unknown) { return String(value ?? "").trim(); }
 function maskCard(value?: string) {
@@ -16,7 +16,7 @@ function maskCard(value?: string) {
 
 export function FuelCardsOperational() {
   const token = useAccessToken();
-  const vehicles = useApi(useCallback(async () => api.vehicles(await token()), [token]));
+  const vehicles = useVehicles();
   const [query, setQuery] = useState("");
   const [message, setMessage] = useState<string>();
   const [editing, setEditing] = useState<Vehicle>();
@@ -34,7 +34,7 @@ export function FuelCardsOperational() {
       const { id, ...payload } = editing;
       await api.updateVehicle(id, payload, await token());
       setEditing(undefined);
-      await vehicles.refresh();
+      await vehicles.refetch();
       setMessage("Fuel card register updated in the Live TMS Master Database.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Fuel card details could not be saved.");
@@ -50,7 +50,7 @@ export function FuelCardsOperational() {
       </div>
       <div className="title-actions">
         <span className="status approved">Live TMS Master Database</span>
-        <button onClick={() => void vehicles.refresh()}>Refresh</button><MasterDataExportButton section="fuel-cards" label="Fuel cards" rows={(vehicles.data || []) as unknown as Record<string, unknown>[]} />
+        <button onClick={() => void vehicles.refetch()}>Refresh</button><MasterDataExportButton section="fuel-cards" label="Fuel cards" rows={(vehicles.data || []) as unknown as Record<string, unknown>[]} />
         <Link className="button-like" to="/admin/fuel-card-migration">Legacy fuel migration</Link>
       </div>
     </div>
@@ -74,7 +74,7 @@ export function FuelCardsOperational() {
     </div>}
 
     {message && <p className="notice inline-notice">{message}</p>}
-    {vehicles.error && <p className="notice inline-notice">{vehicles.error}</p>}
+    {vehicles.error && <p className="notice inline-notice">{vehicles.error.message}</p>}
 
     <div className="planner-toolbar">
       <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search vehicle, card, PIN or notes…" />
