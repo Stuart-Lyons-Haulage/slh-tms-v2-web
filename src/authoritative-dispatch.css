@@ -449,3 +449,122 @@
 .dispatch-driver-pool .smart-dispatch-row.collapsed .smart-driver-heading { align-items: center; }
 .dispatch-pool-tools { display: flex; align-items: center; gap: 10px; }
 .dispatch-pool-tools .smart-action.ghost { padding: 4px 10px; font-size: .74rem; }
+
+/* Dispatch layout refinements: keep controls, remove the title strip, and
+   surface first-site access and driver readiness in compact badges. */
+.smart-dispatch-board > .smart-dispatch-header {
+  min-height: 0 !important;
+  padding: 4px 12px !important;
+  justify-content: flex-end;
+}
+.smart-dispatch-board > .smart-dispatch-header .smart-dispatch-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.dispatch-driver-pool-help { display: none; }
+
+.smart-driver-identity {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.smart-driver-detail-bubbles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+.smart-driver-detail-bubbles small {
+  display: inline-flex !important;
+  align-items: center;
+  margin: 0 !important;
+  padding: 2px 6px;
+  border: 1px solid #d5e1e8;
+  border-radius: 999px;
+  background: #f4f8fa;
+  color: #34566a;
+  font-size: .62rem;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+.smart-driver-detail-bubbles .smart-driver-skill-bubble {
+  border-color: #c8e2d2;
+  background: #eff8f2;
+  color: #17633b;
+  font-weight: 800;
+}
+.smart-driver-detail-bubbles .smart-driver-start-bubble {
+  border-color: #b9d8ed;
+  background: #eff7fc;
+  color: #1f5675;
+  font-weight: 800;
+}
+.smart-driver-detail-bubbles .smart-driver-code-bubble {
+  font-weight: 800;
+}
+
+.smart-run-card-list {
+  grid-template-columns: repeat(auto-fill, minmax(205px, 1fr));
+  gap: 6px;
+  padding: 6px;
+}
+.smart-run-card {
+  padding: 6px;
+  border-radius: 8px;
+}
+.smart-run-card-title {
+  align-items: flex-start;
+  gap: 4px;
+}
+.smart-run-card-title strong { font-size: .78rem; }
+.smart-run-card-title span {
+  max-width: 65%;
+  text-align: right;
+  line-height: 1.15;
+}
+.smart-run-card-title span.ready { color: #245574; }
+.smart-run-card-title span.sent { color: #145c36; }
+.smart-run-card-title span.needs-resend { color: #8a5c00; }
+.smart-run-time-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  margin: 4px 0;
+}
+.smart-run-time-bubble {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border: 1px solid #bfe2cd;
+  border-radius: 999px;
+  background: #edf9f2;
+  color: #145c36;
+  font-size: .7rem;
+  font-weight: 900;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.smart-run-distance {
+  color: #637987;
+  font-size: .62rem;
+}
+.smart-run-route {
+  gap: 4px;
+}
+.smart-run-route span {
+  padding: 4px 5px;
+  font-size: .66rem;
+}
+.smart-run-card small {
+  margin-top: 4px;
+  font-size: .62rem;
+}
+.smart-run-allocation-grid {
+  grid-template-columns: minmax(110px, 1.3fr) repeat(2, minmax(85px, 1fr)) minmax(72px, .7fr);
+  gap: 4px;
+  margin-top: 6px;
+}
+@media (max-width: 1100px) {
+  .smart-run-card-list { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
+}
