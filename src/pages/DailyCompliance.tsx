@@ -3,7 +3,7 @@ import { useWorkingDate } from "../lib/workingDate";
 import { useSearchParams } from "react-router-dom";
 import { api, request, type Driver } from "../lib/api";
 import { useAccessToken } from "../lib/auth";
-import { useApi } from "../lib/useApi";
+import { useTmsQuery } from "../lib/useTmsQuery";
 import { useDrivers } from "../lib/lookupQueries";
 
 type ComplianceRow = {
@@ -94,7 +94,10 @@ export function DailyCompliance() {
   const [search, setSearch] = useState("");
   const [busyKey, setBusyKey] = useState<string>();
   const [actionError, setActionError] = useState<string>();
-  const report = useApi(useCallback(async () => request<ComplianceReport>(`/api/v1/daily-compliance/report?date=${date}`, await token(), undefined, 90000), [date, token]));
+  const report = useTmsQuery<ComplianceReport>(
+    ['dailyCompliance', 'report', date] as const,
+    useCallback((t: string) => request<ComplianceReport>(`/api/v1/daily-compliance/report?date=${date}`, t, undefined, 90000), [date]),
+  );
   const drivers = useDrivers();
 
   const canonicalRows = useMemo(() => {
@@ -131,7 +134,7 @@ export function DailyCompliance() {
     setBusyKey(key); setActionError(undefined);
     try {
       await request("/api/v1/daily-compliance/checks", await token(), { method: "POST", body: JSON.stringify({ date, assetType: row.assetType, assetId: row.assetId, driverId: row.driverId, kind, note: note || null }) });
-      await report.refresh();
+      await report.refetch();
     } catch (exception) { setActionError(exception instanceof Error ? exception.message : "Could not record that."); }
     finally { setBusyKey(undefined); }
   }
@@ -181,8 +184,8 @@ export function DailyCompliance() {
       <label>Search<input value={search} onChange={event => setSearch(event.target.value)} placeholder="Driver, vehicle or run" /></label>
     </div>
 
-    {(report.loading || drivers.isLoading) && !report.data && <div className="ui-empty">Matching Fleetio checks to Tacho and tracking…</div>}
-    {report.error && <p className="ui-error">{report.error}</p>}
+    {(report.isLoading || drivers.isLoading) && !report.data && <div className="ui-empty">Matching Fleetio checks to Tacho and tracking…</div>}
+    {report.error && <p className="ui-error">{report.error.message}</p>}
     {actionError && <p className="ui-error">{actionError}</p>}
 
     {report.data && <section className="ui-card">

@@ -1,7 +1,7 @@
-import { useCallback, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { api, type MarketContact } from "../lib/api";
 import { useAccessToken } from "../lib/auth";
-import { useApi } from "../lib/useApi";
+import { useMarketContacts } from "../lib/lookupQueries";
 import { ALL_MARKETS, marketRowsForTab, marketTabs } from "./MarketsMasterLogic";
 import { MasterDataExportButton } from "../components/MasterDataExportButton";
 
@@ -18,7 +18,7 @@ function marketTabLabel(market: string) { return market === "Sender" ? "Senders"
 
 export function MarketsMasterClean() {
   const token = useAccessToken();
-  const contacts = useApi(useCallback(async () => api.marketContacts(await token()), [token]));
+  const contacts = useMarketContacts();
   const [activeMarket, setActiveMarket] = useState(ALL_MARKETS);
   const [editing, setEditing] = useState<MarketContact>();
   const [draft, setDraft] = useState<MarketContact>();
@@ -49,7 +49,7 @@ export function MarketsMasterClean() {
       await api.updateMarketContact(id, payload, await token());
       setEditing(undefined);
       setDraft(undefined);
-      await contacts.refresh();
+      await contacts.refetch();
       setMessage("Market details saved to the SQL master.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Market details could not be saved.");
@@ -69,13 +69,13 @@ export function MarketsMasterClean() {
         <span><strong>{summary.missingStand}</strong> stall/stand to enrich</span>
         <span><strong>{summary.missingSalesman}</strong> salesman to enrich</span>
       </div>
-      {contacts.error && <p className="notice inline-notice">Market quality check: {contacts.error}</p>}
+      {contacts.error && <p className="notice inline-notice">Market quality check: {contacts.error.message}</p>}
     </section>
 
     <section>
       <div className="title-row">
         <div><p className="eyebrow">Master data</p><h1>Markets &amp; senders</h1></div>
-        <div className="title-actions"><button onClick={() => void contacts.refresh()}>Refresh</button><MasterDataExportButton section="markets" label="Markets" rows={(rows) as unknown as Record<string, unknown>[]} /></div>
+        <div className="title-actions"><button onClick={() => void contacts.refetch()}>Refresh</button><MasterDataExportButton section="markets" label="Markets" rows={(rows) as unknown as Record<string, unknown>[]} /></div>
       </div>
       <p className="intro">Market orders use this list for sellers, stall details and salesman. Senders are maintained independently and can be used across markets. Choose a market below to work with one list at a time.</p>
 
@@ -102,10 +102,10 @@ export function MarketsMasterClean() {
         })}
       </div>
 
-      {contacts.loading && <div className="state">Loading market records…</div>}
-      {!contacts.loading && contacts.error && <div className="state error">{contacts.error}</div>}
-      {!contacts.loading && !contacts.error && visibleRows.length === 0 && <div className="state">No records are available for this market.</div>}
-      {!contacts.loading && !contacts.error && visibleRows.length > 0 && <div className="master-table-wrap">
+      {contacts.isLoading && <div className="state">Loading market records…</div>}
+      {!contacts.isLoading && contacts.error && <div className="state error">{contacts.error.message}</div>}
+      {!contacts.isLoading && !contacts.error && visibleRows.length === 0 && <div className="state">No records are available for this market.</div>}
+      {!contacts.isLoading && !contacts.error && visibleRows.length > 0 && <div className="master-table-wrap">
         <table className="master-table">
           <thead><tr>{activeMarket === ALL_MARKETS && <th>Market</th>}<th>{activeMarket === "Sender" ? "Sender" : "Seller"}</th><th>Stall / stand</th><th>Salesman</th><th>Active</th><th>Action</th></tr></thead>
           <tbody>{visibleRows.map(row => <tr key={row.id}>{activeMarket === ALL_MARKETS && <td>{row.market}</td>}<td>{row.name || "—"}</td><td>{row.standOrLocation || "—"}</td><td>{row.salesman || "—"}</td><td>{row.active ? "Yes" : "No"}</td><td><button type="button" onClick={() => { setEditing(row); setDraft({ ...row }); setMessage(undefined); }}>Edit</button></td></tr>)}</tbody>

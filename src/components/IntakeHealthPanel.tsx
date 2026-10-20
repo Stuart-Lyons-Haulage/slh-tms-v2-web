@@ -1,7 +1,6 @@
 import { useCallback } from "react";
 import { request } from "../lib/api";
-import { useAccessToken } from "../lib/auth";
-import { useApi } from "../lib/useApi";
+import { useTmsQuery } from "../lib/useTmsQuery";
 
 type IntakeHealth = {
   fromUtc: string;
@@ -30,8 +29,7 @@ function time(value?: string) {
 }
 
 export function IntakeHealthPanel() {
-  const token = useAccessToken();
-  const health = useApi(useCallback(async () => request<IntakeHealth>("/api/v1/intake-health", await token()), [token]));
+  const health = useTmsQuery<IntakeHealth>(['intake-health'] as const, useCallback((t: string) => request<IntakeHealth>("/api/v1/intake-health", t), []));
 
   return <section className="panel" style={{ marginBottom: 18 }}>
     <div className="title-row" style={{ alignItems: "end" }}>
@@ -40,10 +38,10 @@ export function IntakeHealthPanel() {
         <h2 style={{ marginBottom: 4 }}>Order intake health</h2>
         <p className="hint" style={{ marginBottom: 0 }}>Shows retained inbound evidence, staged orders and anything needing mapping attention.</p>
       </div>
-      <button type="button" onClick={() => void health.refresh()} disabled={health.loading}>{health.loading ? "Checking…" : "Refresh health"}</button>
+      <button type="button" onClick={() => void health.refetch()} disabled={health.isLoading}>{health.isLoading ? "Checking…" : "Refresh health"}</button>
     </div>
 
-    {health.error && <div className="state error" style={{ marginTop: 12 }}>{health.error}</div>}
+    {health.error && <div className="state error" style={{ marginTop: 12 }}>{health.error.message}</div>}
     {health.data && <>
       <div className="review-metrics" style={{ marginTop: 14 }}>
         <article><span>Email evidence</span><strong>{health.data.evidenceEmails}</strong><small>Retained inbound messages</small></article>

@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { api, request, type DriverTimesheetDriver } from '../lib/api';
 import { useAccessToken } from '../lib/auth';
-import { useApi } from '../lib/useApi';
+import { useTmsQuery } from '../lib/useTmsQuery';
 import type { DriverAvailabilitySnapshot } from '../components/dispatch/types';
 
 type TimesheetSection = 'Employed' | 'Agency';
@@ -148,7 +148,7 @@ export function DriverTimesheets({ embedded = false }: { embedded?: boolean }) {
   const [busyReview, setBusyReview] = useState<string>();
   const [staffingByDate, setStaffingByDate] = useState<Record<string, DriverAvailabilitySnapshot>>({});
 
-  const report = useApi(useCallback(async () => api.driverTimesheets(from, to, await token()), [from, to, token]));
+  const report = useTmsQuery(['driverTimesheets', from, to] as const, useCallback((t: string) => api.driverTimesheets(from, to, t), [from, to]));
   useEffect(() => {
     let cancelled = false;
     const dates: string[] = [];
@@ -163,7 +163,7 @@ export function DriverTimesheets({ embedded = false }: { embedded?: boolean }) {
     setBusyReview(key);
     try {
       await api.reviewTimesheetNightOut({ driverId: driver.driverId, date: day.date, dutyStartUtc: day.tachoStartUtc, decision, reason: `Timesheet review for ${day.date}` }, await token());
-      await report.refresh();
+      await report.refetch();
     } finally {
       setBusyReview(undefined);
     }
@@ -274,7 +274,7 @@ export function DriverTimesheets({ embedded = false }: { embedded?: boolean }) {
       <label>To <input type="date" min={from} value={to} onChange={event => setTo(event.target.value)} /></label>
       <button onClick={() => setWeek(1)}>Next week →</button>
       <button onClick={resetToCurrentWeek}>Current Wed–Tue</button>
-      <button onClick={() => void report.refresh()}>Refresh evidence</button>
+      <button onClick={() => void report.refetch()}>Refresh evidence</button>
     </div>
 
     <div className="timesheet-section-tabs" role="tablist" aria-label="Timesheet driver type">
@@ -304,8 +304,8 @@ export function DriverTimesheets({ embedded = false }: { embedded?: boolean }) {
       <label className="timesheet-review-check"><input type="checkbox" checked={reviewOnly} onChange={event => setReviewOnly(event.target.checked)} /> Needs review only</label>
     </div>
 
-    {report.loading ? <div className="state">Building TachoMaster and RoadTech timesheet evidence…</div>
-      : report.error ? <div className="state error">{report.error}</div>
+    {report.isLoading ? <div className="state">Building TachoMaster and RoadTech timesheet evidence…</div>
+      : report.error ? <div className="state error">{report.error.message}</div>
       : <>
           <SectionSummary drivers={drivers} section={section} />
           {section === 'Agency' && drivers.length > 0 && <div className="timesheet-agency-summary">

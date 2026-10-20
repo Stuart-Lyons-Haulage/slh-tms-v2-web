@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiBaseUrl, request } from "../lib/api";
 import { useAccessToken } from "../lib/auth";
-import { useApi } from "../lib/useApi";
+import { useTmsQuery } from "../lib/useTmsQuery";
 
 type ScheduleCustomer = {
   customerCode: string;
@@ -40,7 +40,7 @@ function statusChip(status?: string, hold?: string) {
  */
 export function CustomerCommsSchedule() {
   const token = useAccessToken();
-  const data = useApi(useCallback(async () => request<ScheduleResponse>("/api/v1/customer-load-plans/schedule", await token(), undefined, 60000), [token]));
+  const data = useTmsQuery<ScheduleResponse>(['customer-comms', 'schedule'] as const, useCallback((t: string) => request<ScheduleResponse>("/api/v1/customer-load-plans/schedule", t, undefined, 60000), []));
   const [draft, setDraft] = useState<ScheduleResponse>();
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string>();
@@ -69,7 +69,7 @@ export function CustomerCommsSchedule() {
       link.remove();
       globalThis.setTimeout(() => URL.revokeObjectURL(url), 30_000);
       setMessage(`${customer.customerName} ${kind === "plan" ? "load plan" : "delivery times"} ready: open the downloaded email to send it from Outlook.`);
-      void data.refresh();
+      void data.refetch();
     } catch (exception) { setMessage(exception instanceof Error ? exception.message : "Could not build the email."); }
     finally { setOpening(undefined); }
   }
@@ -100,7 +100,7 @@ export function CustomerCommsSchedule() {
     void save({ ...draft, customers: draft.customers.map(item => item.customerCode === code ? { ...item, [field]: value } : item) });
   }
 
-  if (data.error) return <p className="ui-error">{data.error}</p>;
+  if (data.error) return <p className="ui-error">{data.error.message}</p>;
   if (!draft) return <div className="ui-empty">Loading the send schedule…</div>;
   return <section className="ui-card">
     <div className="ui-card-head">
