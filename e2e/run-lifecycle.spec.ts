@@ -295,6 +295,7 @@ async function installApi(page: Page, state: State) {
 }
 
 test('planner → dispatch → geofence arrival/departure → completion stays coherent', async ({ page }) => {
+  page.on('pageerror', error => console.error('E2E browser page error:', error.stack || error.message));
   const state: State = { runCreated: false, allocatedPallets: 0, driverAssigned: false, vehicleAssigned: false, trailerAssigned: false, geofenceStage: 0, planningDate: isoDate() };
   await installApi(page, state);
 
@@ -310,7 +311,8 @@ test('planner → dispatch → geofence arrival/departure → completion stays c
   expect(state.runCreated).toBe(true);
   expect(state.allocatedPallets).toBe(4);
 
-  await page.getByRole('link', { name: 'Pallet Order' }).click();
+  await page.getByRole('link', { name: 'Pallet Order', exact: true }).click();
+  await expect(page).toHaveURL(/\/pallet-control(?:\?.*)?$/);
   await expect(page.getByRole('heading', { name: 'Pallet Control' })).toBeVisible();
   await expect(page.getByTitle('Hall Hunter → Leyland: 4 ordered, 4 planned, 0 to plan').first()).toBeVisible();
 

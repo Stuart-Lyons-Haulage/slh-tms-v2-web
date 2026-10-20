@@ -1,12 +1,14 @@
+import { QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter, Link, Route, Routes } from 'react-router-dom';
 import { DriverDispatch } from './pages/DriverDispatch';
 import { PlannerEnhanced } from './pages/PlannerEnhanced';
 import { LiveRunsBoard } from './pages/LiveRunsBoard';
 import { PalletPlanningControl } from './pages/PalletPlanningControl';
 import { WorkingDateControl } from './components/WorkingDateControl';
+import { queryClient } from './lib/queryClient';
 
 export function E2eHarness() {
-  return <BrowserRouter>
+  return <QueryClientProvider client={queryClient}><BrowserRouter>
     <nav aria-label="E2E workflow navigation" style={{ display: 'flex', gap: 12, padding: 12 }}>
       <Link to="/">Planner</Link>
       <Link to="/pallet-control">Pallet Order</Link>
@@ -21,5 +23,5 @@ export function E2eHarness() {
       <Route path="/driver-dispatch" element={<DriverDispatch />} />
       <Route path="/operations-wallboard" element={<LiveRunsBoard />} />
     </Routes>
-  </BrowserRouter>;
+  </BrowserRouter></QueryClientProvider>;
 }
