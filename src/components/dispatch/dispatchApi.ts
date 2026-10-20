@@ -204,7 +204,8 @@ function authorityRun(load: LegacyDispatchLoad): DispatchRunDto {
     isBackload: Boolean(load.southbound),
     isOvernightMarket: false,
     isSouthbound: Boolean(load.southbound),
-    firstCollectionTimeUtc: collection?.latestAccessTimeUtc || collection?.plannedArrivalUtc || load.plannedStartUtc,
+    firstCollectionTimeUtc: collection?.plannedCollectionTimeUtc || collection?.plannedArrivalUtc || load.plannedStartUtc,
+    deliveryCutoffTimeUtc: delivery?.deliveryCutoffTimeUtc,
     finalDeliveryPoint: delivery ? { name: cleanStopName(delivery.name) || delivery.name, latitude: delivery.latitude, longitude: delivery.longitude } : undefined,
     plannerNotes: load.plannerNotes,
     trailerSwapRequested: /(?:trailer\\s*(?:swap|change)|swap\\s*trailer|drop\\s*trailer|pick\\s*up\\s+(?:a\\s*)?(?:different|new)\\s*trailer)/i.test(load.plannerNotes || ""),
@@ -223,7 +224,8 @@ function runDetail(run: DispatchRunDto, equipment: DispatchEquipmentWorkbench): 
   return {
     ...run,
     ...runMetrics(load),
-    firstCollectionTimeUtc: collection?.latestAccessTimeUtc || collection?.plannedArrivalUtc || load.plannedStartUtc,
+    firstCollectionTimeUtc: collection?.plannedCollectionTimeUtc || collection?.plannedArrivalUtc || load.plannedStartUtc,
+    deliveryCutoffTimeUtc: delivery?.deliveryCutoffTimeUtc,
     finalDeliveryPoint: delivery ? {
       name: cleanStopName(delivery.name) || delivery.name,
       latitude: delivery.latitude,
