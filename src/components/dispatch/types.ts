@@ -126,6 +126,7 @@ export interface DispatchRunDto {
   isOvernightMarket: boolean;
   isSouthbound: boolean;
   firstCollectionTimeUtc?: string;
+  deliveryCutoffTimeUtc?: string;
   finalDeliveryPoint?: DispatchCollectionPointDto;
   /** Straight-line miles from Barnham to the furthest stop. */
   furthestMiles?: number;
@@ -193,6 +194,8 @@ export interface LegacyDispatchStop {
   longitude?: number;
   plannedArrivalUtc?: string;
   latestAccessTimeUtc?: string;
+  plannedCollectionTimeUtc?: string;
+  deliveryCutoffTimeUtc?: string;
   plannerNote?: string;
 }
 
