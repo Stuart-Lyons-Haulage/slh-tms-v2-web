@@ -1,7 +1,6 @@
 import { useCallback } from "react";
 import { request } from "../lib/api";
-import { useAccessToken } from "../lib/auth";
-import { useApi } from "../lib/useApi";
+import { useTmsQuery } from "../lib/useTmsQuery";
 
 type Preference = { customer: string; destination: string; preferredRun: string; pattern: string; confidence: number; samples: number; typicalPallets: number; weekdays: string[] };
 type Insights = { generatedAtUtc: string; days: number; decisions: number; customers: number; consistency: number; preferences: Preference[] };
@@ -12,13 +11,12 @@ type Insights = { generatedAtUtc: string; days: number; decisions: number; custo
  * are shown as hints in Pallet Order, nothing is applied automatically.
  */
 export function PlannerLearningCard() {
-  const token = useAccessToken();
-  const insights = useApi(useCallback(async () => request<Insights>("/api/v1/planner/learning?days=90", await token()), [token]));
+  const insights = useTmsQuery<Insights>(['planner', 'learning'] as const, useCallback((t: string) => request<Insights>("/api/v1/planner/learning?days=90", t), []));
   const data = insights.data && Array.isArray(insights.data.preferences) ? insights.data : undefined;
 
   return <details className="panel pallet-control-learning" style={{ marginTop: 16 }}>
     <summary><strong>What the planner has learned</strong>{data ? ` · ${data.preferences.length} usual patterns from ${data.decisions} decisions · ${data.consistency}% consistent` : ""}</summary>
-    {insights.loading && !data ? <p className="hint">Loading…</p>
+    {insights.isLoading && !data ? <p className="hint">Loading…</p>
       : !data || data.decisions === 0 ? <p className="hint">Nothing learned yet. As you put orders on runs, the TMS learns each customer's usual run and typical size, then shows it as a hint when the same work comes round. Give it a few days of planning.</p>
       : <>
         <p className="hint">From the last {data.days} days: {data.decisions} run placements across {data.customers} customer/destination combinations. The pattern is followed {data.consistency}% of the time. These show as 💡 hints when you plan.</p>

@@ -1,8 +1,7 @@
 import { useCallback } from "react";
 import { Link } from "react-router-dom";
 import { request } from "../lib/api";
-import { useAccessToken } from "../lib/auth";
-import { useApi } from "../lib/useApi";
+import { useTmsQuery } from "../lib/useTmsQuery";
 
 type SageHrDriverLeaveItem = {
   date: string;
@@ -46,8 +45,7 @@ function dateLabel(value: string) {
 }
 
 export function SageHrLeavePanel({ date = todayIsoDate(), days = 5, maxItems = 10, compact = false }: SageHrLeavePanelProps) {
-  const token = useAccessToken();
-  const leave = useApi(useCallback(async () => request<SageHrDriverLeaveResponse>(`/api/v1/integrations/sage-hr/driver-leave?from=${encodeURIComponent(date)}&days=${days}`, await token(), undefined, 30000), [date, days, token]));
+  const leave = useTmsQuery<SageHrDriverLeaveResponse>(['sage-hr', 'leave', date, days] as const, useCallback((t: string) => request<SageHrDriverLeaveResponse>(`/api/v1/integrations/sage-hr/driver-leave?from=${encodeURIComponent(date)}&days=${days}`, t, undefined, 30000), [date, days]));
   const items = leave.data?.items || [];
   const todayItems = items.filter(item => item.date === date);
   const upcoming = items.filter(item => item.date !== date);
@@ -62,10 +60,10 @@ export function SageHrLeavePanel({ date = todayIsoDate(), days = 5, maxItems = 1
       </div>
       <div className="dashboard-panel-actions">
         <Link to="/driver-dispatch">View all →</Link>
-        {!compact && <button type="button" onClick={() => leave.refresh()} disabled={leave.loading}>Refresh</button>}
+        {!compact && <button type="button" onClick={() => void leave.refetch()} disabled={leave.isLoading}>Refresh</button>}
       </div>
     </div>
-    {leave.error && <p className="notice inline-notice">Sage HR leave could not refresh: {leave.error}</p>}
+    {leave.error && <p className="notice inline-notice">Sage HR leave could not refresh: {leave.error.message}</p>}
     {leave.data && !leave.data.configured && <p className="notice inline-notice">{leave.data.message}</p>}
     {leave.data && !compact && <p className="hint">{leave.data.message}</p>}
     {compact ? <div className="dashboard-leave-summary-row">
@@ -91,6 +89,6 @@ export function SageHrLeavePanel({ date = todayIsoDate(), days = 5, maxItems = 1
         <small>{item.policyName || "Leave"}{!compact && item.details ? ` · ${item.details}` : ""}{!compact && !item.linkedToDriverMaster ? " · not linked to Driver Master" : ""}</small>
         <b>→</b>
       </Link>)}
-    </div> : !leave.loading && <p className="dashboard-empty">No employed drivers are marked off in Sage HR for this window.</p>}
+    </div> : !leave.isLoading && <p className="dashboard-empty">No employed drivers are marked off in Sage HR for this window.</p>}
   </section>;
 }

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { request } from '../lib/api';
-import { intelligenceApi } from '../lib/intelligenceApi';
+import { intelligenceApi, type FreshnessResponse } from '../lib/intelligenceApi';
 import { useAccessToken } from '../lib/auth';
-import { useApi } from '../lib/useApi';
+import { useTmsQuery } from '../lib/useTmsQuery';
 import { PlanningWipe } from './PlanningWipe';
 import { SageCalendarLink } from './SageCalendarLink';
 import { SamsaraReconcile } from './SamsaraReconcile';
@@ -104,8 +104,8 @@ export function AdminIntegrationSyncControls() {
   const [samsara, setSamsara] = useState<SamsaraStatus>();
   const [samsaraSites, setSamsaraSites] = useState<SamsaraSiteAddressStatus>();
   const [runtimeStatus, setRuntimeStatus] = useState<IntegrationRuntimeStatus>();
-  const feedHealth = useApi(useCallback(async () => intelligenceApi.freshness(await token()), [token]));
-  const driverMasterHealth = useApi(useCallback(async () => request<DriverMasterHealth>('/api/v1/health/driver-master', await token()), [token]));
+  const feedHealth = useTmsQuery<FreshnessResponse>(['system-health', 'feed-freshness'] as const, useCallback((t: string) => intelligenceApi.freshness(t), []));
+  const driverMasterHealth = useTmsQuery<DriverMasterHealth>(['system-health', 'driver-master'] as const, useCallback((t: string) => request<DriverMasterHealth>('/api/v1/health/driver-master', t), []));
 
   const loadState = async () => {
     setRoadTechError(undefined);
@@ -130,7 +130,7 @@ export function AdminIntegrationSyncControls() {
 
   useEffect(() => { void loadState(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    const refresh = () => { void loadState(); void feedHealth.refresh(); void driverMasterHealth.refresh(); };
+    const refresh = () => { void loadState(); void feedHealth.refetch(); void driverMasterHealth.refetch(); };
     const interval = window.setInterval(refresh, 60_000);
     const onFocus = () => refresh();
     const onVisibility = () => { if (document.visibilityState === 'visible') refresh(); };
@@ -141,7 +141,7 @@ export function AdminIntegrationSyncControls() {
       window.removeEventListener('focus', onFocus);
       document.removeEventListener('visibilitychange', onVisibility);
     };
-  }, [feedHealth.refresh, driverMasterHealth.refresh]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [feedHealth.refetch, driverMasterHealth.refetch]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const force = async (provider: 'tacho' | 'sage' | 'fleetio' | 'all') => {
     setBusy(provider);
@@ -172,8 +172,8 @@ export function AdminIntegrationSyncControls() {
       }
       setMessage(rows.map(item => `${item.provider}: ${item.message}`).join(' · '));
       await loadState();
-      await feedHealth.refresh();
-      await driverMasterHealth.refresh();
+      await feedHealth.refetch();
+      await driverMasterHealth.refetch();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Force refresh failed.');
     } finally {
@@ -188,7 +188,7 @@ export function AdminIntegrationSyncControls() {
       const result = await request<{ message: string }>('/api/v1/health/intake/poll', await token(), { method: 'POST' });
       setMessage(result.message);
       await loadState();
-      await feedHealth.refresh();
+      await feedHealth.refetch();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Graph mailbox poll could not be queued.');
     } finally {
@@ -239,7 +239,7 @@ export function AdminIntegrationSyncControls() {
         <p>Every outside system the TMS reads from, whether it is up to date, and what it affects. Updates are automatic; refresh only if something looks stuck.</p>
       </div>
       <div className="ui-page-actions">
-        <button type="button" onClick={() => { void loadState(); void feedHealth.refresh(); void driverMasterHealth.refresh(); }}>Check now</button>
+        <button type="button" onClick={() => { void loadState(); void feedHealth.refetch(); void driverMasterHealth.refetch(); }}>Check now</button>
         <button type="button" className="primary" onClick={() => void force('all')} disabled={Boolean(busy)}>{busy === 'all' ? 'Refreshing all…' : 'Refresh all'}</button>
       </div>
     </div>
@@ -247,7 +247,7 @@ export function AdminIntegrationSyncControls() {
 
     <section className="ui-card">
       <div className="ui-card-head"><h2>Data feeds</h2>{feedHealth.data && <span className={`ui-chip ${attention ? 'amber' : 'green'}`}>{attention ? `${attention} need attention` : 'All current'}</span>}</div>
-      {feedHealth.error && <p className="ui-error">{feedHealth.error}</p>}
+      {feedHealth.error && <p className="ui-error">{feedHealth.error.message}</p>}
       <div className="ui-table-wrap"><table className="ui-table">
         <thead><tr><th>Feed</th><th>Status</th><th>Last received</th><th>Affects</th><th /></tr></thead>
         <tbody>{sources.map(feed => {
@@ -289,12 +289,12 @@ export function AdminIntegrationSyncControls() {
       </article>
       <article className="ui-card">
         <div className="ui-card-head"><h2>Driver Master identity</h2>{driverMasterHealth.data && <span className={`ui-chip ${driverMasterHealth.data.status === 'healthy' ? 'green' : driverMasterHealth.data.status === 'attention' ? 'amber' : ''}`}>{driverMasterHealth.data.status === 'healthy' ? 'Clear' : driverMasterHealth.data.status === 'attention' ? 'Needs attention' : 'Review'}</span>}</div>
-        {driverMasterHealth.error && <p className="ui-error">{driverMasterHealth.error}</p>}
+        {driverMasterHealth.error && <p className="ui-error">{driverMasterHealth.error.message}</p>}
         {driverMasterHealth.data ? <>
           <p className="hint">{driverMasterHealth.data.message}</p>
           <p className="hint">{driverMasterHealth.data.activeDrivers} active drivers · {driverMasterHealth.data.activeWithMember} matched to a Tacho member · {driverMasterHealth.data.activeWithCard} with card evidence.</p>
           {(driverMasterHealth.data.duplicateMemberGroups > 0 || driverMasterHealth.data.duplicateCardGroups > 0) && <p className="ui-error">Duplicate Tacho identity: {driverMasterHealth.data.duplicateMemberGroups} member match group{driverMasterHealth.data.duplicateMemberGroups === 1 ? '' : 's'}, {driverMasterHealth.data.duplicateCardGroups} card group{driverMasterHealth.data.duplicateCardGroups === 1 ? '' : 's'}.</p>}
-        </> : !driverMasterHealth.loading && <p className="hint">Checking…</p>}
+        </> : !driverMasterHealth.isLoading && <p className="hint">Checking…</p>}
       </article>
     </div>
     <SamsaraReconcile />

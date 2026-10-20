@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import { request } from "../lib/api";
 import { useAccessToken } from "../lib/auth";
-import { useApi } from "../lib/useApi";
+import { useTmsQuery } from "../lib/useTmsQuery";
 import { workingDateLabel } from "../lib/workingDate";
 
 export type PastDatedOrder = { id: string; customer?: string; reference?: string; latestDate: string; receivedAtUtc: string; subject?: string };
@@ -14,7 +14,7 @@ export type PastDatedResponse = { today: string; count: number; oldest?: string;
  */
 export function PastDatedOrders({ onClosed }: { onClosed?: () => void }) {
   const token = useAccessToken();
-  const data = useApi(useCallback(async () => request<PastDatedResponse>("/api/v1/staging/queue/past-dated", await token()), [token]));
+  const data = useTmsQuery<PastDatedResponse>(['staging', 'past-dated'] as const, useCallback((t: string) => request<PastDatedResponse>("/api/v1/staging/queue/past-dated", t), []));
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string>();
@@ -27,7 +27,7 @@ export function PastDatedOrders({ onClosed }: { onClosed?: () => void }) {
     try {
       const result = await request<{ closed: number; skipped: number }>("/api/v1/staging/queue/past-dated/close", await token(), { method: "POST", body: JSON.stringify({ ids: items.map(item => item.id) }) });
       setMessage(`${result.closed} past-dated order${result.closed === 1 ? "" : "s"} closed${result.skipped ? `, ${result.skipped} left (already reviewed or no longer past-dated)` : ""}.`);
-      await data.refresh();
+      await data.refetch();
       onClosed?.();
     } catch (exception) { setMessage(exception instanceof Error ? exception.message : "Could not close the orders."); }
     finally { setBusy(false); }

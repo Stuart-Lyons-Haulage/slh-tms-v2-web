@@ -1,7 +1,6 @@
 import { useCallback } from "react";
 import { request } from "../lib/api";
-import { useAccessToken } from "../lib/auth";
-import { useApi } from "../lib/useApi";
+import { useTmsQuery } from "../lib/useTmsQuery";
 
 type Row = { endpoint: string; count: number; avgMs: number; p95Ms: number; maxMs: number };
 type SlowCall = { atUtc: string; method: string; route: string; ms: number; statusCode: number };
@@ -12,15 +11,14 @@ const tone = (value: number) => value >= 3000 ? "amber" : value >= 1500 ? "" : "
 
 /** Where the API's time went recently, so "it's slow" can be pinned to specific endpoints. */
 export function SlowEndpoints() {
-  const token = useAccessToken();
-  const perf = useApi(useCallback(async () => request<Summary>("/api/v1/diagnostics/slow-endpoints", await token()), [token]));
+  const perf = useTmsQuery<Summary>(['diagnostics', 'slow-endpoints'] as const, useCallback((t: string) => request<Summary>("/api/v1/diagnostics/slow-endpoints", t), []));
   const data = perf.data && Array.isArray(perf.data.endpoints) ? perf.data : undefined;
 
   return <details className="ui-card" style={{ marginTop: 16 }}>
     <summary><strong>What's slow (API response times)</strong>{data ? ` · last ${data.windowMinutes} min` : ""}</summary>
     <p className="hint">Server response time per screen/endpoint over the last {data?.windowMinutes ?? 15} minutes. High numbers here mean the server or database is the bottleneck; if these are low but a screen still feels slow, it's the browser or the network. Use the TMS normally for a few minutes, then press Refresh.</p>
-    <div className="ui-page-actions"><button type="button" disabled={perf.loading} onClick={() => void perf.refresh()}>Refresh</button></div>
-    {!data ? <p className="hint">{perf.loading ? "Loading…" : "No timing yet — use the TMS for a few minutes and refresh."}</p>
+    <div className="ui-page-actions"><button type="button" disabled={perf.isLoading} onClick={() => void perf.refetch()}>Refresh</button></div>
+    {!data ? <p className="hint">{perf.isLoading ? "Loading…" : "No timing yet — use the TMS for a few minutes and refresh."}</p>
       : data.endpoints.length === 0 ? <p className="hint">No traffic recorded yet in this window.</p>
       : <div className="ui-table-wrap"><table className="ui-table">
           <thead><tr><th>Endpoint</th><th>Calls</th><th>Average</th><th>95th percentile</th><th>Slowest</th></tr></thead>

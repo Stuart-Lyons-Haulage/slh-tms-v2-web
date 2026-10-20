@@ -3,7 +3,8 @@ import { listRuns } from "../api/runs";
 import { api, type DriverAssignment, type Load, type TransportOrder } from "../lib/api";
 import { useAccessToken } from "../lib/auth";
 import { todayIsoDate } from "../lib/dateUtils";
-import { useApi } from "../lib/useApi";
+import { useTmsQuery } from "../lib/useTmsQuery";
+import { useQueryClient } from "@tanstack/react-query";
 
 type HistoryRow = {
   id: string;
@@ -104,10 +105,11 @@ export function JobInvoiceHistory() {
   const [to, setTo] = useState(today);
   const [search, setSearch] = useState("");
   const [readiness, setReadiness] = useState("all");
-  const orders = useApi(useCallback(async () => api.orders(from, to, await token()), [from, to, token]));
-  const runs = useApi(useCallback(async () => (await listRuns(undefined, await token())).filter(run => runDateInRange(run, from, to)), [from, to, token]));
-  const assignments = useApi(useCallback(async () => api.driverAssignments(from, to, await token()), [from, to, token]));
-  const invoiceRecords = useApi(useCallback(async () => api.invoiceHistory({ from, to }, await token()), [from, to, token]));
+  const queryClient = useQueryClient();
+  const orders = useTmsQuery(['invoiceHistory', 'orders', from, to] as const, useCallback((t: string) => api.orders(from, to, t), [from, to]));
+  const runs = useTmsQuery(['invoiceHistory', 'runs', from, to] as const, useCallback(async (t: string) => (await listRuns(undefined, t)).filter(run => runDateInRange(run, from, to)), [from, to]));
+  const assignments = useTmsQuery(['invoiceHistory', 'assignments', from, to] as const, useCallback((t: string) => api.driverAssignments(from, to, t), [from, to]));
+  const invoiceRecords = useTmsQuery(['invoiceHistory', 'records', from, to] as const, useCallback((t: string) => api.invoiceHistory({ from, to }, t), [from, to]));
   const rows = useMemo(() => buildRows(orders.data || [], runs.data || [], assignments.data || []), [assignments.data, orders.data, runs.data]);
   const visibleRows = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -120,14 +122,11 @@ export function JobInvoiceHistory() {
   const ready = visibleRows.filter(row => row.invoiceReadiness === "Ready").length;
   const review = visibleRows.filter(row => row.invoiceReadiness === "Review").length;
   const notReady = visibleRows.filter(row => row.invoiceReadiness === "Not ready").length;
-  const loading = orders.loading || runs.loading || assignments.loading || invoiceRecords.loading;
-  const error = orders.error || runs.error || assignments.error || invoiceRecords.error;
+  const loading = orders.isLoading || runs.isLoading || assignments.isLoading || invoiceRecords.isLoading;
+  const error = orders.error?.message || runs.error?.message || assignments.error?.message || invoiceRecords.error?.message;
 
   function refresh() {
-    void orders.refresh();
-    void runs.refresh();
-    void assignments.refresh();
-    void invoiceRecords.refresh();
+    void queryClient.invalidateQueries({ queryKey: ['invoiceHistory'] });
   }
 
   function exportCsv() {

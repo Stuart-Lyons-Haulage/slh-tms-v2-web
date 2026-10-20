@@ -2,8 +2,7 @@
 import { Link } from "react-router-dom";
 import { useCallback, useMemo } from "react";
 import { request } from "../lib/api";
-import { useAccessToken } from "../lib/auth";
-import { useApi } from "../lib/useApi";
+import { useTmsQuery } from "../lib/useTmsQuery";
 import { normaliseCoverageKey, resolveSiteCoverage, type CoverageSite, type CoverageStatus, type SiteCoverage } from "./siteGeofenceCoverageLogic";
 
 type RunLinkageIssue = {
@@ -35,20 +34,18 @@ type RunLinkageResponse = {
 };
 
 export function useSiteGeofenceCoverage(labels: string[]) {
-  const token = useAccessToken();
   const cleanLabels = useMemo(() => Array.from(new Set(labels.map(value => String(value || "").trim()).filter(Boolean))), [labels]);
   const key = cleanLabels.join("\u001f");
-  const lookup = useApi(useCallback(async () => {
+  const lookup = useTmsQuery<SiteCoverage[]>(['geofence-coverage', key] as const, useCallback(async (t: string) => {
     if (!cleanLabels.length) return [] as SiteCoverage[];
-    const access = await token();
     const [sites, statuses] = await Promise.all([
-      request<CoverageSite[]>("/api/v1/sites", access),
-      request<CoverageStatus[]>("/api/v1/site-geofence-sync/sites", access, { cache: "no-store" }),
+      request<CoverageSite[]>("/api/v1/sites", t),
+      request<CoverageStatus[]>("/api/v1/site-geofence-sync/sites", t, { cache: "no-store" }),
     ]);
     return cleanLabels.map(label => resolveSiteCoverage(label, sites, statuses));
   // key intentionally represents the complete label set so edits/additions rerun the check.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, token]));
+  }, [key]), { enabled: cleanLabels.length > 0 });
 
   const byLabel = useMemo(() => new Map((lookup.data || []).map(item => [normaliseCoverageKey(item.sourceLabel), item])), [lookup.data]);
   const resultFor = useCallback((label?: string) => label ? byLabel.get(normaliseCoverageKey(label)) : undefined, [byLabel]);
@@ -111,10 +108,9 @@ export function SiteCoverageWarningPanel({
 }
 
 export function RunGeofenceWarningPanel({ planningDate }: { planningDate: string }) {
-  const token = useAccessToken();
-  const check = useApi(useCallback(async () => request<RunLinkageResponse>(`/api/v1/planning/geofence-linkage?date=${encodeURIComponent(planningDate)}`, await token(), { cache: "no-store" }), [planningDate, token]));
+  const check = useTmsQuery<RunLinkageResponse>(['geofence-linkage', planningDate] as const, useCallback((t: string) => request<RunLinkageResponse>(`/api/v1/planning/geofence-linkage?date=${encodeURIComponent(planningDate)}`, t, { cache: "no-store" }), [planningDate]));
   const issues = check.data?.issues || [];
-  if (!check.loading && !check.error && !issues.length) return null;
+  if (!check.isLoading && !check.error && !issues.length) return null;
   if (check.error) return <div className="notice" style={{ borderColor: "#b42318" }}>⚠ Geofence coverage check could not be loaded. Runs remain available, but Site/geofence linkage has not been confirmed.</div>;
   if (!issues.length) return null;
   return <div className="notice" style={{ border: "2px solid #b42318", background: "#fff1f0", marginBottom: 14 }}>

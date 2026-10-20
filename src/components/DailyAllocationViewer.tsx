@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { request, type Trailer, type Vehicle } from "../lib/api";
 import { useAccessToken } from "../lib/auth";
-import { useApi } from "../lib/useApi";
+import { useTmsQuery } from "../lib/useTmsQuery";
 import "../daily-allocation-viewer.css";
 
 type DispatchLoad = { id: string; reference: string; rawReference: string; driverId?: string; vehicleId?: string; trailerId?: string };
@@ -38,15 +38,14 @@ function effectiveStatus(driver: DispatchDriver, status?: DriverDispatchStatus):
 export function DailyAllocationViewer({ initialDate }: { initialDate: string }) {
   const token = useAccessToken();
   const [date,setDate] = useState(initialDate);
-  const mirror = useApi(useCallback(async(): Promise<DispatchMirror> => {
-    const access = await token();
+  const mirror = useTmsQuery<DispatchMirror>(['allocation', 'mirror', date] as const, useCallback(async(t: string): Promise<DispatchMirror> => {
     const [workbench, statusResponse] = await Promise.all([
-      request<Workbench>(`/api/v1/driver-dispatch?date=${encodeURIComponent(date)}`, access, undefined, 90000),
-      request<{ planningDate: string; drivers: DriverDispatchStatus[] }>(`/api/v1/driver-dispatch-status?date=${encodeURIComponent(date)}`, access, undefined, 90000)
+      request<Workbench>(`/api/v1/driver-dispatch?date=${encodeURIComponent(date)}`, t, undefined, 90000),
+      request<{ planningDate: string; drivers: DriverDispatchStatus[] }>(`/api/v1/driver-dispatch-status?date=${encodeURIComponent(date)}`, t, undefined, 90000)
     ]);
     return { workbench, statuses: Object.fromEntries(statusResponse.drivers.map(item => [item.driverId, item])) };
-  },[date,token]));
-  const refreshMirror = mirror.refresh;
+  },[date]));
+  const refreshMirror = mirror.refetch;
   const days = useMemo(()=>[-3,-2,-1,0,1,2,3].map(offset=>addDays(date,offset)),[date]);
   const data = mirror.data?.workbench;
   const statuses = mirror.data?.statuses || {};
@@ -73,9 +72,9 @@ export function DailyAllocationViewer({ initialDate }: { initialDate: string }) 
   return <section className="panel allocation-viewer">
     <div className="title-row"><div><p className="eyebrow">Today’s allocated routes</p><h2>Drivers on Runs</h2></div><Link to={`/driver-dispatch?date=${encodeURIComponent(date)}`}>Open Driver Dispatch →</Link></div>
     <div className="allocation-day-strip">{days.map(item=>{const value=label(item);return <button type="button" key={item} className={item===date?"active":""} onClick={()=>setDate(item)}><small>{value.weekday}</small><strong>{value.day}</strong></button>;})}</div>
-    {mirror.loading && !mirror.data && <div className="state">Loading allocated routes…</div>}
-    {mirror.error && <p className="notice inline-notice">Allocated routes could not refresh: {mirror.error}</p>}
-    {!mirror.loading && rows.length===0 && <p className="hint">No drivers are allocated to runs for this day.</p>}
+    {mirror.isLoading && !mirror.data && <div className="state">Loading allocated routes…</div>}
+    {mirror.error && <p className="notice inline-notice">Allocated routes could not refresh: {mirror.error.message}</p>}
+    {!mirror.isLoading && rows.length===0 && <p className="hint">No drivers are allocated to runs for this day.</p>}
     {rows.length>0 && <><div className="allocation-viewer-summary"><strong>{rows.length}</strong> allocated driver{rows.length===1?"":"s"} shown · <strong>{unallocatedRuns}</strong> built run{unallocatedRuns===1?"":"s"} still unallocated</div><div className="allocation-viewer-table-wrap"><table><thead><tr><th>Driver</th><th>Type / skills</th><th>Code</th><th>Day</th><th>Vehicle</th><th>Trailer</th><th>Run</th><th>Status</th></tr></thead><tbody>{rows.map(driver=>{
       const load = data?.loads.find(item=>item.id===driver.assignedLoadId);
       const vehicle = load?.vehicleId ? data?.vehicles.find(item=>item.id===load.vehicleId) : undefined;

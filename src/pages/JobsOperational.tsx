@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 import { api, request, type TransportOrder } from "../lib/api";
 import { orderMaintenance, type OrderUpdatePayload } from "../lib/orderMaintenance";
 import { useAccessToken } from "../lib/auth";
-import { useApi } from "../lib/useApi";
+import { useTmsQuery } from "../lib/useTmsQuery";
 
 function tagged(notes: string | undefined, label: string) {
   if (!notes) return "";
@@ -57,7 +57,7 @@ export function JobsOperational({ date }: { date: string }) {
   const [form, setForm] = useState<OrderUpdatePayload>();
   const [message, setMessage] = useState<string>();
   const [saving, setSaving] = useState(false);
-  const orders = useApi(useCallback(async () => api.orders(date, date, await token()), [date, token]));
+  const orders = useTmsQuery(['jobs', 'orders', date] as const, useCallback((t: string) => api.orders(date, date, t), [date]));
 
   const rows = useMemo(() => (orders.data || []).filter((order) => {
     if (order.status === "Cancelled") return false;
@@ -81,7 +81,7 @@ export function JobsOperational({ date }: { date: string }) {
       const result = await orderMaintenance.update(editingId, form, await token());
       setEditingId(undefined);
       setForm(undefined);
-      await orders.refresh();
+      await orders.refetch();
       setMessage(result.siteMasterMessage
         ? `Job amended successfully. ${result.siteMasterMessage} Planner data has been refreshed from the saved order.`
         : "Job amended successfully. Planner data has been refreshed from the saved order.");
@@ -98,7 +98,7 @@ export function JobsOperational({ date }: { date: string }) {
     setMessage(undefined);
     try {
       const result = await orderMaintenance.cancel(order.id, await token());
-      await orders.refresh();
+      await orders.refetch();
       setMessage(`${order.reference} cancelled. ${result.removedStops ? `${result.removedStops} linked run stop${result.removedStops === 1 ? " was" : "s were"} removed.` : "It was not attached to a run."}`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "The job could not be deleted.");
@@ -115,7 +115,7 @@ export function JobsOperational({ date }: { date: string }) {
       const result = await request<{ cancelled: number; removedStops: number; message: string }>("/api/v1/orders/open", await token(), { method: "DELETE" });
       setEditingId(undefined);
       setForm(undefined);
-      await orders.refresh();
+      await orders.refetch();
       setMessage(result.message);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Open jobs could not be cleared.");
@@ -131,11 +131,11 @@ export function JobsOperational({ date }: { date: string }) {
     <div className="planner-toolbar">
       <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search customer, order, market, stall, address…" />
       <span>{rows.length} active job{rows.length === 1 ? "" : "s"} for {date}</span>
-      <button onClick={() => void orders.refresh()} disabled={orders.loading || saving}>Refresh jobs</button>
+      <button onClick={() => void orders.refetch()} disabled={orders.isLoading || saving}>Refresh jobs</button>
       <button onClick={() => void clearAllOpenJobs()} disabled={saving}>Clear all open jobs</button>
     </div>
     {message && <p className="notice inline-notice">{message}</p>}
-    {orders.error && <p className="notice inline-notice">{orders.error}</p>}
+    {orders.error && <p className="notice inline-notice">{orders.error.message}</p>}
     <div className="master-table-wrap" style={{ overflowX: "auto" }}>
       <table className="master-table" style={{ minWidth: 1320 }}>
         <thead><tr><th>Order</th><th>Customer</th><th>Collection</th><th>Market / Depot</th><th>Destination / Market detail</th><th>Delivery address</th><th>Quantity</th><th>Unit</th><th>Status</th><th>Actions</th></tr></thead>
@@ -157,7 +157,7 @@ export function JobsOperational({ date }: { date: string }) {
         })}</tbody>
       </table>
     </div>
-    {!orders.loading && !rows.length && <p className="state">No active imported jobs for this date.</p>}
+    {!orders.isLoading && !rows.length && <p className="state">No active imported jobs for this date.</p>}
 
     {editingId && form && <div className="job-edit-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) { setEditingId(undefined); setForm(undefined); } }}>
       <section className="job-edit-modal" role="dialog" aria-modal="true" aria-label={`Edit job ${form.reference}`}>

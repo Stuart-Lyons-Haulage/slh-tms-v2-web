@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import { request } from '../lib/api';
 import { useAccessToken } from '../lib/auth';
-import { useApi } from '../lib/useApi';
+import { useTmsQuery } from '../lib/useTmsQuery';
 
 type MasterDocument = {
   id: string;
@@ -28,7 +28,7 @@ export function MasterDocuments({ entityType, entityId, title }: { entityType: '
   const [draft, setDraft] = useState<Draft>(empty);
   const [adding, setAdding] = useState(false);
   const [message, setMessage] = useState<string>();
-  const documents = useApi(useCallback(async () => request<MasterDocument[]>(`/api/v1/master-documents/${entityType}/${entityId}`, await token()), [entityId, entityType, token]));
+  const documents = useTmsQuery<MasterDocument[]>(['master-documents', entityType, entityId] as const, useCallback((t: string) => request<MasterDocument[]>(`/api/v1/master-documents/${entityType}/${entityId}`, t), [entityId, entityType]));
 
   async function add() {
     if (!draft.fileName.trim() || !draft.storageUrl.trim()) { setMessage('File name and SharePoint/OneDrive link are required.'); return; }
@@ -40,14 +40,14 @@ export function MasterDocuments({ entityType, entityId, title }: { entityType: '
           storageUrl: draft.storageUrl.trim(), storageItemId: null, expiryOrReviewDate: draft.expiryOrReviewDate || null,
         })
       });
-      setDraft(empty); setMessage('Document added to the TMS library.'); await documents.refresh();
+      setDraft(empty); setMessage('Document added to the TMS library.'); await documents.refetch();
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Document could not be added.'); }
     finally { setAdding(false); }
   }
 
   async function archive(id: string) {
     if (!window.confirm('Archive this document entry? The SharePoint/OneDrive file will be retained.')) return;
-    try { await request(`/api/v1/master-documents/${id}/archive`, await token(), { method: 'POST' }); await documents.refresh(); }
+    try { await request(`/api/v1/master-documents/${id}/archive`, await token(), { method: 'POST' }); await documents.refetch(); }
     catch (error) { setMessage(error instanceof Error ? error.message : 'Document could not be archived.'); }
   }
 
@@ -62,13 +62,13 @@ export function MasterDocuments({ entityType, entityId, title }: { entityType: '
     </div>
     <div style={{ marginTop:10 }}><button className="primary" disabled={adding} onClick={()=>void add()}>{adding ? 'Adding…' : 'Add document'}</button></div>
     {message && <p className="notice inline-notice">{message}</p>}
-    {documents.error && <p className="notice inline-notice">{documents.error}</p>}
+    {documents.error && <p className="notice inline-notice">{documents.error.message}</p>}
     <div style={{ overflowX:'auto', marginTop:12 }}><table><thead><tr><th>Document</th><th>Type</th><th>Notes</th><th>Review / expiry</th><th>Added</th><th></th></tr></thead>
       <tbody>{(documents.data || []).map(doc => <tr key={doc.id}>
         <td><a href={doc.storageUrl} target="_blank" rel="noreferrer"><strong>{doc.fileName}</strong></a></td>
         <td>{doc.documentType}</td><td>{doc.description || '—'}</td><td>{doc.expiryOrReviewDate || '—'}</td>
         <td>{new Date(doc.createdAtUtc).toLocaleDateString('en-GB')}<br/><small>{doc.createdBy || '—'}</small></td>
         <td><button onClick={()=>void archive(doc.id)}>Archive</button></td>
-      </tr>)}</tbody></table>{!documents.loading && !(documents.data || []).length && <p className="hint">No documents linked yet.</p>}</div>
+      </tr>)}</tbody></table>{!documents.isLoading && !(documents.data || []).length && <p className="hint">No documents linked yet.</p>}</div>
   </div>;
 }

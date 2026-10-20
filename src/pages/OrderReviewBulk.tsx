@@ -2,7 +2,8 @@ import { describeQuantity, payloadQuantity } from "../lib/loadQuantity";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApiError, api, request, type StagedImport } from "../lib/api";
 import { useAccessToken } from "../lib/auth";
-import { useApi } from "../lib/useApi";
+import { useCustomers, useSites } from "../lib/lookupQueries";
+import { useTmsQuery } from "../lib/useTmsQuery";
 import { matchesPlanningDate } from "../lib/orderReviewDates";
 import { SourceEmailEvidenceDrawer } from "../components/SourceEmailEvidenceDrawer";
 import { resolveSourceEvidence } from "../sourceEvidence";
@@ -338,8 +339,10 @@ export function OrderReviewBulk({ date }: { date: string }) {
   const [sourceEmailStagingId, setSourceEmailStagingId] = useState<string>();
   const [requestingOrders, setRequestingOrders] = useState(false);
   const [loadingAllClean, setLoadingAllClean] = useState(false);
-  const [customers, setCustomers] = useState<Array<{ code: string; name: string; active: boolean }>>([]);
-  const [sites, setSites] = useState<Array<{ id: string; name: string; driverTextName?: string; externalCode: string; collectionAddress?: string; aliases?: string; active: boolean }>>([]);
+  const customersQuery = useCustomers();
+  const sitesQuery = useSites();
+  const customers = useMemo(() => (customersQuery.data || []).filter(row => row.active), [customersQuery.data]);
+  const sites = useMemo(() => (sitesQuery.data || []).filter(row => row.active), [sitesQuery.data]);
   const [mappingAction, setMappingAction] = useState<MappingAction>();
   const [mappingSiteId, setMappingSiteId] = useState("");
   const [mappingAlias, setMappingAlias] = useState("");
@@ -347,27 +350,16 @@ export function OrderReviewBulk({ date }: { date: string }) {
   const [mappingAddress, setMappingAddress] = useState("");
   const [mappingBusy, setMappingBusy] = useState(false);
 
-  useEffect(() => {
-    let active = true;
-    void token().then((authToken) => Promise.all([api.customers(authToken), api.sites(authToken)]))
-      .then(([customerRows, siteRows]) => {
-        if (!active) return;
-        setCustomers(customerRows.filter((row) => row.active));
-        setSites(siteRows.filter((row) => row.active));
-      })
-      .catch(() => {
-        // Keep imported text editable if master-data loading is temporarily unavailable.
-      });
-    return () => { active = false; };
-  }, [token]);
-
-  const queue = useApi(useCallback(async () =>
-    request<StagingQueuePage>(
-      `/api/v1/staging/queue?status=PendingReview&entityType=order&page=${queuePage}&pageSize=${queuePageSize}&planningDate=${encodeURIComponent(date)}`,
-      await token(),
-      undefined,
-      30_000,
-    ), [date, queuePage, token]));
+  const queue = useTmsQuery<StagingQueuePage>(
+    ['staging', 'queue', date, queuePage] as const,
+    useCallback((t: string) =>
+      request<StagingQueuePage>(
+        `/api/v1/staging/queue?status=PendingReview&entityType=order&page=${queuePage}&pageSize=${queuePageSize}&planningDate=${encodeURIComponent(date)}`,
+        t,
+        undefined,
+        30_000,
+      ), [date, queuePage]),
+  );
 
   const rows = useMemo(() => (queue.data?.records || []).map(parse), [queue.data]);
   const datedRows = useMemo(() => rows.filter((row) => matchesPlanningDate(row.payload, date)), [date, rows]);
@@ -426,13 +418,13 @@ export function OrderReviewBulk({ date }: { date: string }) {
           }
           setQueuePage(1);
           setSelectedIds(new Set());
-          await queue.refresh();
+          await queue.refetch();
           // The Graph poll can commit the final staged rows just after its
           // completion marker. Recheck briefly so the review count catches up
           // without requiring a manual browser reload.
           for (let attempt = 0; attempt < 3; attempt += 1) {
             await new Promise((resolve) => window.setTimeout(resolve, 1_000));
-            await queue.refresh();
+            await queue.refetch();
           }
           setNotice(`${result.message} ${graph.lastMessagesIngested} new message${graph.lastMessagesIngested === 1 ? "" : "s"} staged.`);
           completed = true;
@@ -441,7 +433,7 @@ export function OrderReviewBulk({ date }: { date: string }) {
       }
 
       if (!completed) {
-        await queue.refresh();
+        await queue.refetch();
         setNotice("The Graph poll is still running. Orders will remain in review; check the queue again shortly.");
       }
     } catch (error) {
@@ -503,7 +495,7 @@ export function OrderReviewBulk({ date }: { date: string }) {
       });
       setEditingId(undefined);
       setDraft(undefined);
-      await queue.refresh();
+      await queue.refetch();
       setNotice(`${displayReference(next)} updated and kept waiting for approval.`);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "The staged order could not be saved.");
@@ -539,7 +531,7 @@ export function OrderReviewBulk({ date }: { date: string }) {
         await api.createStagedSite(row.item.id, { field: mappingAction.field, name: mappingName, address: mappingAddress, alias: mappingAlias || mappingName, customerCode: text(row.payload.customerCode) }, authToken);
       }
       setMappingAction(undefined);
-      await queue.refresh();
+      await queue.refetch();
       setNotice(`${displayReference(row.payload)} site mapping updated and kept waiting for approval.`);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "The site mapping could not be saved.");
@@ -563,7 +555,7 @@ export function OrderReviewBulk({ date }: { date: string }) {
         setDraft(undefined);
       }
       if (sourceEmailStagingId === row.item.id) setSourceEmailStagingId(undefined);
-      await queue.refresh();
+      await queue.refetch();
       setNotice(`${displayReference(row.payload)} rejected. The source evidence remains in the audit history.`);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "The order could not be rejected.");
@@ -595,7 +587,7 @@ export function OrderReviewBulk({ date }: { date: string }) {
           next.delete(row.item.id);
           return next;
         });
-        await queue.refresh();
+        await queue.refetch();
         setNotice(`${displayReference(row.payload)} was an exact duplicate. Its staging entry and review history were deleted; the live order was left unchanged.`);
         return;
       }
@@ -635,7 +627,7 @@ export function OrderReviewBulk({ date }: { date: string }) {
           setDraft(undefined);
         }
         if (sourceEmailStagingId === row.item.id) setSourceEmailStagingId(undefined);
-        await queue.refresh();
+        await queue.refetch();
       }
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "The order could not be approved.");
@@ -698,7 +690,7 @@ export function OrderReviewBulk({ date }: { date: string }) {
 
       if (approvable.length === 0) {
         setSelectedIds(new Set());
-        await queue.refresh();
+        await queue.refetch();
         setNotice(`${duplicates.length} exact duplicate staging entr${duplicates.length === 1 ? "y" : "ies"} deleted. The live orders were left unchanged.`);
         return;
       }
@@ -741,7 +733,7 @@ export function OrderReviewBulk({ date }: { date: string }) {
       setEditingId(undefined);
       setDraft(undefined);
       setSourceEmailStagingId(undefined);
-      await queue.refresh();
+      await queue.refetch();
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Selected approval failed.");
     } finally {
@@ -794,7 +786,7 @@ export function OrderReviewBulk({ date }: { date: string }) {
     </div>
 
     {notice && <p className="notice inline-notice">{notice}</p>}
-    {queue.error && <p className="review-error">{queue.error}</p>}
+    {queue.error && <p className="review-error">{queue.error.message}</p>}
 
     {queue.data && queue.data.total > queue.data.pageSize && <div className="order-date-history-controls" aria-label="Order review queue pages">
       <button type="button" onClick={() => changeQueuePage(queuePage - 1)} disabled={queuePage <= 1 || busy || Boolean(busyId)}>Previous 100</button>
@@ -819,8 +811,8 @@ export function OrderReviewBulk({ date }: { date: string }) {
 
     {flaggedRows.length > 0 && <p className="order-review-explainer">The {flaggedRows.length} amber jobs are <strong>not locked</strong>. Use Review source email to compare the booking with the original message, then Edit if a field needs correcting. They are deliberately excluded from “Select all clean”.</p>}
 
-    {queue.loading && !queue.data && <div className="state">Loading orders waiting for approval…</div>}
-    {!queue.loading && datedRows.length === 0 && <div className="state">No orders are waiting for approval for this planning date.</div>}
+    {queue.isLoading && !queue.data && <div className="state">Loading orders waiting for approval…</div>}
+    {!queue.isLoading && datedRows.length === 0 && <div className="state">No orders are waiting for approval for this planning date.</div>}
 
     {datedRows.length > 0 && <div className="bulk-order-list" role="list" aria-label="Orders waiting for approval">
       {datedRows.map((row) => {
