@@ -374,8 +374,54 @@ export const api: TmsApi = {
   trailers: token => sharedLookup('trailers', () => request<Trailer[]>('/api/v1/trailers', token)),
   sites: token => sharedLookup('sites', () => request<Site[]>('/api/v1/sites', token)),
   updateSite: async (id, payload, token) => { const result = await request<Site>(`/api/v1/sites/${id}`, token, { method: 'PUT', body: JSON.stringify(payload) }); invalidateSharedLookup('sites'); return result; },
-  matchStagedSite: async (id, payload, token) => { const result = await request<{ siteId: string; siteName: string; alias: string; field: string; updated: boolean }>(`/api/v1/staging/${id}/match-site`, token, { method: 'POST', body: JSON.stringify(payload) }); invalidateSharedLookup('sites'); return result; },
-  createStagedSite: async (id, payload, token) => { const result = await request<{ siteId: string; siteName: string; externalCode: string; alias: string; field: string; created: boolean }>(`/api/v1/staging/${id}/create-site`, token, { method: 'POST', body: JSON.stringify(payload) }); invalidateSharedLookup('sites'); return result; },
+  matchStagedSite: async (_id, payload, token) => {
+    if (!payload.alias?.trim()) throw new Error('Enter the source site name to save as an alias.');
+    const result = await request<{ site: string; aliases: string | null; rechecked: number }>('/api/v1/order-intake/site-names/alias', token, {
+      method: 'POST',
+      body: JSON.stringify({ siteId: payload.siteId, alias: payload.alias.trim() }),
+    }, 120000);
+    invalidateSharedLookup('sites');
+    return { siteId: payload.siteId, siteName: result.site, alias: payload.alias.trim(), field: payload.field, updated: true };
+  },
+  createStagedSite: async (_id, payload, token) => {
+    const externalCode = `PLN-${crypto.randomUUID().replaceAll('-', '').slice(0, 12).toUpperCase()}`;
+    const result = await request<MasterApplyResponse>('/api/v1/master-data/apply', token, {
+      method: 'POST',
+      body: JSON.stringify([{
+        entityType: 'site',
+        idempotencyKey: `manual:planner-site:${externalCode}`,
+        source: 'Run Planner job editor',
+        payload: {
+          externalCode,
+          customerCode: payload.customerCode,
+          name: payload.name.trim(),
+          driverTextName: payload.name.trim(),
+          aliases: (payload.alias || payload.name).trim(),
+          collectionAddress: payload.address.trim(),
+          active: true,
+        },
+      }]),
+    }, 120000);
+    const applied = result.results.find(item => item.entityType.toLowerCase() === 'site' && item.applied);
+    if (!applied) throw new Error(result.results.find(item => item.entityType.toLowerCase() === 'site')?.error || 'The new site was not added to Master Data.');
+
+    invalidateSharedLookup('sites');
+    const site = (await api.sites(token)).find(item => item.externalCode.toLowerCase() === externalCode.toLowerCase());
+    if (!site) throw new Error('The site was saved, but it could not be reloaded. Refresh Master Data before using it.');
+
+    // Recheck the pending job so its unusual-site warning can clear immediately.
+    await request<{ rechecked: number }>('/api/v1/order-intake/site-names/recheck', token, { method: 'POST' }, 120000)
+      .catch(() => undefined);
+
+    return {
+      siteId: site.id,
+      siteName: site.name,
+      externalCode: site.externalCode,
+      alias: payload.alias || payload.name,
+      field: payload.field,
+      created: true,
+    };
+  },
   marketContacts: async token => normaliseMarketContacts(await request<MarketContact[]>('/api/v1/market-contacts', token)),
   updateMarketContact: (id, payload, token) => request<MarketContact>(`/api/v1/market-contacts/${id}`, token, { method: 'PUT', body: JSON.stringify(payload) }),
   fuelPrices: token => request<FuelPrice[]>('/api/v1/fuel-prices', token),
