@@ -59,6 +59,7 @@ export type SamsaraDispatchState = {
   routeId: string;
   deliveryRouteId?: string;
   exportedAtUtc: string;
+  requiresResend?: boolean;
   executionState?: string;
   executionOperation?: string;
   executionUpdatedAtUtc?: string;
