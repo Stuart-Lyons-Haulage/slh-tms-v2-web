@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { FuelMaster } from './Pages';
+import { lazy, Suspense, useEffect, useState } from 'react';
+const FuelMaster = lazy(() => import('./Pages').then(m => ({ default: m.FuelMaster })));
 import { DriversMasterOperational } from './DriversMasterOperational';
 import { FleetMasterUnified } from './FleetMasterUnified';
 import { FuelCardsOperational } from './FuelCardsOperational';
@@ -59,7 +59,7 @@ export function MasterDataHub({ initialSection = 'drivers' }: { initialSection?:
       {section === 'customers' && <MasterDataOperational initialTab="customers" showCategoryButtons={false} showHeading={false} />}
       {section === 'fuel-cards' && <FuelCardsOperational />}
       {section === 'markets' && <MarketsMasterClean />}
-      {section === 'fuel-prices' && <FuelMaster />}
+      {section === 'fuel-prices' && <Suspense fallback={<div className="state">Loading fuel prices…</div>}><FuelMaster /></Suspense>}
     </div>
   </section>;
 }

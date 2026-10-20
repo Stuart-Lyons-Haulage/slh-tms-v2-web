@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useWorkingDate } from "../lib/workingDate";
 import { useSearchParams } from "react-router-dom";
 import { request } from "../lib/api";
@@ -10,7 +10,7 @@ import { OrderReviewBulk } from "./OrderReviewBulk";
 import { OrderChangeAlerts } from "../components/OrderChangeAlerts";
 import { UndatedOrderReviewQueue } from "./UndatedOrderReviewQueue";
 import { listRuns } from "../api/runs";
-import { Orders as AddOrders } from "./Pages";
+const AddOrders = lazy(() => import("./Pages").then(m => ({ default: m.Orders })));
 import type { Load, TransportOrder } from "../lib/api";
 import { PastDatedOrders } from "../components/PastDatedOrders";
 
@@ -424,7 +424,7 @@ export function OrderControl({ initialTab = "review" }: { initialTab?: OrderCont
     </div>
     {repairNotice && <p className="notice inline-notice">{repairNotice}</p>}
     {tab !== "add" && <OrderReviewDateStrip selectedDate={selectedDate} onChange={updateDate} />}
-    {tab === "add" ? <AddOrders /> : tab === "review" ? <><p className="hint" style={{ margin: "0 0 8px" }}>"Unusual: new delivery point / collection site" usually means a site name isn't in Master data yet. <a href="/admin/order-intake?tab=names">Fix site names</a> once and every waiting order is re-checked.</p><OrderChangeAlerts /><PastDatedOrders onClosed={refreshVisibleReviewData} /><OrderIntakeCacheRecovery date={selectedDate} /><UndatedOrderReviewQueue /><OrderReviewBulk date={selectedDate} /></> : <><ApprovedOrdersList date={selectedDate} token={token} /><JobsOperational date={selectedDate} /></>}
+    {tab === "add" ? <Suspense fallback={<div className="state">Loading order entry…</div>}><AddOrders /></Suspense> : tab === "review" ? <><p className="hint" style={{ margin: "0 0 8px" }}>"Unusual: new delivery point / collection site" usually means a site name isn't in Master data yet. <a href="/admin/order-intake?tab=names">Fix site names</a> once and every waiting order is re-checked.</p><OrderChangeAlerts /><PastDatedOrders onClosed={refreshVisibleReviewData} /><OrderIntakeCacheRecovery date={selectedDate} /><UndatedOrderReviewQueue /><OrderReviewBulk date={selectedDate} /></> : <><ApprovedOrdersList date={selectedDate} token={token} /><JobsOperational date={selectedDate} /></>}
     {sourceEmailStagingId && <SourceEmailEvidenceDrawer stagingId={sourceEmailStagingId} onClose={closeSourceEmail} />}
   </>;
 }

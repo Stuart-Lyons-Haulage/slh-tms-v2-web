@@ -4,6 +4,7 @@ import { useSearchParams } from "react-router-dom";
 import { api, request, type Driver } from "../lib/api";
 import { useAccessToken } from "../lib/auth";
 import { useApi } from "../lib/useApi";
+import { useDrivers } from "../lib/lookupQueries";
 
 type ComplianceRow = {
   assetType: "Vehicle" | "Trailer";
@@ -94,7 +95,7 @@ export function DailyCompliance() {
   const [busyKey, setBusyKey] = useState<string>();
   const [actionError, setActionError] = useState<string>();
   const report = useApi(useCallback(async () => request<ComplianceReport>(`/api/v1/daily-compliance/report?date=${date}`, await token(), undefined, 90000), [date, token]));
-  const drivers = useApi(useCallback(async () => api.drivers(await token()), [token]));
+  const drivers = useDrivers();
 
   const canonicalRows = useMemo(() => {
     const byId = new Map((drivers.data || []).map(driver => [driver.id, driver]));
@@ -180,7 +181,7 @@ export function DailyCompliance() {
       <label>Search<input value={search} onChange={event => setSearch(event.target.value)} placeholder="Driver, vehicle or run" /></label>
     </div>
 
-    {(report.loading || drivers.loading) && !report.data && <div className="ui-empty">Matching Fleetio checks to Tacho and tracking…</div>}
+    {(report.loading || drivers.isLoading) && !report.data && <div className="ui-empty">Matching Fleetio checks to Tacho and tracking…</div>}
     {report.error && <p className="ui-error">{report.error}</p>}
     {actionError && <p className="ui-error">{actionError}</p>}
 
