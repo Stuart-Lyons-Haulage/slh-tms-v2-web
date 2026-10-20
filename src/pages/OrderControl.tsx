@@ -285,13 +285,13 @@ function OrderIntakeCacheRecovery({ date }: { date: string }) {
       });
       let job = started;
       while (!job.done) {
-        setNotice(`Re-parsing… ${job.evidenceScanned} emails checked, ${job.eligibleOrders} matching orders found. You can leave this page.`);
+        setNotice(`Re-parsing… ${job.evidenceScanned} emails checked, ${job.eligibleOrders} matching order projections checked. You can leave this page.`);
         await new Promise(resolve => globalThis.setTimeout(resolve, 2500));
         job = await request<ReplayJobStatus>(`/api/v1/order-intake/replay-jobs/${encodeURIComponent(started.id)}`, await token());
       }
       saveReplayCheckpoint(date, undefined);
       const skipped = job.errors.length ? ` ${job.errors.length} email${job.errors.length === 1 ? "" : "s"} could not be re-parsed: ${job.errors.slice(0, 3).join("; ")}` : "";
-      setNotice(`Re-parse complete: ${job.eligibleOrders} order${job.eligibleOrders === 1 ? "" : "s"} matched for ${date}; ${job.pendingAfterReplay} awaiting review; ${job.legacyMappingExceptionsArchived} old placeholder${job.legacyMappingExceptionsArchived === 1 ? "" : "s"} archived.${skipped}`);
+      setNotice(`Re-parse complete: ${job.eligibleOrders} matching order projection${job.eligibleOrders === 1 ? "" : "s"} checked for ${date}; ${job.legacyMappingExceptionsArchived} old placeholder${job.legacyMappingExceptionsArchived === 1 ? "" : "s"} archived. Check Approved and Pending Review for the actual orders.${skipped}`);
       await loadCache();
       refreshVisibleReviewData();
     } catch (err) {
