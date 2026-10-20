@@ -486,9 +486,12 @@ export async function getSmartDispatch(
   // Blocked and unconfirmed people remain visible with their reasons; allocation
   // controls continue to enforce these decisions.
   const assignedDriverIds = new Set(equipment.loads.map(load => load.driverId).filter(Boolean));
+  // Calculate and display Tacho possible starts for the full visible workforce.
+  // Availability/status feeds still decide who can be allocated, but a delayed feed
+  // must not prevent the board from refreshing individual legal-start times.
   const potentialDriverIds = enrichedDrivers
     .filter(driver => assignedDriverIds.has(driver.driverId)
-      || isPotentiallyDispatchAvailable(driver, statusResponse.drivers.find(item => item.driverId === driver.driverId)))
+      || (!driver.isBlocked && !driver.onLeave && !driver.partDayLeave))
     .map(driver => driver.driverId);
   const availableTimesPromise = potentialDriverIds.length
     ? getAvailableTimes(planningDate, potentialDriverIds, token)
