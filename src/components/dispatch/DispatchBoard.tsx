@@ -7,6 +7,7 @@ import type { DispatchAssetSearchOption } from "./dispatchAssetSearch";
 import { DispatchSnapshotCache } from "./dispatchSnapshotCache";
 import { DispatchFilters } from "./DispatchFilters";
 import { rankDriversForRun } from "./dispatchRunRanking";
+import { missingSkills } from "./dispatchRules";
 import { allocateDispatchRun, downloadSamsaraCsv, getAvailableTimes, getSamsaraDispatchStatus, getSmartDispatch, sendRunToSamsara, syncDispatchDrivers, syncSamsaraMappings, unassignDispatchRun, type SmartDispatchOptionalEnrichment } from "./dispatchApi";
 import {
   applyAvailableTimes,
@@ -83,7 +84,7 @@ function RouteSidebar({ runs, owners, allocatedRunIds, drivers, allDrivers, vehi
       <strong>Routes</strong>
       <span>{runs.length}</span>
     </div>
-    <p>Furthest first. Suggestions weigh distance to the first collection, skills, driver type (trampers for nights out; day and night drivers must get back in shift) and who has had the fewest long runs in the last 2 weeks.</p>
+    <p>Earliest first collection first, using the Master Data access time. Driver suggestions weigh distance to collection, required skills, driver type, and recent long-run fairness. Miles shown are straight-line distance from Barnham to each run’s furthest stop.</p>
     <div className="smart-run-card-list">
       {[...runs].sort((left, right) => {
         const leftTime = left.firstCollectionTimeUtc ? Date.parse(left.firstCollectionTimeUtc) : Number.POSITIVE_INFINITY;
@@ -101,10 +102,31 @@ function RouteSidebar({ runs, owners, allocatedRunIds, drivers, allDrivers, vehi
         const samsaraState = samsaraDispatch[run.runId];
         const routeStatus = samsaraState?.requiresResend ? "Re-send due to amendment" : samsaraState ? "Dispatched to Samsara" : "Ready to Send";
         const rowFailures = failures.filter(failure => failure.runId === run.runId);
-        const selectableDrivers = drivers;
         const ownerAvailable = Boolean(ownerId && drivers.some(driver => driver.driverId === ownerId));
-        const driverOptions: DispatchAssetSearchOption[] = selectableDrivers.map(driver => ({ id: driver.driverId, label: `${driver.name} · ${driver.driverCode}`, search: `${driver.name} ${driver.driverCode} ${driver.employmentType}` }));
-        if (owner && !ownerAvailable) driverOptions.unshift({ id: owner.driverId, label: `${owner.name} · currently allocated · unavailable`, search: `${owner.name} ${owner.driverCode}`, disabled: true });
+        const reasonForUnavailableDriver = (driver: DispatchDriverDto): string[] => {
+          const reasons: string[] = [];
+          const missing = missingSkills(driver, run);
+          if (driver.isBlocked) reasons.push(driver.blockedReason || "Blocked in Driver Master");
+          if (driver.onLeave) reasons.push(driver.leaveDetails || "On leave");
+          else if (driver.partDayLeave) reasons.push("Part-day leave");
+          if (missing.length) reasons.push(`Missing ${missing.join(", ")} skill${missing.length === 1 ? "" : "s"}`);
+          if (!drivers.some(item => item.driverId === driver.driverId)) {
+            const availability = statuses[driver.driverId]?.availabilityMessage || statuses[driver.driverId]?.availabilityStatus;
+            reasons.push(availability || "Availability / Tacho check has not passed");
+          }
+          return [...new Set(reasons)];
+        };
+        const driverOptions: DispatchAssetSearchOption[] = allDrivers.map(driver => {
+          const reasons = reasonForUnavailableDriver(driver);
+          const selectable = reasons.length === 0;
+          return {
+            id: driver.driverId,
+            label: `${driver.name} · ${driver.driverCode}${selectable ? "" : ` · unavailable: ${reasons.join("; ")}`}`,
+            search: `${driver.name} ${driver.driverCode} ${driver.employmentType} ${reasons.join(" ")}`,
+            disabled: !selectable
+          };
+        });
+        if (owner && !driverOptions.some(option => option.id === owner.driverId)) driverOptions.unshift({ id: owner.driverId, label: `${owner.name} · currently allocated · unavailable`, search: `${owner.name} ${owner.driverCode}`, disabled: true });
         const vehicleOptions: DispatchAssetSearchOption[] = vehicles.filter(vehicle => vehicle.active !== false).map(vehicle => ({ id: vehicle.id, label: `${vehicle.registration}${vehicle.fleetNumber ? ` · ${vehicle.fleetNumber}` : ""}`, search: `${vehicle.registration} ${vehicle.fleetNumber || ""}` }));
         const trailerOptions: DispatchAssetSearchOption[] = trailers.filter(trailer => trailer.active !== false).map(trailer => ({ id: trailer.id, label: `${trailer.trailerNumber}${trailer.type ? ` · ${trailer.type}` : ""}`, search: `${trailer.trailerNumber} ${trailer.type || ""}` }));
         const canExport = Boolean(ownerAvailable && selected.runId && selected.vehicleId);
@@ -116,7 +138,7 @@ function RouteSidebar({ runs, owners, allocatedRunIds, drivers, allDrivers, vehi
           </div>
           <div className="smart-run-time-row">
             <span className="smart-run-time-bubble" title="Master Data access time for the first collection">Start {runTime(run.firstCollectionTimeUtc)}</span>
-            <span className="smart-run-distance">{run.furthestMiles != null ? `${run.furthestMiles} mi out` : ""}{run.spanHours != null ? ` · ~${run.spanHours}h` : ""}{run.needsNightOut ? " · night out" : ""}{run.isNightRun ? " · night run" : ""}</span>
+            <span className="smart-run-distance" title="Straight-line distance from Barnham to the furthest stop">{run.furthestMiles != null ? `Furthest stop: ${run.furthestMiles} mi from Barnham (straight line)` : ""}{run.spanHours != null ? ` · ~${run.spanHours}h` : ""}{run.needsNightOut ? " · night out" : ""}{run.isNightRun ? " · night run" : ""}</span>
           </div>
           <div className="smart-run-route">
             <span><b>Collect</b>{run.collectionPoint.name}</span>
@@ -133,16 +155,16 @@ function RouteSidebar({ runs, owners, allocatedRunIds, drivers, allDrivers, vehi
             <div className="smart-run-allocation-status"><small>Status</small><strong>{allocated ? (status?.operationalStatus || "Dispatched") : "Available"}</strong></div>
           </div>
           {rowFailures.map((failure, index) => <small className="smart-run-warning" key={`${failure.reason}-${index}`}>{failure.reason}</small>)}
-          {owner && <div className="smart-run-actions">
-            <button type="button" className="smart-action primary" disabled={!canExport || busyDriverId === owner.driverId} onClick={() => selectedDriver && onDispatch(selectedDriver, selected)}>{busyDriverId === owner.driverId ? "Preparing…" : owner ? "Dispatch / amend" : "Dispatch"}</button>
-            <button type="button" className="smart-action ghost dark" disabled={!canExport || busyDriverId === owner.driverId} onClick={() => selectedDriver && onSamsaraAndDispatch(selectedDriver, selected)}>{busyDriverId === owner.driverId ? "Working…" : "Export to Samsara"}</button>
-            <button type="button" className="smart-action ghost" disabled={busyDriverId === owner.driverId} onClick={() => selectedDriver && onDownloadSamsaraCsv(selectedDriver, selected)}>CSV</button>
-          </div>}
+          <div className="smart-run-actions">
+            <button type="button" className="smart-action primary" disabled={!canExport || busyDriverId === ownerId} title={canExport ? "Validate and dispatch this run to the selected driver" : "Select an eligible driver and vehicle first"} onClick={() => selectedDriver && onDispatch(selectedDriver, selected)}>{busyDriverId === ownerId ? "Preparing…" : "Dispatch"}</button>
+            <button type="button" className="smart-action ghost dark" disabled={!canExport || busyDriverId === ownerId} onClick={() => selectedDriver && onSamsaraAndDispatch(selectedDriver, selected)}>{busyDriverId === ownerId ? "Working…" : "Samsara"}</button>
+            <button type="button" className="smart-action ghost" disabled={!selectedDriver || busyDriverId === ownerId} onClick={() => selectedDriver && onDownloadSamsaraCsv(selectedDriver, selected)}>CSV</button>
+          </div>
           {!owner && rankedDrivers.length > 0 && <details className="smart-run-fit">
             <summary>Best driver matches</summary>
             <ol>{rankedDrivers.slice(0, 3).map(match => <li key={match.driver.driverId}><strong>{match.driver.name} · {match.score}/100</strong><small>{match.reasons.join(" · ")}</small></li>)}</ol>
           </details>}
-          {!owner && rankedDrivers.length === 0 && <small className="smart-run-warning">No eligible driver currently matches this route</small>}
+          {!owner && rankedDrivers.length === 0 && <div className="smart-run-warning"><strong>No eligible driver currently matches this route.</strong>{allDrivers.length === 0 ? <span>Driver Master returned no active drivers.</span> : <span>{allDrivers.filter(driver => reasonForUnavailableDriver(driver).length > 0).slice(0, 3).map(driver => `${driver.name}: ${reasonForUnavailableDriver(driver).join(", ")}`).join(" · ") || "Check Driver Master skills and current availability / Tacho validation."}</span>}</div>}
           {run.relay?.enabled && <small className="smart-run-warning">Relay: collect → {run.relay.handoverSite || "handover site required"} → delivery</small>}
           {!run.relay?.enabled && run.trailerSwapRequested && <small className="smart-run-warning">Planner note: trailer swap requested</small>}
         </article>;
