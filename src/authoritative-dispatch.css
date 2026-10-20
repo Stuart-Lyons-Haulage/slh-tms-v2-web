@@ -610,3 +610,17 @@
   .smart-run-route { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .smart-run-allocation-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+.smart-run-cutoff-bubble {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border: 1px solid #e7d39c;
+  border-radius: 999px;
+  background: #fff8e7;
+  color: #76560b;
+  font-size: .68rem;
+  font-weight: 850;
+  line-height: 1.2;
+  white-space: nowrap;
+}
