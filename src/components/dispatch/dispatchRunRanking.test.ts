@@ -70,4 +70,24 @@ describe("rankDriversForRun", () => {
     expect(result[0].driver.driverId).toBe("return");
     expect(result[0].reasons).toContain("Supports return/backload positioning");
   });
+
+  it("penalises a driver whose available time is after the collection", () => {
+    const collectionTime = "2026-10-20T06:00:00Z";
+    const availableTimes = {
+      "early": { driverId: "early", availableFrom: "2026-10-20T04:00:00Z", requiredRestPeriod: 11, weeklyWorkingTimeUsed: 10, dailyDrivingTimeUsed: 2, wtdStatus: "ok" as const },
+      "late": { driverId: "late", availableFrom: "2026-10-20T10:00:00Z", requiredRestPeriod: 11, weeklyWorkingTimeUsed: 10, dailyDrivingTimeUsed: 2, wtdStatus: "ok" as const }
+    };
+    const result = rankDriversForRun(
+      run({ firstCollectionTimeUtc: collectionTime }),
+      [driver("late", "Late Driver"), driver("early", "Early Driver")],
+      {},
+      availableTimes
+    );
+
+    expect(result[0].driver.driverId).toBe("early");
+    expect(result[0].timeEligible).toBe(true);
+    expect(result[1].driver.driverId).toBe("late");
+    expect(result[1].timeEligible).toBe(false);
+    expect(result[1].score).toBeLessThan(result[0].score);
+  });
 });

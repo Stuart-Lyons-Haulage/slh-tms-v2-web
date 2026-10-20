@@ -61,7 +61,7 @@ function runTime(value?: string): string {
   return Number.isNaN(date.getTime()) ? "Time not set" : date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 }
 
-function RouteSidebar({ runs, owners, allocatedRunIds, drivers, allDrivers, vehicles, trailers, selections, statuses, samsaraDispatch, busyDriverId, onSelectionChange, onDispatch, onSamsaraAndDispatch, onDownloadSamsaraCsv }: {
+function RouteSidebar({ runs, owners, allocatedRunIds, drivers, allDrivers, vehicles, trailers, selections, statuses, samsaraDispatch, availableTimes, busyDriverId, onSelectionChange, onDispatch, onSamsaraAndDispatch, onDownloadSamsaraCsv }: {
   runs: DispatchRunDto[];
   owners: Record<string, string | undefined>;
   allocatedRunIds: Set<string>;
@@ -72,6 +72,7 @@ function RouteSidebar({ runs, owners, allocatedRunIds, drivers, allDrivers, vehi
   selections: DispatchSelectionMap;
   statuses: SmartDispatchSnapshot["statuses"];
   samsaraDispatch: SmartDispatchSnapshot["samsaraDispatch"];
+  availableTimes: DispatchAvailableTimeMap;
   busyDriverId?: string;
   onSelectionChange: (driverId: string, patch: Partial<DispatchSelectionMap[string]>) => void;
   onDispatch: (driver: DispatchDriverDto, selection: DispatchSelectionMap[string]) => void;
@@ -93,7 +94,7 @@ function RouteSidebar({ runs, owners, allocatedRunIds, drivers, allDrivers, vehi
         const ownerId = owners[run.runId];
         const owner = ownerId ? allDrivers.find(driver => driver.driverId === ownerId) : undefined;
         const suggestedDrivers = drivers.filter(driver => driver.suggestedRunId === run.runId);
-        const rankedDrivers = rankDriversForRun(run, drivers, owners)
+        const rankedDrivers = rankDriversForRun(run, drivers, owners, availableTimes)
           .sort((left, right) => Number(suggestedDrivers.includes(right.driver)) - Number(suggestedDrivers.includes(left.driver)) || right.score - left.score);
         const selectedDriver = ownerId ? drivers.find(driver => driver.driverId === ownerId) : undefined;
         const selected = ownerId ? selections[ownerId] || emptyDispatchSelection() : emptyDispatchSelection();
@@ -159,7 +160,7 @@ function RouteSidebar({ runs, owners, allocatedRunIds, drivers, allDrivers, vehi
           </div>
           {!owner && rankedDrivers.length > 0 && <details className="smart-run-fit">
             <summary>Best driver matches</summary>
-            <ol>{rankedDrivers.slice(0, 3).map(match => <li key={match.driver.driverId}><strong>{match.driver.name} · {match.score}/100</strong><small>{match.reasons.join(" · ")}</small></li>)}</ol>
+            <ol>{rankedDrivers.slice(0, 3).map(match => <li key={match.driver.driverId} className={match.timeEligible ? "" : "time-ineligible"}><strong>{match.driver.name} · {match.score}/100</strong>{!match.timeEligible && <span className="smart-run-time-warning" title="Driver cannot make this collection time">⚠ late</span>}<small>{match.reasons.join(" · ")}</small></li>)}</ol>
           </details>}
         </article>;
       })}
@@ -257,6 +258,22 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
   }, [planningDate, token]);
 
   useEffect(() => { void refresh(); }, [refresh]);
+
+  useEffect(() => {
+    if (!snapshot) return;
+    const TACHO_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+    const interval = window.setInterval(async () => {
+      const driverIds = Object.keys(availableTimes);
+      if (driverIds.length === 0) return;
+      try {
+        const access = await token();
+        const rows = await getAvailableTimes(planningDate, driverIds, access);
+        setAvailableTimes(availableTimesByDriver(rows));
+        setSelections(current => applyAvailableTimes(current, rows));
+      } catch { /* silent — next interval will retry */ }
+    }, TACHO_REFRESH_INTERVAL_MS);
+    return () => window.clearInterval(interval);
+  }, [snapshot, planningDate, token]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const runOwnerById = useMemo(
     () => snapshot ? buildRunOwnerById(selections, snapshot.equipment) : {},
@@ -785,6 +802,7 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
         selections={selections}
         statuses={snapshot.statuses}
         samsaraDispatch={snapshot.samsaraDispatch}
+        availableTimes={availableTimes}
         busyDriverId={busyDriverId}
         onSelectionChange={changeSelection}
         onDispatch={(driver, selection) => void prepareDispatch(driver, selection)}

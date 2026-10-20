@@ -10,11 +10,99 @@ import type {
   DispatchHistoryItem,
   DispatchLockResponse,
   LegacyDispatchLoad,
+  LegacyDispatchStop,
   DispatchRunDto,
   DispatchVisibilitySnapshot
 } from "./types";
 import { availabilityDayCount } from "./availabilityDayCount";
 import { isPotentiallyDispatchAvailable } from "./dispatchBoardState";
+
+export type SiteTimingProfile = {
+  siteId: string;
+  externalCode: string;
+  name: string;
+  latestCollectionTime?: string;
+  wallBoardDeadline?: string;
+  firstGeofenceResetsLiveEtos: boolean;
+  cutoffs: Array<{
+    collectFrom?: string;
+    collectTo?: string;
+    latestCollectionTime?: string;
+    depotDeadline?: string;
+    wallBoardDeadline?: string;
+  }>;
+  routeTimings: Array<{
+    routeCombination: string;
+    collectFrom?: string;
+    collectTo?: string;
+    latestCollectionTime?: string;
+    depotDeadline?: string;
+  }>;
+};
+
+async function getSiteTimingProfile(siteId: string, token: string): Promise<SiteTimingProfile | undefined> {
+  try {
+    return await request<SiteTimingProfile>(`/api/v1/sites/${encodeURIComponent(siteId)}/timing-profile`, token, undefined, 10_000);
+  } catch {
+    return undefined;
+  }
+}
+
+function timeToIso(planningDate: string, hhmm?: string): string | undefined {
+  if (!hhmm || hhmm.length < 4) return undefined;
+  const clean = hhmm.replace(":", "").padStart(4, "0");
+  const hours = clean.slice(0, 2);
+  const minutes = clean.slice(2, 4);
+  return `${planningDate}T${hours}:${minutes}:00Z`;
+}
+
+async function enrichStopsWithSiteTimings(
+  loads: LegacyDispatchLoad[],
+  planningDate: string,
+  token: string
+): Promise<LegacyDispatchLoad[]> {
+  const siteIdsNeeded = new Set<string>();
+  for (const load of loads) {
+    for (const stop of load.stops || []) {
+      if (stop.siteId && !stop.plannedCollectionTimeUtc && !stop.deliveryCutoffTimeUtc) {
+        siteIdsNeeded.add(stop.siteId);
+      }
+    }
+  }
+  if (siteIdsNeeded.size === 0) return loads;
+
+  const profiles = new Map<string, SiteTimingProfile>();
+  const fetches = [...siteIdsNeeded].map(async siteId => {
+    const profile = await getSiteTimingProfile(siteId, token);
+    if (profile) profiles.set(siteId, profile);
+  });
+  await Promise.all(fetches);
+
+  if (profiles.size === 0) return loads;
+
+  return loads.map(load => {
+    const stops = load.stops?.map(stop => {
+      if (!stop.siteId || (stop.plannedCollectionTimeUtc && stop.deliveryCutoffTimeUtc)) return stop;
+      const profile = profiles.get(stop.siteId);
+      if (!profile) return stop;
+
+      const isCollection = /^collect\b/i.test(stop.name);
+      const cutoff = profile.cutoffs[0];
+      const enriched: LegacyDispatchStop = { ...stop };
+
+      if (isCollection && !stop.plannedCollectionTimeUtc) {
+        const collectTime = cutoff?.collectFrom || profile.latestCollectionTime;
+        if (collectTime) enriched.plannedCollectionTimeUtc = timeToIso(planningDate, collectTime);
+      }
+      if (!isCollection && !stop.deliveryCutoffTimeUtc) {
+        const deadline = cutoff?.latestCollectionTime || cutoff?.depotDeadline || profile.wallBoardDeadline;
+        if (deadline) enriched.deliveryCutoffTimeUtc = timeToIso(planningDate, deadline);
+      }
+      return enriched;
+    });
+    return stops ? { ...load, stops } : load;
+  });
+}
 
 const DISPATCH_READ_TIMEOUT_MS = 60_000;
 const DISPATCH_TACHO_TIMEOUT_MS = 180_000;
@@ -277,7 +365,9 @@ export async function getSmartDispatch(
     ? authorityResult[0].value
     : (degradedSources.push("equipment", "drivers", "runs"), { drivers: [], vehicles: [], trailers: [], loads: [] } as DriverDispatchAuthority);
   const requestedDrivers: DispatchDriverDto[] = [];
-  const runs = driverAuthority.loads.map(authorityRun);
+  const enrichedLoads = await enrichStopsWithSiteTimings(driverAuthority.loads, planningDate, token).catch(() => driverAuthority.loads);
+  driverAuthority.loads = enrichedLoads;
+  const runs = enrichedLoads.map(authorityRun);
   // The Driver Master authority endpoint is a deliberately smaller, resilient
   // roster. If the enriched dispatch roster is empty or unavailable, retain
   // those identities rather than rendering an empty driver board.

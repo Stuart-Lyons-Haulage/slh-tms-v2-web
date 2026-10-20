@@ -467,7 +467,12 @@
 .smart-run-fit summary { cursor: pointer; font-weight: 600; }
 .smart-run-fit ol { margin: 5px 0 0 18px; padding: 0; }
 .smart-run-fit li { margin: 4px 0; }
+.smart-run-fit li.time-ineligible { opacity: 0.7; }
+.smart-run-fit li.time-ineligible strong { color: #b42318; }
 .smart-run-fit li small { display: block; line-height: 1.35; }
+.smart-run-time-warning { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 4px; background: #fef3cd; color: #856404; font-size: 0.75em; font-weight: 600; }
+.smart-run-time-bubble { font-weight: 600; }
+.smart-run-time-bubble.from-site-master { background: #e6f4ea; border: 1px solid #34a853; border-radius: 4px; padding: 1px 6px; }
 
 .relay-dispatch-panel {
   display: grid;

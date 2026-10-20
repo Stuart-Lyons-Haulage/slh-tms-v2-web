@@ -190,6 +190,7 @@ export interface LegacyDispatchStop {
   sequence: number;
   name: string;
   address?: string;
+  siteId?: string;
   latitude?: number;
   longitude?: number;
   plannedArrivalUtc?: string;
