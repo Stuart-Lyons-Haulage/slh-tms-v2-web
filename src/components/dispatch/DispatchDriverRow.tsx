@@ -204,11 +204,20 @@ export function DispatchDriverRow({
 
   const availabilityTone = driver.onLeave ? "on-leave" : blocked ? "blocked" : availabilityUnknown ? "availability-unknown" : driver.needsReturn ? "return-needed" : "available";
   const dispatchTone = samsaraState ? "samsara-sent" : lockedToDriver ? "allocated" : "";
+  const earliestStart = availableTime?.availableFrom || status?.earliestStartUtc || driver.availableFrom;
   return <tr className={`smart-dispatch-row ${availabilityTone} ${dispatchTone} ${collapsed ? "collapsed" : ""}`.trim()}>
     <td className="smart-driver-cell">
       <div className="smart-driver-heading">
         <button type="button" className="smart-driver-collapse" aria-label={`${collapsed ? "Expand" : "Collapse"} ${driver.name}`} aria-expanded={!collapsed} onClick={onToggleCollapse}>{collapsed ? "＋" : "−"}</button>
-        <div><strong>{driver.name}</strong><span className={`smart-day ${dayTone(driver)}`}>Day {status?.projectedDayNumber || driver.dayNumber || driver.tachoData.currentDutyDay}</span></div>
+        <div className="smart-driver-identity">
+          <strong>{driver.name}</strong>
+          <span className={`smart-day ${dayTone(driver)}`}>Day {status?.projectedDayNumber || driver.dayNumber || driver.tachoData.currentDutyDay}</span>
+          <span className="smart-driver-detail-bubbles">
+            {driver.driverCode?.trim() && <small className="smart-driver-code-bubble">{driver.driverCode.trim()}</small>}
+            {visibleSkills.slice(0, 4).map(item => <small key={item.skill} className="smart-driver-skill-bubble" title={item.label}>{item.badge}</small>)}
+            <small className="smart-driver-start-bubble" title={availableTime?.availableFrom ? "Earliest legal start from current Tacho calculation" : status?.earliestStartUtc && !status.earliestStartIsAssumption ? "Earliest legal start from Tacho record" : "Tacho start time not confirmed"}>{earliestStart ? `Start ${ukTime(earliestStart)}` : "Start —"}</small>
+          </span>
+        </div>
       </div>
       {collapsed && <div className="smart-collapsed-summary">
         <span className="employment-badge">{employmentLabel(driver.employmentType)}</span>
