@@ -60,7 +60,7 @@ function runTime(value?: string): string {
   return Number.isNaN(date.getTime()) ? "Time not set" : date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 }
 
-function RouteSidebar({ runs, owners, allocatedRunIds, drivers, allDrivers, vehicles, trailers, selections, statuses, failures, busyDriverId, onSelectionChange, onDispatch, onSamsaraAndDispatch, onDownloadSamsaraCsv }: {
+function RouteSidebar({ runs, owners, allocatedRunIds, drivers, allDrivers, vehicles, trailers, selections, statuses, samsaraDispatch, failures, busyDriverId, onSelectionChange, onDispatch, onSamsaraAndDispatch, onDownloadSamsaraCsv }: {
   runs: DispatchRunDto[];
   owners: Record<string, string | undefined>;
   allocatedRunIds: Set<string>;
@@ -70,6 +70,7 @@ function RouteSidebar({ runs, owners, allocatedRunIds, drivers, allDrivers, vehi
   trailers: SmartDispatchSnapshot["equipment"]["trailers"];
   selections: DispatchSelectionMap;
   statuses: SmartDispatchSnapshot["statuses"];
+  samsaraDispatch: SmartDispatchSnapshot["samsaraDispatch"];
   failures: DispatchLockFailure[];
   busyDriverId?: string;
   onSelectionChange: (driverId: string, patch: Partial<DispatchSelectionMap[string]>) => void;
@@ -97,6 +98,8 @@ function RouteSidebar({ runs, owners, allocatedRunIds, drivers, allDrivers, vehi
         const selectedDriver = ownerId ? drivers.find(driver => driver.driverId === ownerId) : undefined;
         const selected = ownerId ? selections[ownerId] || emptyDispatchSelection() : emptyDispatchSelection();
         const status = ownerId ? statuses[ownerId] : undefined;
+        const samsaraState = samsaraDispatch[run.runId];
+        const routeStatus = samsaraState?.requiresResend ? "Re-send due to amendment" : samsaraState ? "Dispatched to Samsara" : "Ready to Send";
         const rowFailures = failures.filter(failure => failure.runId === run.runId);
         const selectableDrivers = drivers;
         const ownerAvailable = Boolean(ownerId && drivers.some(driver => driver.driverId === ownerId));
@@ -109,9 +112,12 @@ function RouteSidebar({ runs, owners, allocatedRunIds, drivers, allDrivers, vehi
         return <article className={`smart-run-card ${allocated ? "allocated" : "available"}`} key={run.runId}>
           <div className="smart-run-card-title">
             <strong>{run.reference}</strong>
-            <span>{allocated ? "Dispatched" : owner ? "Selected" : run.isBackload ? "Backload" : "Available"}</span>
+            <span className={samsaraState?.requiresResend ? "needs-resend" : samsaraState ? "sent" : "ready"}>{routeStatus}</span>
           </div>
-          <div className="smart-run-time">{runTime(run.firstCollectionTimeUtc)}{run.furthestMiles != null && <small> · {run.furthestMiles} mi out</small>}{run.spanHours != null && <small> · ~{run.spanHours}h</small>}{run.needsNightOut && <small className="smart-run-nightout"> · night out</small>}{run.isNightRun && <small> · night run</small>}</div>
+          <div className="smart-run-time-row">
+            <span className="smart-run-time-bubble" title="Master Data access time for the first collection">Start {runTime(run.firstCollectionTimeUtc)}</span>
+            <span className="smart-run-distance">{run.furthestMiles != null ? `${run.furthestMiles} mi out` : ""}{run.spanHours != null ? ` · ~${run.spanHours}h` : ""}{run.needsNightOut ? " · night out" : ""}{run.isNightRun ? " · night run" : ""}</span>
+          </div>
           <div className="smart-run-route">
             <span><b>Collect</b>{run.collectionPoint.name}</span>
             <span><b>Deliver</b>{run.finalDeliveryPoint?.name || "Final stop not set"}</span>
@@ -647,11 +653,6 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
 
   return <section className="smart-dispatch-board" aria-label="Driver Dispatch">
     <header className="smart-dispatch-header">
-      <div>
-        <span className="smart-eyebrow">Authoritative planning & dispatch</span>
-        <h2>Driver Dispatch</h2>
-        <p>One screen for Tacho/live driver selection, allocation, compliance and Samsara route dispatch.</p>
-      </div>
       <div className="smart-dispatch-actions">
         {onPlanningDateChange && <label className="smart-date-control">Planning date<input type="date" value={planningDate} onChange={event => onPlanningDateChange(event.target.value)} /></label>}
         {extraActions}
@@ -718,7 +719,6 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
             <b>{visibleDrivers.length}</b>
           </div>
         </summary>
-        <p className="dispatch-driver-pool-help">All active Driver Master records remain visible. Green is available, red is blocked and hatched is unknown or stale until Sage/Tacho refreshes.</p>
         <table className="smart-dispatch-table authoritative">
           <thead>
             <tr>
@@ -768,6 +768,7 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
         trailers={snapshot.equipment.trailers}
         selections={selections}
         statuses={snapshot.statuses}
+        samsaraDispatch={snapshot.samsaraDispatch}
         failures={failures}
         busyDriverId={busyDriverId}
         onSelectionChange={changeSelection}
