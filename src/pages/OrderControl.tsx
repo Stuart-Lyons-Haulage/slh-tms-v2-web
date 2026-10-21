@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useWorkingDate } from "../lib/workingDate";
 import { useSearchParams } from "react-router-dom";
 import { request } from "../lib/api";
@@ -10,11 +10,12 @@ import { OrderReviewBulk } from "./OrderReviewBulk";
 import { OrderChangeAlerts } from "../components/OrderChangeAlerts";
 import { UndatedOrderReviewQueue } from "./UndatedOrderReviewQueue";
 import { listRuns } from "../api/runs";
-const AddOrders = lazy(() => import("./Pages").then(m => ({ default: m.Orders })));
+import { Orders as AddOrders } from "./Pages";
 import type { Load, TransportOrder } from "../lib/api";
 import { PastDatedOrders } from "../components/PastDatedOrders";
+import { OrderIntakeControlCentre } from "../components/OrderIntakeControlCentre";
 
-type OrderControlTab = "review" | "live" | "add";
+type OrderControlTab = "control" | "review" | "live" | "add";
 type NwfRepairResponse = { repaired: number; message: string };
 type CachedEmailRecord = {
   evidenceId: string;
@@ -35,7 +36,6 @@ type CachedEmailResponse = {
   fromUtc?: string;
   toUtc?: string;
   count: number;
-  hasMore?: boolean;
   records: CachedEmailRecord[];
 };
 
@@ -184,9 +184,7 @@ export function ApprovedOrdersList({ date, token }: { date: string; token: Retur
   }, [date, token]);
 
   useEffect(() => {
-    let active = true;
     void refresh();
-    return () => { active = false; };
   }, [refresh]);
 
   const runByOrderId = new Map(runs.flatMap(run => run.stops
@@ -221,14 +219,13 @@ function OrderIntakeCacheRecovery({ date }: { date: string }) {
     setReceivedThroughDate(date);
   }, [date]);
 
-  async function loadCache(skip = 0) {
+  async function loadCache() {
     setLoading(true);
     setError(undefined);
     try {
-      const result = await request<CachedEmailResponse>(`/api/v1/order-intake/cache?fromUtc=${encodeURIComponent(window.fromUtc)}&toUtc=${encodeURIComponent(window.toUtc)}&take=100&skip=${skip}`, await token());
-      const records = skip === 0 ? result.records : [...(data?.records ?? []), ...result.records];
-      setData({ ...result, count: records.length, records });
-      setNotice(`${records.length}${result.hasMore ? "+" : ""} cached emails loaded · ${records.filter(item => (item.existingOrderCount ?? 0) === 0).length} with no order row in the loaded pages.`);
+      const result = await request<CachedEmailResponse>(`/api/v1/order-intake/cache?fromUtc=${encodeURIComponent(window.fromUtc)}&toUtc=${encodeURIComponent(window.toUtc)}&take=1000`, await token());
+      setData(result);
+      setNotice(`${result.count} cached emails found · ${result.records.filter(item => (item.existingOrderCount ?? 0) === 0).length} with no order row.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load cached intake emails.");
     } finally {
@@ -287,13 +284,13 @@ function OrderIntakeCacheRecovery({ date }: { date: string }) {
       });
       let job = started;
       while (!job.done) {
-        setNotice(`Re-parsing… ${job.evidenceScanned} emails checked, ${job.eligibleOrders} matching order projections checked. You can leave this page.`);
+        setNotice(`Re-parsing… ${job.evidenceScanned} emails checked, ${job.eligibleOrders} matching orders found. You can leave this page.`);
         await new Promise(resolve => globalThis.setTimeout(resolve, 2500));
         job = await request<ReplayJobStatus>(`/api/v1/order-intake/replay-jobs/${encodeURIComponent(started.id)}`, await token());
       }
       saveReplayCheckpoint(date, undefined);
       const skipped = job.errors.length ? ` ${job.errors.length} email${job.errors.length === 1 ? "" : "s"} could not be re-parsed: ${job.errors.slice(0, 3).join("; ")}` : "";
-      setNotice(`Re-parse complete: ${job.eligibleOrders} matching order projection${job.eligibleOrders === 1 ? "" : "s"} checked for ${date}; ${job.legacyMappingExceptionsArchived} old placeholder${job.legacyMappingExceptionsArchived === 1 ? "" : "s"} archived. Check Approved and Pending Review for the actual orders.${skipped}`);
+      setNotice(`Re-parse complete: ${job.eligibleOrders} order${job.eligibleOrders === 1 ? "" : "s"} matched for ${date}; ${job.pendingAfterReplay} awaiting review; ${job.legacyMappingExceptionsArchived} old placeholder${job.legacyMappingExceptionsArchived === 1 ? "" : "s"} archived.${skipped}`);
       await loadCache();
       refreshVisibleReviewData();
     } catch (err) {
@@ -322,9 +319,8 @@ function OrderIntakeCacheRecovery({ date }: { date: string }) {
         {data && <span className={missing.length ? "status warning" : "status approved"}>{missing.length} missing order rows</span>}
         <button type="button" onClick={() => void replayRetainedEvidence()} disabled={replaying || forcing !== undefined || loading}>{replaying ? "Re-parsing…" : `Re-parse ${date}`}</button>
         <button type="button" onClick={() => setOpen(value => !value)}>{open ? "Hide cached emails" : "Show cached emails"}</button>
-        {open && <button type="button" onClick={() => void loadCache()} disabled={loading}>{loading ? "Checking…" : "Refresh cache"}</button>}
-        {open && data?.hasMore && <button type="button" onClick={() => void loadCache(data.records.length)} disabled={loading}>Load older emails</button>}
-        {open && <button type="button" className="primary" onClick={forceAll} disabled={forcing !== undefined || missing.length === 0 || data?.hasMore}>{forcing === "all" ? "Forcing…" : `Force all missing (${missing.length})`}</button>}
+        {open && <button type="button" onClick={loadCache} disabled={loading}>{loading ? "Checking…" : "Refresh cache"}</button>}
+        {open && <button type="button" className="primary" onClick={forceAll} disabled={forcing !== undefined || missing.length === 0}>{forcing === "all" ? "Forcing…" : `Force all missing (${missing.length})`}</button>}
       </div>
     </div>
     {notice && <p className="notice inline-notice" style={{ marginTop: 12 }}>{notice}</p>}
@@ -373,7 +369,7 @@ export function OrderControl({ initialTab = "review" }: { initialTab?: OrderCont
   const token = useAccessToken();
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedTab = searchParams.get("tab");
-  const [tab, setTabState] = useState<OrderControlTab>(requestedTab === "add" || requestedTab === "live" ? requestedTab : initialTab);
+  const [tab, setTabState] = useState<OrderControlTab>(requestedTab === "add" || requestedTab === "live" || requestedTab === "control" ? requestedTab : initialTab);
   function setTab(next: OrderControlTab) {
     setTabState(next);
     const params = new URLSearchParams(searchParams);
@@ -421,13 +417,14 @@ export function OrderControl({ initialTab = "review" }: { initialTab?: OrderCont
       </div>
     </section>
     <div className="ui-tabs" role="tablist" aria-label="Orders view" style={{ marginBottom: 12 }}>
+      <button type="button" role="tab" aria-selected={tab === "control"} onClick={() => setTab("control")}>Intake control</button>
       <button type="button" role="tab" aria-selected={tab === "review"} onClick={() => setTab("review")}>Waiting for review</button>
       <button type="button" role="tab" aria-selected={tab === "live"} onClick={() => setTab("live")}>Approved orders</button>
       <button type="button" role="tab" aria-selected={tab === "add"} onClick={() => setTab("add")}>Add orders</button>
     </div>
     {repairNotice && <p className="notice inline-notice">{repairNotice}</p>}
-    {tab !== "add" && <OrderReviewDateStrip selectedDate={selectedDate} onChange={updateDate} />}
-    {tab === "add" ? <Suspense fallback={<div className="state">Loading order entry…</div>}><AddOrders /></Suspense> : tab === "review" ? <><p className="hint" style={{ margin: "0 0 8px" }}>"Unusual: new delivery point / collection site" usually means a site name isn't in Master data yet. <a href="/admin/order-intake?tab=names">Fix site names</a> once and every waiting order is re-checked.</p><OrderChangeAlerts /><PastDatedOrders onClosed={refreshVisibleReviewData} /><OrderIntakeCacheRecovery date={selectedDate} /><UndatedOrderReviewQueue /><OrderReviewBulk date={selectedDate} /></> : <><ApprovedOrdersList date={selectedDate} token={token} /><JobsOperational date={selectedDate} /></>}
+    {tab !== "add" && tab !== "control" && <OrderReviewDateStrip selectedDate={selectedDate} onChange={updateDate} />}
+    {tab === "control" ? <OrderIntakeControlCentre /> : tab === "add" ? <AddOrders /> : tab === "review" ? <><p className="hint" style={{ margin: "0 0 8px" }}>"Unusual: new delivery point / collection site" usually means a site name isn't in Master data yet. <a href="/admin/order-intake?tab=names">Fix site names</a> once and every waiting order is re-checked.</p><OrderChangeAlerts /><PastDatedOrders onClosed={refreshVisibleReviewData} /><OrderIntakeCacheRecovery date={selectedDate} /><UndatedOrderReviewQueue /><OrderReviewBulk date={selectedDate} /></> : <><ApprovedOrdersList date={selectedDate} token={token} /><JobsOperational date={selectedDate} /></>}
     {sourceEmailStagingId && <SourceEmailEvidenceDrawer stagingId={sourceEmailStagingId} onClose={closeSourceEmail} />}
   </>;
 }
