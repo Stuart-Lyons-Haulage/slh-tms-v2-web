@@ -66,7 +66,7 @@ describe("parsePlannerPlanFile", () => {
     expect(payload.runs.some(run => run.plannerRun.startsWith("Waitrose") && run.runType === "PM" && run.overnight && !/WAVE/i.test(run.plannerRun))).toBe(true);
     const overnightWaitrose = payload.runs.find(run => run.plannerRun.startsWith("Waitrose") && run.runType === "PM");
     expect(overnightWaitrose?.stops[0].deliveryDate).toBe("2026-09-13");
-    const collectionBoard = payload.runs.find(run => run.plannerRun === "PM-4");
+    const collectionBoard = payload.runs.find(run => run.plannerRun.startsWith("PM-") && run.source?.sheet === "Collection Board");
     expect(collectionBoard).toMatchObject({ runType: "PM", overnight: true });
     expect(collectionBoard?.stops[0]).toMatchObject({ collectionSite: "Barfoots Sefter", deliveryDate: "2026-09-13" });
     expect(collectionBoard?.plannerNote).not.toMatch(/WAVE/i);

@@ -205,7 +205,28 @@ export function southboundWorkbookToPayload(sheets: WorkbookSheetRows, fileName 
     { sheet: "WAVE 3", period: "PM" as const, label: "PM O/N" },
   ]) {
     const rows = sheets[wave.sheet] ?? [];
-    const sections = [{ header: 1, start: 3, end: 18 }, { header: 18, start: 20, end: rows.length }];
+    // Find destination header rows dynamically: a row whose first populated cell in a
+    // destination column contains "Waitrose" or a known depot name rather than a supplier.
+    // The original template places headers at rows 1 and 18, but xlsx may strip leading
+    // empty rows during roundtrip, so scan instead of using fixed indices.
+    const headerIndices: number[] = [];
+    for (let index = 0; index < Math.min(rows.length, 30); index++) {
+      const row = rows[index];
+      if (!row) continue;
+      const hasDestination = destinationColumns.some(column => {
+        const value = norm(row[column]);
+        return value && /WAITROSE|BRACKNELL|AYLESFORD|BRINKLOW|LEYLAND|NORTH|SOUTH/.test(value) && !/SUPPLIER/.test(value);
+      });
+      if (hasDestination) headerIndices.push(index);
+    }
+    // Fallback to the original fixed indices if no headers were found.
+    const sections = headerIndices.length > 0
+      ? headerIndices.map((header, index) => ({
+          header,
+          start: header + 2,
+          end: index + 1 < headerIndices.length ? headerIndices[index + 1] : rows.length,
+        }))
+      : [{ header: 1, start: 3, end: 18 }, { header: 18, start: 20, end: rows.length }];
     for (const section of sections) {
       for (const column of destinationColumns) {
         const destination = clean(rows[section.header]?.[column]);
@@ -245,7 +266,18 @@ export function southboundWorkbookToPayload(sheets: WorkbookSheetRows, fileName 
   const currentMarketSheets = Object.entries(sheets).filter(([name, rows]) => /^(Covent|Spit|Spitalfields|Western|West 3|Brighton)/i.test(name) && rows.some(row => row.some(value => excelDate(value) === planningDate)));
   if (currentMarketSheets.length === 0) {
     const board = sheets["Collection Board"] ?? [];
-    for (let index = 3; index < board.length; index++) {
+    // Find the first data row dynamically: look for the header row containing
+    // "Collection Required" or "Collection" in column 1-2, then start one past it.
+    // The original template places the header at row 2 and data at row 3, but
+    // xlsx may strip leading empty rows during roundtrip.
+    let boardStart = 3;
+    for (let index = 0; index < Math.min(board.length, 10); index++) {
+      if (/COLLECTION\s*(REQUIRED)?/i.test(norm(board[index]?.[1]) + " " + norm(board[index]?.[2]))) {
+        boardStart = index + 1;
+        break;
+      }
+    }
+    for (let index = boardStart; index < board.length; index++) {
       const required = norm(board[index]?.[1]);
       const description = clean(board[index]?.[2]);
       if (required !== "YES") continue;
