@@ -22,7 +22,7 @@ function isHomeSite(value?: string) { return Boolean(value && HOME_SITES.test(va
 type PlanningCell = { planningGroup: string; destination: string; ordered: number; planned: number; outstanding: number; overplanned: number; orderIds: string[] };
 type PlanningRun = { id: string; reference: string; status: string; trailerId?: string; palletSpacesUsed?: number; totalPalletSpaces?: number; capacityType?: string; capacityStatus?: "Green" | "Amber" | "Red"; capacityUtilisationPercent?: number; stopCount: number };
 type PlanningControlData = { date: string; generatedAtUtc: string; summary: { ordered: number; planned: number; outstanding: number; overplanned: number; lateAdditions: number; orders: number; runs: number }; planningGroups: string[]; destinations: string[]; cells: PlanningCell[]; orders: PlanningOrder[]; runs: PlanningRun[] };
-type RegionData = { date: string; destinations: string[]; destinationRegions: Record<string, string>; destinationLabels?: Record<string, string>; destinationSiteCodes?: Record<string, string | null>; unmatchedDestinations?: number; unmatchedDestinationNames?: string[] };
+type RegionData = { date: string; destinations: string[]; destinationRegions: Record<string, string>; destinationLabels?: Record<string, string>; destinationSiteCodes?: Record<string, string | null>; destinationSiteIdentities?: Record<string, string | null>; unmatchedDestinations?: number; unmatchedDestinationNames?: string[] };
 type OrderHint = { orderId: string; message: string; pattern: string; confidence: number; matchingLoadId?: string | null; matchingRun?: string | null; typicalPallets?: number | null; palletWarning?: string | null };
 type ViewMode = "toPlan" | "planned" | "summary";
 type PalletTone = "standard" | "euro" | "traycrate" | "trolley" | "mixed" | "unknown";
@@ -93,8 +93,10 @@ export function PalletPlanningControl() {
   // ("Aylesford", "AYLESFORD", "Waitrose Aylesford") share a column; unmatched names
   // share one when they read the same once spacing/case/punctuation are ignored.
   const columnOf = useCallback((raw: string) => {
+    const identity = regions.data?.destinationSiteIdentities?.[raw];
+    if (identity) return `site:${identity}`;
     const code = regions.data?.destinationSiteCodes?.[raw];
-    if (code) return `site:${code}`;
+    if (code) return `code:${code}`;
     const label = regions.data?.destinationLabels?.[raw] || raw;
     return `name:${label.replace(/[^a-z0-9]/gi, "").toUpperCase()}`;
   }, [regions.data]);
