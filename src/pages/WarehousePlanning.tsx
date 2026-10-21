@@ -29,7 +29,7 @@ function totals(rows: WarehouseMovement[]) {
 export function WarehousePlanning() {
   const [date] = useWorkingDate();
   const data = useTmsQuery<WarehouseDailyResult>(['warehouse', 'daily', date] as const, useCallback((t: string) => request<WarehouseDailyResult>(`/api/v1/warehouse/daily?date=${encodeURIComponent(date)}`, t), [date]));
-  const refresh = data.refetch;
+  const refresh = useCallback(async () => { await data.refetch(); }, [data.refetch]);
   useEffect(() => startVisiblePolling(refresh, 60_000), [refresh]);
   const inbound = useMemo(() => data.data ? sortByExpected(data.data.inbound, data.data.planningDate) : [], [data.data]);
   const outbound = useMemo(() => data.data ? sortByExpected(data.data.outbound, data.data.planningDate) : [], [data.data]);
