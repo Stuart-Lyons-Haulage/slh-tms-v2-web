@@ -7,7 +7,7 @@ import { SouthboundCollections } from "./BookingReservations";
 import { request } from "../lib/api";
 import { useAccessToken } from "../lib/auth";
 import { signalPlanningChange, subscribePlanningChanges } from "../lib/planningEvents";
-import { useApi } from "../lib/useApi";
+import { useTmsQuery } from "../lib/useTmsQuery";
 import { startVisiblePolling } from "../lib/visiblePolling";
 import { planningDeliveryLocation } from "../lib/planningLocations";
 import { useWorkingDate } from "../lib/workingDate";
@@ -55,12 +55,12 @@ export function PalletPlanningControl() {
   // because overlapping save + refresh cycles on the same run raced each other.
   const pendingSaves = useRef(0);
   const saveChain = useRef<Promise<void>>(Promise.resolve());
-  const control = useApi(useCallback(async () => request<PlanningControlData>(`/api/v1/planning-control/pallets?date=${encodeURIComponent(date)}`, await token()), [date, token]));
-  const regions = useApi(useCallback(async () => request<RegionData>(`/api/v1/planning-control/regions?date=${encodeURIComponent(date)}`, await token()), [date, token]));
-  const learningHints = useApi(useCallback(async () => request<OrderHint[]>(`/api/v1/planner/learning/orders?date=${encodeURIComponent(date)}`, await token()), [date, token]));
+  const control = useTmsQuery<PlanningControlData>(['planning-control', 'pallets', date] as const, useCallback((t: string) => request<PlanningControlData>(`/api/v1/planning-control/pallets?date=${encodeURIComponent(date)}`, t), [date]));
+  const regions = useTmsQuery<RegionData>(['planning-control', 'regions', date] as const, useCallback((t: string) => request<RegionData>(`/api/v1/planning-control/regions?date=${encodeURIComponent(date)}`, t), [date]));
+  const learningHints = useTmsQuery<OrderHint[]>(['planner', 'learning', 'orders', date] as const, useCallback((t: string) => request<OrderHint[]>(`/api/v1/planner/learning/orders?date=${encodeURIComponent(date)}`, t), [date]));
   useEffect(() => { setSelectedCell(undefined); }, [date]);
-  const refreshControl = control.refresh;
-  const refreshRegions = regions.refresh;
+  const refreshControl = control.refetch;
+  const refreshRegions = regions.refetch;
 
   useEffect(() => {
     // Don't reload the grid underneath an in-flight save: a background refresh that
@@ -207,7 +207,7 @@ export function PalletPlanningControl() {
     </tbody></table></div></section>;
   }
 
-  return <section className="pallet-control-page"><div className="title-row pallet-control-header"><div><h1>Pallet Control</h1><p className="intro">What is ordered, planned and still to plan, by collection and delivery point. Click a number to put it on a run.</p></div><div className="title-actions"><button onClick={() => { void refreshControl(); void refreshRegions(); }} disabled={control.loading}>Refresh</button><Link className="button-like" to="/">Open planner</Link></div></div>
+  return <section className="pallet-control-page"><div className="title-row pallet-control-header"><div><h1>Pallet Control</h1><p className="intro">What is ordered, planned and still to plan, by collection and delivery point. Click a number to put it on a run.</p></div><div className="title-actions"><button onClick={() => { void refreshControl(); void refreshRegions(); }} disabled={control.isLoading}>Refresh</button><Link className="button-like" to="/">Open planner</Link></div></div>
     <div className="ui-tabs" role="tablist" aria-label="Pallet Order view">
       <button type="button" role="tab" aria-selected={tab === "pallets"} onClick={() => openTab("pallets")}>Pallets</button>
       <button type="button" role="tab" aria-selected={tab === "southbound"} onClick={() => openTab("southbound")}>Southbound collections{southboundOrders.some(order => order.outstandingPallets > 0) && <span className="ui-tab-count">{southboundOrders.filter(order => order.outstandingPallets > 0).length}</span>}</button>
@@ -215,7 +215,7 @@ export function PalletPlanningControl() {
     {tab === "southbound" ? <SouthboundCollections date={date} confirmedOrders={southboundOrders} /> : <>
     <div className="pallet-control-legend"><span><i style={{ background: toneBackground("standard"), borderColor: toneBorder("standard") }} />Standard</span><span><i style={{ background: toneBackground("euro"), borderColor: toneBorder("euro") }} />Euro</span><span><i style={{ background: toneBackground("traycrate"), borderColor: toneBorder("traycrate") }} />Trays / Crates</span><span><i style={{ background: toneBackground("trolley"), borderColor: toneBorder("trolley") }} />Trolleys</span><span><i style={{ background: toneBackground("mixed"), borderColor: toneBorder("mixed") }} />Mixed</span><small>{ukDate(date)} · {palletTotals.orders} orders · {data?.summary.runs || 0} runs{regions.data?.unmatchedDestinations ? ` · ${regions.data.unmatchedDestinations} destination${regions.data.unmatchedDestinations === 1 ? "" : "s"} need Site Master matching` : ""} · instant event updates · 30s reconciliation · updated {fmtTime(data?.generatedAtUtc)}</small></div>
     {regions.data?.unmatchedDestinationNames?.length ? <p className="notice inline-notice">Site Master review required: {regions.data.unmatchedDestinationNames.join(", ")}. Open <Link to="/master-data">Master Data → Sites</Link> and add an alias or a new site record. Orders remain available to plan until matched.</p> : null}
-    {message && <p className="notice inline-notice">{message}</p>}{control.error && <p className="notice inline-notice">{control.error}</p>}
+    {message && <p className="notice inline-notice">{message}</p>}{control.error && <p className="notice inline-notice">{control.error.message}</p>}
     {data && data.runs.length > 0 && <RunSpace runs={data.runs} toPlan={palletTotals.outstanding} />}
     {data && <div className="pallet-control-mini-metrics"><article><span>To plan (load units)</span><strong>{palletTotals.outstanding}</strong></article><article><span>Planned (load units)</span><strong>{palletTotals.planned}</strong></article><article className={palletTotals.overplanned ? "attention" : ""}><span>Over-planned (load units)</span><strong>{palletTotals.overplanned}</strong></article><article><span>Late additions (orders)</span><strong>{palletTotals.lateAdditions}</strong></article></div>}
     {data && palletTotals.orders === 0 && <div className="state">No approved load-unit orders are available for {ukDate(date)}.</div>}{data && <div className="pallet-control-stack">{matrix("toPlan", "To Plan", palletTotals.outstanding)}{matrix("planned", "Planned", palletTotals.planned)}{matrix("summary", "Pallet Summary", palletTotals.ordered)}</div>}

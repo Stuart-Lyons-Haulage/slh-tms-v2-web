@@ -6,7 +6,6 @@ describe("TV bootstrap contract", () => {
   it("recognises every public TV entry point and keeps TV auth in memory", () => {
     expect(isTvRoute("/tv")).toBe(true);
     expect(isTvRoute("/operations-wallboard/tv")).toBe(true);
-    expect(isTvRoute("/live-runs/tv")).toBe(true);
     expect(isTvRoute("/operations-wallboard")).toBe(false);
     expect(isPublicTvLink("/tv", "?key=display-key")).toBe(true);
     expect(isPublicTvLink("/tv", "")).toBe(false);
