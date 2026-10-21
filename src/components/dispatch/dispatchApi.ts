@@ -64,7 +64,7 @@ async function enrichStopsWithSiteTimings(
   const siteIdsNeeded = new Set<string>();
   for (const load of loads) {
     for (const stop of load.stops || []) {
-      if (stop.siteId && !stop.plannedCollectionTimeUtc && !stop.deliveryCutoffTimeUtc) {
+      if (stop.siteId && (!stop.plannedCollectionTimeUtc || !stop.deliveryCutoffTimeUtc)) {
         siteIdsNeeded.add(stop.siteId);
       }
     }
@@ -280,8 +280,8 @@ function cleanStopName(value?: string): string | undefined {
 
 function authorityRun(load: LegacyDispatchLoad): DispatchRunDto {
   const stops = [...(load.stops || [])].sort((left, right) => left.sequence - right.sequence);
-  const collection = stops.find(stop => /^collect\\b/i.test(stop.name)) || stops[0];
-  const delivery = [...stops].reverse().find(stop => /^deliver\\b/i.test(stop.name)) || stops.at(-1);
+  const collection = stops.find(stop => /^collect\b/i.test(stop.name)) || stops[0];
+  const delivery = [...stops].reverse().find(stop => /^deliver\b/i.test(stop.name)) || stops.at(-1);
   return {
     runId: load.id,
     reference: load.reference || load.rawReference || load.id,
@@ -296,7 +296,7 @@ function authorityRun(load: LegacyDispatchLoad): DispatchRunDto {
     deliveryCutoffTimeUtc: delivery?.deliveryCutoffTimeUtc,
     finalDeliveryPoint: delivery ? { name: cleanStopName(delivery.name) || delivery.name, latitude: delivery.latitude, longitude: delivery.longitude } : undefined,
     plannerNotes: load.plannerNotes,
-    trailerSwapRequested: /(?:trailer\\s*(?:swap|change)|swap\\s*trailer|drop\\s*trailer|pick\\s*up\\s+(?:a\\s*)?(?:different|new)\\s*trailer)/i.test(load.plannerNotes || ""),
+    trailerSwapRequested: /(?:trailer\s*(?:swap|change)|swap\s*trailer|drop\s*trailer|pick\s*up\s+(?:a\s*)?(?:different|new)\s*trailer)/i.test(load.plannerNotes || ""),
     relay: load.relayPlan
   };
 }

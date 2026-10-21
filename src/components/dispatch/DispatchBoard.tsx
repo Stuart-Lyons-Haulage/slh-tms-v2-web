@@ -393,18 +393,33 @@ export function DispatchBoard({ planningDate, onPlanningDateChange, extraActions
     setFailures([]);
     try {
       const access = await token();
+      const cacheKey = dispatchCacheKey(access, planningDate);
       await syncDispatchDrivers(access);
-      const nextSnapshot = await getSmartDispatch(planningDate, access);
+      let pendingTachoRows: DispatchAvailableTimeDto[] | undefined;
+      const nextSnapshot = await getSmartDispatch(planningDate, access, undefined, (rows) => {
+        pendingTachoRows = rows;
+        setAvailableTimes(availableTimesByDriver(rows));
+        setSelections(current => applyAvailableTimes(current, rows));
+        setSnapshot(current => {
+          if (!current) return current;
+          const updated = { ...current, availableTimes: rows };
+          dispatchSnapshotCache.set(cacheKey, updated);
+          return updated;
+        });
+        const warnings = rows.filter(row => Boolean(row.breachDetail)).length;
+        setNotice(warnings > 0
+          ? `Staff refreshed from Driver Master/Sage and Tacho times recalculated for ${rows.length} staff · ${warnings} require planner attention.`
+          : `Staff refreshed from Driver Master/Sage and Tacho times recalculated for ${rows.length} staff.`);
+      });
       const nextSelections = buildInitialSelections(nextSnapshot.drivers, nextSnapshot.runs, nextSnapshot.equipment);
-      const rows = nextSnapshot.availableTimes;
-      dispatchSnapshotCache.set(dispatchCacheKey(access, planningDate), nextSnapshot);
-      setSnapshot(nextSnapshot);
-      setSelections(applyAvailableTimes(nextSelections, rows));
-      setAvailableTimes(availableTimesByDriver(rows));
-      const warnings = rows.filter(row => Boolean(row.breachDetail)).length;
-      setNotice(warnings > 0
-        ? `Staff refreshed from Driver Master/Sage and Tacho times recalculated for ${rows.length} staff · ${warnings} require planner attention.`
-        : `Staff refreshed from Driver Master/Sage and Tacho times recalculated for ${rows.length} staff.`);
+      const data = pendingTachoRows ? { ...nextSnapshot, availableTimes: pendingTachoRows } : nextSnapshot;
+      dispatchSnapshotCache.set(cacheKey, data);
+      setSnapshot(data);
+      setSelections(applyAvailableTimes(nextSelections, data.availableTimes));
+      setAvailableTimes(availableTimesByDriver(data.availableTimes));
+      if (!pendingTachoRows) {
+        setNotice("Staff refreshed from Driver Master/Sage. Tacho times loading…");
+      }
     } catch (exception) {
       setError(exception instanceof Error ? exception.message : "Driver sync and Tacho refresh failed.");
     } finally {
