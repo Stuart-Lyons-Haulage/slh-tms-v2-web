@@ -96,12 +96,12 @@ function RouteSidebar({ runs, owners, allocatedRunIds, drivers, allDrivers, vehi
         const suggestedDrivers = drivers.filter(driver => driver.suggestedRunId === run.runId);
         const rankedDrivers = rankDriversForRun(run, drivers, owners, availableTimes)
           .sort((left, right) => Number(suggestedDrivers.includes(right.driver)) - Number(suggestedDrivers.includes(left.driver)) || right.score - left.score);
-        const selectedDriver = ownerId ? drivers.find(driver => driver.driverId === ownerId) : undefined;
+        const selectedDriver = owner;
         const selected = ownerId ? selections[ownerId] || emptyDispatchSelection() : emptyDispatchSelection();
         const status = ownerId ? statuses[ownerId] : undefined;
         const samsaraState = samsaraDispatch[run.runId];
         const routeStatus = samsaraState?.requiresResend ? "Re-send due to amendment" : samsaraState ? "Dispatched to Samsara" : "Ready to Send";
-        const ownerAvailable = Boolean(ownerId && drivers.some(driver => driver.driverId === ownerId));
+        const ownerAvailable = Boolean(owner);
         const reasonForUnavailableDriver = (driver: DispatchDriverDto): string[] => {
           const reasons: string[] = [];
           const missing = missingSkills(driver, run);
