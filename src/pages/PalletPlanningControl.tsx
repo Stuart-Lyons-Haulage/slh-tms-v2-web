@@ -61,15 +61,37 @@ export function PalletPlanningControl() {
   useEffect(() => { setSelectedCell(undefined); }, [date]);
   const refreshControl = control.refetch;
   const refreshRegions = regions.refetch;
+  // Track the server timestamp of the last successful /pallets response so SSE-driven
+  // refreshes can use the lightweight /orders/changes endpoint as a gate: if nothing
+  // changed since the last refresh, the heavy reload is skipped entirely.
+  const lastRefreshAtUtc = useRef<string | undefined>(undefined);
+  useEffect(() => { if (control.data?.generatedAtUtc) lastRefreshAtUtc.current = control.data.generatedAtUtc; }, [control.data?.generatedAtUtc]);
 
   useEffect(() => {
     // Don't reload the grid underneath an in-flight save: a background refresh that
     // resolves mid-save can repaint stale figures and hide a just-added allocation.
     // The save runs its own refresh when it finishes, so nothing is missed.
-    const unsubscribe = subscribePlanningChanges(() => { if (pendingSaves.current > 0) return; void refreshControl(); void refreshRegions(); });
+    const checkThenRefresh = async () => {
+      if (pendingSaves.current > 0) return;
+      // Fast path: ask the server whether anything has changed since our last /pallets
+      // load. If nothing moved, skip the expensive full reload. The check itself is a
+      // single indexed query that returns in <20 ms.
+      if (lastRefreshAtUtc.current) {
+        try {
+          const t = await token();
+          const changes = await request<{ changed: boolean }>(`/api/v1/planning-control/orders/changes?date=${encodeURIComponent(date)}&since=${encodeURIComponent(lastRefreshAtUtc.current)}`, t);
+          if (!changes.changed) return;
+        } catch { /* If the check fails, fall through to a full refresh */ }
+      }
+      void refreshControl();
+      void refreshRegions();
+    };
+    const unsubscribe = subscribePlanningChanges(() => void checkThenRefresh());
+    // Reconciliation poll always does a full refresh — it runs every 30 s and is the
+    // safety net that catches any state SSE missed (a reconnect gap, a tab waking up).
     const stopReconciliation = startVisiblePolling(() => pendingSaves.current > 0 ? Promise.resolve() : Promise.allSettled([refreshControl(), refreshRegions()]).then(() => undefined), 30_000);
     return () => { unsubscribe(); stopReconciliation(); };
-  }, [refreshControl, refreshRegions]);
+  }, [refreshControl, refreshRegions, date, token]);
 
   const data = control.data;
   const allOrders = useMemo(() => data?.orders || [], [data?.orders]);
