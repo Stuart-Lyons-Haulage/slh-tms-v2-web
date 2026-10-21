@@ -364,19 +364,12 @@ export async function getSmartDispatch(
   const driverAuthority = authorityResult[0].status === "fulfilled"
     ? authorityResult[0].value
     : (degradedSources.push("equipment", "drivers", "runs"), { drivers: [], vehicles: [], trailers: [], loads: [] } as DriverDispatchAuthority);
-  const requestedDrivers: DispatchDriverDto[] = [];
   const enrichedLoads = await enrichStopsWithSiteTimings(driverAuthority.loads, planningDate, token).catch(() => driverAuthority.loads);
   driverAuthority.loads = enrichedLoads;
   const runs = enrichedLoads.map(authorityRun);
-  // The Driver Master authority endpoint is a deliberately smaller, resilient
-  // roster. If the enriched dispatch roster is empty or unavailable, retain
-  // those identities rather than rendering an empty driver board.
-  const drivers = requestedDrivers.length > 0
-    ? requestedDrivers
-    : driverAuthority.drivers.map(authorityFallbackDriver);
-  if (requestedDrivers.length === 0 && driverAuthority.drivers.length > 0 && !degradedSources.includes("drivers")) {
-    degradedSources.push("drivers");
-  }
+  // The single authoritative Driver Dispatch endpoint now provides the
+  // canonical driver roster directly — no separate enriched fetch is needed.
+  const drivers = driverAuthority.drivers.map(authorityFallbackDriver);
   // History and Samsara improve the board but are not needed to allocate safely.
   // Start both in parallel with the core requests and apply them when they finish;
   // a slow optional integration must not delay the Dispatch table.
