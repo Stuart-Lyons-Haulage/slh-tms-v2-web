@@ -25,7 +25,7 @@ describe("Run Planner autosave", () => {
     expect(planner).toContain("Saving ${order.reference} to the new run…");
     expect(planner).toContain("void createPlanningRun({ ...currentRun, lines: nextLines });");
     expect(planner).toContain("await allocate(allocationEntries[0][0], created.id, allocationEntries[0][1], access)");
-    expect(planner).toContain("void refreshControl().catch(() => undefined);");
+    expect(planner).toContain("applyAllocationResults(result");
   });
 
   it("does not mark a linked job unmatched after its remaining quantity reaches zero", () => {

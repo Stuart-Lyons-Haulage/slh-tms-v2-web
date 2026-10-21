@@ -41,6 +41,7 @@ type PlanningControlData = {
 type AllocationResult = {
   orderId: string;
   loadId: string;
+  loadReference?: string;
   allocatedToRun: number;
   plannedPallets: number;
   orderedPallets: number;
@@ -308,6 +309,44 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
     const nextControl = normalisePlanningControl(await request<PlanningControlData>(`/api/v1/planning-control/pallets?date=${encodeURIComponent(date)}`, await token()));
     setControl(nextControl);
   }, [date, token]);
+
+  // Apply allocation results from the server response directly into the local
+  // control state. This is faster than re-reading the full pallets endpoint after
+  // every save: the allocation POST already returns the authoritative quantities.
+  const applyAllocationResults = useCallback((results: AllocationResult | AllocationResult[]) => {
+    const items = Array.isArray(results) ? results : [results];
+    setControl(current => {
+      if (!current) return current;
+      const updates = new Map(items.map(result => [result.orderId, result]));
+      return {
+        ...current,
+        orders: current.orders.map(order => {
+          const update = updates.get(order.id);
+          if (!update) return order;
+          return {
+            ...order,
+            plannedPallets: update.plannedPallets,
+            outstandingPallets: update.outstandingPallets,
+            allocations: [
+              ...order.allocations.filter(a => a.loadId !== update.loadId),
+              ...(update.allocatedToRun > 0 ? [{ loadId: update.loadId, loadReference: update.loadReference, pallets: update.allocatedToRun }] : []),
+            ],
+          };
+        }),
+        summary: {
+          ...current.summary,
+          planned: current.summary.planned + items.reduce((sum, result) => {
+            const prev = current.orders.find(o => o.id === result.orderId);
+            return sum + result.plannedPallets - (prev?.plannedPallets ?? 0);
+          }, 0),
+          outstanding: current.summary.outstanding + items.reduce((sum, result) => {
+            const prev = current.orders.find(o => o.id === result.orderId);
+            return sum + result.outstandingPallets - (prev?.outstandingPallets ?? 0);
+          }, 0),
+        },
+      };
+    });
+  }, []);
 
   useEffect(() => {
     void refreshAll().catch((error) => setMessage(error instanceof Error ? error.message : "Planner data could not be refreshed."));
@@ -683,13 +722,17 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
         }
       }
       const allocationEntries = [...lineAllocations.entries()].filter(([, pallets]) => pallets > 0);
-      if (allocationEntries.length === 1) await allocate(allocationEntries[0][0], created.id, allocationEntries[0][1], access);
-      else if (allocationEntries.length > 1) await allocateBatch(allocationEntries, created.id, access);
+      if (allocationEntries.length === 1) {
+        const result = await allocate(allocationEntries[0][0], created.id, allocationEntries[0][1], access);
+        applyAllocationResults(result);
+      } else if (allocationEntries.length > 1) {
+        const results = await allocateBatch(allocationEntries, created.id, access);
+        applyAllocationResults(results);
+      }
       if (run.relayEnabled) await updateRunRelay(created.id, relayPayload(run), access);
       dirtyRunKeys.current.delete(run.key);
       signalPlanningChange();
       setMessage(`${created.reference} created and planned in Pallet Order.`);
-      void refreshControl().catch(() => undefined);
       return created.id;
     } catch (error) {
       const reason = error instanceof Error ? error.message : "The save could not be completed.";
@@ -753,9 +796,11 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
       // single-allocation endpoint for it; reserve the batch endpoint for
       // genuinely multi-order consolidated rows.
       if (entries.length === 1) {
-        await allocate(entries[0][0], loadId, entries[0][1], access);
+        const result = await allocate(entries[0][0], loadId, entries[0][1], access);
+        applyAllocationResults(result);
       } else {
-        await allocateBatch(entries, loadId, access);
+        const results = await allocateBatch(entries, loadId, access);
+        applyAllocationResults(results);
       }
       // Adding an order changes the route's stops. A quantity-only edit does not,
       // so avoid a second write that can time out after the allocation succeeded.
@@ -867,7 +912,12 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
     try {
       await enqueueRunMutation(run.key, async () => {
         const access = await token();
-        for (const orderId of ids) await allocate(orderId, currentRun.loadId!, 0, access);
+        const allocationResults: AllocationResult[] = [];
+        for (const orderId of ids) {
+          const result = await allocate(orderId, currentRun.loadId!, 0, access);
+          allocationResults.push(result);
+        }
+        applyAllocationResults(allocationResults);
         const latestLines = runsRef.current.find((item) => item.key === run.key)?.lines || remaining;
         if (latestLines.some(item => lineOrderIds(item).length > 0)) {
           await syncStops(currentRun.loadId!, latestLines, access);
@@ -879,7 +929,6 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
       dirtyRunKeys.current.delete(run.key);
       signalPlanningChange();
       setMessage("Movement removed from the run and its remaining pallets returned to Pallet Order.");
-      void refreshControl().catch(() => undefined);
     } catch (error) { setMessage(error instanceof Error ? error.message : "Movement could not be removed from the run."); await refreshAll().catch(() => undefined); }
     finally { setBusyKey(undefined); }
   }
