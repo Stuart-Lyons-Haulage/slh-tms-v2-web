@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { api, request, type Load, type Site } from "../lib/api";
 import { useAccessToken } from "../lib/auth";
 import { signalPlanningChange, subscribePlanningChanges } from "../lib/planningEvents";
@@ -164,6 +165,7 @@ function runBuilderWarnings(run: RunDraft, capacity: ReturnType<typeof calculate
 
 export function RunPlannerLive({ planningDate }: { planningDate?: string } = {}) {
   const token = useAccessToken();
+  const queryClient = useQueryClient();
   const dateIsExternallyControlled = Boolean(planningDate);
   const [date, setDate] = useState(planningDate || localDate());
   const [control, setControl] = useState<PlanningControlData>();
@@ -870,6 +872,25 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
     }
     const linesAfterEdit = currentRun.lines.map((item) => item.key === line.key ? { ...item, pallets: value, orderAllocations: distributed.allocations } : item);
     updateRun(run.key, (current) => ({ ...current, lines: linesAfterEdit }));
+    // The Pallet Order grid shares this React Query cache. Apply the new
+    // allocation immediately so it does not depend on a 30-second poll or
+    // the completion of a slow allocation API request.
+    queryClient.setQueryData<PlanningControlData>(["planning-control", "pallets", date], previous => {
+      if (!previous) return previous;
+      const nextOrders = previous.orders.map(order => {
+        if (!(order.id in distributed.allocations)) return order;
+        const nextQty = distributed.allocations[order.id];
+        const oldQty = order.allocations.find(a => a.loadId === currentRun.loadId)?.pallets || 0;
+        const plannedPallets = Math.max(0, order.plannedPallets - oldQty + nextQty);
+        return { ...order, plannedPallets, outstandingPallets: Math.max(0, order.orderedPallets - plannedPallets),
+          allocations: [...order.allocations.filter(a => a.loadId !== currentRun.loadId),
+            ...(nextQty > 0 ? [{ loadId: currentRun.loadId!, pallets: nextQty }] : [])] };
+      });
+      return { ...previous, orders: nextOrders,
+        summary: { ...previous.summary,
+          planned: nextOrders.reduce((total, order) => total + order.plannedPallets, 0),
+          outstanding: nextOrders.reduce((total, order) => total + order.outstandingPallets, 0) } };
+    });
     const timerKey = `${run.key}:${line.key}`;
     if (saveTimers.current[timerKey]) window.clearTimeout(saveTimers.current[timerKey]);
     saveTimers.current[timerKey] = window.setTimeout(() => {
