@@ -3,6 +3,12 @@ import planner from "./pages/RunPlannerLive.tsx?raw";
 import plannerLine from "./pages/RunPlannerLine.tsx?raw";
 
 describe("Run Planner autosave", () => {
+  it("updates Pallet Order cache immediately when a Planner quantity is amended", () => {
+    expect(planner).toContain('queryClient.setQueryData<PlanningControlData>(["planning-control", "pallets", date]');
+    expect(planner).toContain("order.plannedPallets - oldQty + nextQty");
+    expect(planner).toContain("Math.max(0, order.orderedPallets - plannedPallets)");
+  });
+
   it("skips obsolete queued quantity snapshots before sending them to the API", () => {
     expect(planner).toContain("if (!persistStops) {");
     expect(planner).toContain("validPallets(latestLine.pallets) !== pallets");
