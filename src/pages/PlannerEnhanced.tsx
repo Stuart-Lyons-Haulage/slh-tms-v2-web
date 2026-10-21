@@ -1,6 +1,8 @@
 import "../mobile-planner.css";
 import { RunPlannerLive } from "./RunPlannerLive";
 import { useWorkingDate } from "../lib/workingDate";
+import { OptimiserProposalReview } from "../components/OptimiserProposalReview";
+import { BetaRouteProposalReview } from "../components/BetaRouteProposalReview";
 
 function clickPlannerButton(pattern: RegExp) {
   const buttons = Array.from(document.querySelectorAll<HTMLButtonElement>(".simple-planner-toolbar button"));
@@ -18,6 +20,8 @@ export function PlannerEnhanced() {
       <span className="planner-action-spacer" />
       <span className="planner-highlight-dot" title="Warnings and planning guidance are shown on the item they relate to rather than taking permanent screen space.">!</span>
     </div>
+    <OptimiserProposalReview planningDate={date} />
+    <BetaRouteProposalReview />
     <RunPlannerLive planningDate={date} />
   </section>;
 }
