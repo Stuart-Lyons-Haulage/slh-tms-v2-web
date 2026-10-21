@@ -1,4 +1,4 @@
-export const tvPaths = new Set(["/tv", "/operations-wallboard/tv", "/live-runs/tv"]);
+export const tvPaths = new Set(["/tv", "/operations-wallboard/tv"]);
 
 export function isTvRoute(pathname: string) {
   return tvPaths.has(pathname);

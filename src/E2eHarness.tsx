@@ -2,7 +2,6 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter, Link, Route, Routes } from 'react-router-dom';
 import { DriverDispatch } from './pages/DriverDispatch';
 import { PlannerEnhanced } from './pages/PlannerEnhanced';
-import { LiveRunsBoard } from './pages/LiveRunsBoard';
 import { PalletPlanningControl } from './pages/PalletPlanningControl';
 import { WorkingDateControl } from './components/WorkingDateControl';
 import { queryClient } from './lib/queryClient';
@@ -13,7 +12,6 @@ export function E2eHarness() {
       <Link to="/">Planner</Link>
       <Link to="/pallet-control">Pallet Order</Link>
       <Link to="/driver-dispatch">Driver Dispatch</Link>
-      <Link to="/operations-wallboard">Operations Wallboard</Link>
       {/* The real app's one working date, as in the header. */}
       <WorkingDateControl />
     </nav>
@@ -21,7 +19,6 @@ export function E2eHarness() {
       <Route path="/" element={<PlannerEnhanced />} />
       <Route path="/pallet-control" element={<PalletPlanningControl />} />
       <Route path="/driver-dispatch" element={<DriverDispatch />} />
-      <Route path="/operations-wallboard" element={<LiveRunsBoard />} />
     </Routes>
   </BrowserRouter></QueryClientProvider>;
 }

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useWorkingDate } from '../lib/workingDate';
 import { request } from '../lib/api';
 import { useAccessToken } from '../lib/auth';
-import { useApi } from '../lib/useApi';
+import { useTmsQuery } from '../lib/useTmsQuery';
 import { startVisiblePolling } from '../lib/visiblePolling';
 import { expectedAt, sortByExpected, unitLabel, type WarehouseDailyResult, type WarehouseMovement } from './warehousePlanningData';
 
@@ -27,10 +27,9 @@ function totals(rows: WarehouseMovement[]) {
  * count actually received or loaded; every count is kept as an audit trail.
  */
 export function WarehousePlanning() {
-  const token = useAccessToken();
   const [date] = useWorkingDate();
-  const data = useApi(useCallback(async () => request<WarehouseDailyResult>(`/api/v1/warehouse/daily?date=${encodeURIComponent(date)}`, await token()), [date, token]));
-  const refresh = data.refresh;
+  const data = useTmsQuery<WarehouseDailyResult>(['warehouse', 'daily', date] as const, useCallback((t: string) => request<WarehouseDailyResult>(`/api/v1/warehouse/daily?date=${encodeURIComponent(date)}`, t), [date]));
+  const refresh = data.refetch;
   useEffect(() => startVisiblePolling(refresh, 60_000), [refresh]);
   const inbound = useMemo(() => data.data ? sortByExpected(data.data.inbound, data.data.planningDate) : [], [data.data]);
   const outbound = useMemo(() => data.data ? sortByExpected(data.data.outbound, data.data.planningDate) : [], [data.data]);
@@ -40,8 +39,8 @@ export function WarehousePlanning() {
       <div><p className="eyebrow">Barnham warehouse</p><h1>Warehouse board</h1><p>What's coming in and what needs loading at SLH. Live ETAs come from tracking; confirm each movement with the count you actually handled.</p></div>
       <div className="warehouse-actions"><button type="button" onClick={() => window.print()}>Print</button><button type="button" onClick={() => void refresh()}>Refresh</button></div>
     </div>
-    {data.loading && !data.data && <p className="notice">Loading warehouse movements…</p>}
-    {data.error && <p className="notice error">Warehouse movements could not be loaded: {data.error}</p>}
+    {data.isLoading && !data.data && <p className="notice">Loading warehouse movements…</p>}
+    {data.error && <p className="notice error">Warehouse movements could not be loaded: {data.error.message}</p>}
     {data.data && <>
       <div className="warehouse-totals">
         <article><span>Coming in</span><strong>{inbound.length}</strong><small>{totals(inbound)}</small></article>
