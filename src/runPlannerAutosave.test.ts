@@ -3,6 +3,12 @@ import planner from "./pages/RunPlannerLive.tsx?raw";
 import plannerLine from "./pages/RunPlannerLine.tsx?raw";
 
 describe("Run Planner autosave", () => {
+  it("skips obsolete queued quantity snapshots before sending them to the API", () => {
+    expect(planner).toContain("if (!persistStops) {");
+    expect(planner).toContain("validPallets(latestLine.pallets) !== pallets");
+    expect(planner).toContain("latestLine.orderAllocations?.[id] !== allocations[id]");
+  });
+
   it("creates a persisted run when a collection and delivery resolve to live work", () => {
     expect(planner).toContain("void createPlanningRun({ ...currentRun, lines: linkedLines });");
     expect(planner).toContain("void createPlanningRun({ ...currentRun, lines: nextLines });");

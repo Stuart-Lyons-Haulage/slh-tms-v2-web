@@ -783,6 +783,14 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
     const next = previous
       .catch(() => undefined)
       .then(async () => {
+        // A subsequent quantity edit may have superseded this queued snapshot.
+        // Skip its stale allocation write: otherwise a slow API can briefly
+        // restore an old quantity and make Pallet Order jump backwards.
+        if (!persistStops) {
+          const latestLine = runsRef.current.find(run => run.key === runKey)?.lines.find(line => line.key === lineKey);
+          if (!latestLine || validPallets(latestLine.pallets) !== pallets ||
+              Object.keys(allocations).some(id => latestLine.orderAllocations?.[id] !== allocations[id])) return true;
+        }
         const saved = await persistQuantity(runKey, lineKey, loadId, allocations, pallets, linesAfterEdit, persistStops);
         if (!saved) quantitySaveFailures.current.add(runKey);
         return saved;
