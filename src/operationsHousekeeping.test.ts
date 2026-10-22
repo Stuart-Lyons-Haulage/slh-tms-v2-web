@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import app from "./App.tsx?raw";
-import optimiser from "./components/OptimiserProposalReview.tsx?raw";
 import dashboard from "./pages/DashboardOperational.tsx?raw";
 import master from "./pages/MasterDataHub.tsx?raw";
 import pages from "./pages/Pages.tsx?raw";
@@ -21,12 +20,15 @@ describe("operations housekeeping contract", () => {
     expect(planner).toContain("Refresh");
   });
 
-  it("removes pallet utilisation from the mixed-unit run builder and gives optimiser more time", () => {
+  it("keeps the planner on the small, capacity-based run suggestions", () => {
     expect(runBuilder).not.toContain("/ 26 pallets");
     expect(runBuilder).not.toContain("simple-run-pallets");
     expect(runBuilder).not.toContain("Ref: ${order.reference}");
     expect(runBuilder).toContain("cleanLineNote");
-    expect(optimiser).toContain("180000");
+    expect(planner).not.toContain("OptimiserProposalReview");
+    expect(planner).not.toContain("BetaRouteProposalReview");
+    expect(runBuilder).toContain("Could remove");
+    expect(runBuilder).toContain("Capacity-safe pallet move");
   });
 
   it("keeps Order Review scoped by a single parent planning date rather than loading every order", () => {
