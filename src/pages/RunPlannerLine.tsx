@@ -29,6 +29,7 @@ export type RunLineModel = {
   deliverySite: string;
   pallets: string;
   note: string;
+  collectionTime: string;
 };
 export type RunLineRun = {
   key: string;
@@ -126,6 +127,9 @@ function RunPlannerLineView({
           return line.collectionSite ? <div className="simple-picker-options simple-picker-empty">No deliveries available from this collection</div> : null;
         })()}
       </div>
+      <input className="simple-time-input" type="time" value={line.collectionTime}
+        onChange={(event) => updateLine(run.key, line.key, { collectionTime: event.target.value })}
+        title="Collection time (leave blank to use site master)" />
       <input value={line.note} onChange={(event) => updateLine(run.key, line.key, { note: event.target.value })}
         onBlur={(event) => void persistLineNote(run, line, event.currentTarget.value)}
         placeholder={refs.length > 1 ? `${refs.length} orders consolidated` : "Facility / load-line note"} />

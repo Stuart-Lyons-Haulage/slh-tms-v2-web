@@ -58,10 +58,11 @@ type RunLine = {
   deliverySite: string;
   pallets: string;
   note: string;
+  collectionTime: string;
 };
 type RunDraft = { key: string; loadId?: string; period: Period; nightOut: boolean; doubleStackingApproved: boolean; operationalAmendment: string; relayEnabled: boolean; handoverSite: string; handoverAfterStopSequence: string; lines: RunLine[] };
 
-const blankLine = (): RunLine => ({ key: crypto.randomUUID(), collectionSite: "", deliverySite: "", pallets: "", note: "" });
+const blankLine = (): RunLine => ({ key: crypto.randomUUID(), collectionSite: "", deliverySite: "", pallets: "", note: "", collectionTime: "" });
 const blankRun = (key: string): RunDraft => ({
   key,
   period: "",
@@ -236,6 +237,13 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
       const ordersById = new Map(nextControl.orders.map((order) => [order.id, order]));
       return ordered.map((load) => {
       const seenOrderIds = new Set<string>();
+      const collectStopTime = (orderId: string) => {
+        const collectStop = load.stops.find((s) => /^collect/i.test(s.name) && s.plannedArrivalUtc);
+        if (!collectStop?.plannedArrivalUtc) return "";
+        try {
+          return new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(collectStop.plannedArrivalUtc));
+        } catch { return ""; }
+      };
       const sequencedLines = [...load.stops]
         .filter((stop) => Boolean(stop.orderId) && /^deliver/i.test(stop.name))
         .sort((left, right) => left.sequence - right.sequence)
@@ -246,12 +254,12 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
           const allocation = order?.allocations.find((item) => item.loadId === load.id && item.pallets > 0);
           if (!order || !allocation) return [];
           seenOrderIds.add(order.id);
-          return [{ key: `${load.id}-${order.id}`, orderId: order.id, collectionSite: order.collection.trim(), deliverySite: order.destination.trim(), pallets: String(allocation.pallets), note: mergedOrderLineNote(stop.plannerNote, orderLineNote(order)) }];
+          return [{ key: `${load.id}-${order.id}`, orderId: order.id, collectionSite: order.collection.trim(), deliverySite: order.destination.trim(), pallets: String(allocation.pallets), note: mergedOrderLineNote(stop.plannerNote, orderLineNote(order)), collectionTime: collectStopTime(order.id) }];
         });
       const unsequencedLines = nextControl.orders.flatMap((order) => {
         if (seenOrderIds.has(order.id)) return [];
         const allocation = order.allocations.find((item) => item.loadId === load.id && item.pallets > 0);
-        return allocation ? [{ key: `${load.id}-${order.id}`, orderId: order.id, collectionSite: order.collection.trim(), deliverySite: order.destination.trim(), pallets: String(allocation.pallets), note: mergedOrderLineNote(load.stops.find((stop) => stop.orderId === order.id && /^deliver/i.test(stop.name))?.plannerNote, orderLineNote(order)) }] : [];
+        return allocation ? [{ key: `${load.id}-${order.id}`, orderId: order.id, collectionSite: order.collection.trim(), deliverySite: order.destination.trim(), pallets: String(allocation.pallets), note: mergedOrderLineNote(load.stops.find((stop) => stop.orderId === order.id && /^deliver/i.test(stop.name))?.plannerNote, orderLineNote(order)), collectionTime: collectStopTime(order.id) }] : [];
       });
       const lines = consolidateLines([...sequencedLines, ...unsequencedLines], ordersById);
       return {
@@ -571,12 +579,31 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
     return calculateRunCapacity(capacityLines, orders, 26, 33, run.doubleStackingApproved);
   };
 
+  function localTimeToUtc(timeStr: string): string | undefined {
+    if (!timeStr) return undefined;
+    // Build a Date in the UK timezone for the planning date + entered time,
+    // then convert to UTC ISO string for the API.
+    const [hours, minutes] = timeStr.split(":").map(Number);
+    if (hours == null || minutes == null || Number.isNaN(hours) || Number.isNaN(minutes)) return undefined;
+    // Create a date at the given local time; use the planning date (YYYY-MM-DD).
+    // Intl trick: format a known UTC instant in Europe/London to find the current offset,
+    // then apply the inverse to get UTC from the desired local time.
+    const naive = new Date(`${date}T${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:00`);
+    const formatter = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
+    const localParts = formatter.format(naive);
+    const [lh, lm] = localParts.split(":").map(Number);
+    const offsetMs = ((lh! - naive.getUTCHours()) * 60 + (lm! - naive.getUTCMinutes())) * 60_000;
+    const utc = new Date(naive.getTime() - offsetMs);
+    return utc.toISOString();
+  }
+
   function buildStops(lines: RunLine[]) {
     return lines.filter((line) => (validPallets(line.pallets) || 0) > 0 && lineOrderIds(line).length > 0).flatMap((line) => {
       const collection = stopFromSite(sites, line.collectionSite);
       const delivery = stopFromSite(sites, line.deliverySite);
+      const plannedArrivalUtc = localTimeToUtc(line.collectionTime);
       return lineOrderIds(line).flatMap((orderId) => [
-        { name: `Collect · ${line.collectionSite}`, ...collection },
+        { name: `Collect · ${line.collectionSite}`, ...collection, ...(plannedArrivalUtc ? { plannedArrivalUtc } : {}) },
         { orderId, name: `Deliver · ${line.deliverySite}`, ...delivery, plannerNote: line.note.trim() || undefined },
       ]);
     });
@@ -1017,7 +1044,7 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
             <div className="simple-run-details"><label className="simple-night-out"><input type="checkbox" checked={run.nightOut} onChange={(event) => { const nightOut = event.target.checked; updateRun(run.key, (current) => ({ ...current, nightOut })); void persistRunDetails(run, { nightOut }); }} /> Overnight / night-out confirmed</label><label className="simple-night-out"><input type="checkbox" checked={run.relayEnabled} onChange={(event) => { const relayEnabled = event.target.checked; updateRun(run.key, (current) => ({ ...current, relayEnabled })); void persistRunDetails(run, { relayEnabled }); }} /> Trailer swap / relay</label><label>Operational amendment<input value={run.operationalAmendment} placeholder="e.g. swap to trailer 123 / breakdown" onChange={(event) => updateRun(run.key, (current) => ({ ...current, operationalAmendment: event.target.value }))} onBlur={() => void persistRunDetails(run, { operationalAmendment: run.operationalAmendment })} /></label>{run.relayEnabled && <><label>Handover site<input list={`relay-sites-${run.key}`} value={run.handoverSite} placeholder="e.g. Cherwell Valley" onChange={(event) => updateRun(run.key, (current) => ({ ...current, handoverSite: event.target.value }))} onBlur={(event) => void persistRunDetails(run, { handoverSite: event.currentTarget.value })} /></label><label>Handover after stop<input type="number" min="1" value={run.handoverAfterStopSequence} placeholder="Optional" onChange={(event) => updateRun(run.key, (current) => ({ ...current, handoverAfterStopSequence: event.target.value }))} onBlur={(event) => void persistRunDetails(run, { handoverAfterStopSequence: event.currentTarget.value })} /></label><datalist id={`relay-sites-${run.key}`}>{sites.map(site => <option key={site.id} value={site.name} />)}</datalist></>}</div>
             {nextOrderSuggestions.length > 0 && <details className="simple-run-suggestions" aria-label={`Suggested next orders for ${run.key}`} onClick={(event) => event.stopPropagation()}><summary className="simple-run-suggestions-heading"><span><strong>Route suggestions</strong><small>{nextOrderSuggestions.length} sensible fit{nextOrderSuggestions.length === 1 ? "" : "s"} · mileage and direction checked</small></span><span className="simple-run-suggestion-hint">Show</span></summary><div className="simple-run-suggestion-list">{nextOrderSuggestions.map(item => { const confidencePercent = suggestionConfidencePercent(item.score); const confidence = confidencePercent >= 70 ? "high" : confidencePercent >= 45 ? "medium" : "low"; const loadType = item.order.palletType || item.order.loadUnitType; return <article key={item.order.id} className={`simple-run-suggestion confidence-${confidence}`}><div className="simple-run-suggestion-route"><span><small>From</small><strong>{item.order.collection}</strong></span><b aria-hidden="true">→</b><span><small>To</small><strong>{item.order.destination}</strong></span></div><div className="simple-run-suggestion-meta"><span><small>Load</small><strong>{item.order.outstandingPallets}{loadType ? ` ${loadType}` : ""}</strong></span>{item.connectorMiles != null && <span><small>Reposition</small><strong>~{Math.round(item.connectorMiles)} mi</strong></span>}<span><small>Fit</small><strong>{confidencePercent}%</strong></span></div><details><summary>Why?</summary><small>{item.reasons.join(" · ")}</small></details><button type="button" onClick={() => addSuggestedOrder(run, item.order)}>Add</button></article>; })}</div></details>}
             {builderWarnings.length > 0 && <aside className="simple-run-warnings" aria-label="Run builder checks"><strong>Planner checks</strong><ul>{builderWarnings.map(warning => <li key={warning}>{warning}</li>)}</ul></aside>}
-            <div className="simple-run-columns"><span>Collection</span><span>Pallets</span><span>Delivery</span><span>Line note</span><span /></div>
+            <div className="simple-run-columns"><span>Collection</span><span>Pallets</span><span>Delivery</span><span>Time</span><span>Line note</span><span /></div>
             <div className="simple-run-lines">{run.lines.map((line, lineIndex) => (
               <RunPlannerLine
                 key={line.key}
