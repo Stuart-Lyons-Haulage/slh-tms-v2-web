@@ -14,8 +14,9 @@ import { Orders as AddOrders } from "./Pages";
 import type { Load, TransportOrder } from "../lib/api";
 import { PastDatedOrders } from "../components/PastDatedOrders";
 import { OrderIntakeControlCentre } from "../components/OrderIntakeControlCentre";
+import { OrderConfirmationQueue } from "../components/OrderConfirmationQueue";
 
-type OrderControlTab = "control" | "review" | "live" | "add";
+type OrderControlTab = "control" | "review" | "live" | "add" | "confirm";
 type NwfRepairResponse = { repaired: number; message: string };
 type CachedEmailRecord = {
   evidenceId: string;
@@ -369,7 +370,7 @@ export function OrderControl({ initialTab = "review" }: { initialTab?: OrderCont
   const token = useAccessToken();
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedTab = searchParams.get("tab");
-  const [tab, setTabState] = useState<OrderControlTab>(requestedTab === "add" || requestedTab === "live" || requestedTab === "control" ? requestedTab : initialTab);
+  const [tab, setTabState] = useState<OrderControlTab>(requestedTab === "add" || requestedTab === "live" || requestedTab === "control" || requestedTab === "confirm" ? requestedTab : initialTab);
   function setTab(next: OrderControlTab) {
     setTabState(next);
     const params = new URLSearchParams(searchParams);
@@ -420,11 +421,12 @@ export function OrderControl({ initialTab = "review" }: { initialTab?: OrderCont
       <button type="button" role="tab" aria-selected={tab === "control"} onClick={() => setTab("control")}>Intake control</button>
       <button type="button" role="tab" aria-selected={tab === "review"} onClick={() => setTab("review")}>Waiting for review</button>
       <button type="button" role="tab" aria-selected={tab === "live"} onClick={() => setTab("live")}>Approved orders</button>
+      <button type="button" role="tab" aria-selected={tab === "confirm"} onClick={() => setTab("confirm")}>Confirm orders</button>
       <button type="button" role="tab" aria-selected={tab === "add"} onClick={() => setTab("add")}>Add orders</button>
     </div>
     {repairNotice && <p className="notice inline-notice">{repairNotice}</p>}
     {tab !== "add" && tab !== "control" && <OrderReviewDateStrip selectedDate={selectedDate} onChange={updateDate} />}
-    {tab === "control" ? <OrderIntakeControlCentre /> : tab === "add" ? <AddOrders /> : tab === "review" ? <><p className="hint" style={{ margin: "0 0 8px" }}>"Unusual: new delivery point / collection site" usually means a site name isn't in Master data yet. <a href="/admin/order-intake?tab=names">Fix site names</a> once and every waiting order is re-checked.</p><OrderChangeAlerts /><PastDatedOrders onClosed={refreshVisibleReviewData} /><OrderIntakeCacheRecovery date={selectedDate} /><UndatedOrderReviewQueue /><OrderReviewBulk date={selectedDate} /></> : <><ApprovedOrdersList date={selectedDate} token={token} /><JobsOperational date={selectedDate} /></>}
+    {tab === "control" ? <OrderIntakeControlCentre /> : tab === "add" ? <AddOrders /> : tab === "confirm" ? <OrderConfirmationQueue date={selectedDate} /> : tab === "review" ? <><p className="hint" style={{ margin: "0 0 8px" }}>"Unusual: new delivery point / collection site" usually means a site name isn't in Master data yet. <a href="/admin/order-intake?tab=names">Fix site names</a> once and every waiting order is re-checked.</p><OrderChangeAlerts /><PastDatedOrders onClosed={refreshVisibleReviewData} /><OrderIntakeCacheRecovery date={selectedDate} /><UndatedOrderReviewQueue /><OrderReviewBulk date={selectedDate} /></> : <><ApprovedOrdersList date={selectedDate} token={token} /><JobsOperational date={selectedDate} /></>}
     {sourceEmailStagingId && <SourceEmailEvidenceDrawer stagingId={sourceEmailStagingId} onClose={closeSourceEmail} />}
   </>;
 }

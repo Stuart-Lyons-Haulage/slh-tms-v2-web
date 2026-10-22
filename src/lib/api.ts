@@ -350,7 +350,14 @@ export interface TmsApi {
   bookingCandidateOrders(id: string, token?: string): Promise<BookingCandidateOrder[]>;
   matchBookingOrder(id: string, payload: { transportOrderId: string; units?: number; note?: string }, token?: string): Promise<unknown>;
   invoiceHistory(query: { from?: string; to?: string; customerCode?: string; status?: string }, token?: string): Promise<InvoiceHistoryRecord[]>;
+  ordersAwaitingConfirmation(date: string, token?: string): Promise<OrderConfirmationQueue>;
+  confirmOrders(ids: string[], token?: string): Promise<OrderConfirmationResult>;
+  rejectOrders(ids: string[], token?: string): Promise<OrderConfirmationResult>;
 }
+
+export type OrderConfirmationQueue = { date: string; count: number; orders: OrderConfirmationItem[] };
+export type OrderConfirmationItem = { id: string; reference: string; customerCode: string; collectionDate: string; deliveryDate?: string; pallets: number; sellerName?: string; marketName?: string; status: string; confirmationStatus: number; createdAtUtc: string };
+export type OrderConfirmationResult = { requested: number; confirmed?: number; rejected?: number; skipped: number; skippedItems: Array<{ id: string; reference: string; reason: string }>; message: string };
 
 type SharedLookupEntry = { expiresAt: number; promise: Promise<unknown> };
 const sharedLookupCache = new Map<string, SharedLookupEntry>();
@@ -478,4 +485,7 @@ export const api: TmsApi = {
   bookingCandidateOrders: (id, token) => request<BookingCandidateOrder[]>(`/api/v1/booking-reservations/${id}/candidate-orders`, token),
   matchBookingOrder: (id, payload, token) => request(`/api/v1/booking-reservations/${id}/match-order`, token, { method: 'POST', body: JSON.stringify(payload) }),
   invoiceHistory: (query, token) => request<InvoiceHistoryRecord[]>(`/api/v1/invoice-history?${new URLSearchParams(Object.entries(query).filter(([, value]) => Boolean(value)) as string[][])}`, token),
+  ordersAwaitingConfirmation: (date, token) => request<OrderConfirmationQueue>(`/api/v1/orders/awaiting-review?date=${encodeURIComponent(date)}`, token),
+  confirmOrders: (ids, token) => request<OrderConfirmationResult>('/api/v1/orders/confirm', token, { method: 'POST', body: JSON.stringify({ ids }) }),
+  rejectOrders: (ids, token) => request<OrderConfirmationResult>('/api/v1/orders/reject', token, { method: 'POST', body: JSON.stringify({ ids }) }),
 };
