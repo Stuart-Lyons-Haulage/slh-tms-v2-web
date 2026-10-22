@@ -6,7 +6,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { SouthboundCollections } from "./BookingReservations";
 import { request } from "../lib/api";
 import { useAccessToken } from "../lib/auth";
-import { signalPlanningChange, subscribePlanningChanges } from "../lib/planningEvents";
+import { signalPlanningChange, subscribePlanningChanges, subscribeServerPlanningChanges } from "../lib/planningEvents";
 import { useTmsQuery } from "../lib/useTmsQuery";
 import { startVisiblePolling } from "../lib/visiblePolling";
 import { planningDeliveryLocation } from "../lib/planningLocations";
@@ -71,11 +71,19 @@ export function PalletPlanningControl() {
     // Don't reload the grid underneath an in-flight save: a background refresh that
     // resolves mid-save can repaint stale figures and hide a just-added allocation.
     // The save runs its own refresh when it finishes, so nothing is missed.
+    const fullRefresh = () => {
+      if (pendingSaves.current > 0) return;
+      void refreshControl();
+      void refreshRegions();
+    };
     const checkThenRefresh = async () => {
       if (pendingSaves.current > 0) return;
-      // Fast path: ask the server whether anything has changed since our last /pallets
-      // load. If nothing moved, skip the expensive full reload. The check itself is a
-      // single indexed query that returns in <20 ms.
+      // Fast path: ask the server whether any new orders have arrived since our last
+      // /pallets load. If nothing moved, skip the expensive full reload. The check
+      // itself is a single indexed query that returns in <20 ms.
+      // NOTE: this gate only detects order-intake changes (StagedImports), so it is
+      // used only for local/cross-tab events. Server-pushed SSE events bypass it via
+      // subscribeServerPlanningChanges below — those already know something changed.
       if (lastRefreshAtUtc.current) {
         try {
           const t = await token();
@@ -83,14 +91,19 @@ export function PalletPlanningControl() {
           if (!changes.changed) return;
         } catch { /* If the check fails, fall through to a full refresh */ }
       }
-      void refreshControl();
-      void refreshRegions();
+      fullRefresh();
     };
-    const unsubscribe = subscribePlanningChanges(() => void checkThenRefresh());
-    // Reconciliation poll always does a full refresh — it runs every 30 s and is the
+    // Local/cross-tab events (planner saves in another tab) — gated on order changes.
+    const unsubscribeLocal = subscribePlanningChanges(() => void checkThenRefresh());
+    // Server-pushed SSE events — the server already confirmed something changed (an
+    // allocation, a stop edit, a run status change, a new order), so skip the gate and
+    // reload immediately. This fixes the ~4-minute lag where allocation changes were
+    // invisible because the orders/changes gate only checks StagedImports.
+    const unsubscribeServer = subscribeServerPlanningChanges(fullRefresh);
+    // Reconciliation poll always does a full refresh — it runs every 15 s and is the
     // safety net that catches any state SSE missed (a reconnect gap, a tab waking up).
-    const stopReconciliation = startVisiblePolling(() => pendingSaves.current > 0 ? Promise.resolve() : Promise.allSettled([refreshControl(), refreshRegions()]).then(() => undefined), 30_000);
-    return () => { unsubscribe(); stopReconciliation(); };
+    const stopReconciliation = startVisiblePolling(() => pendingSaves.current > 0 ? Promise.resolve() : Promise.allSettled([refreshControl(), refreshRegions()]).then(() => undefined), 15_000);
+    return () => { unsubscribeLocal(); unsubscribeServer(); stopReconciliation(); };
   }, [refreshControl, refreshRegions, date, token]);
 
   const data = control.data;

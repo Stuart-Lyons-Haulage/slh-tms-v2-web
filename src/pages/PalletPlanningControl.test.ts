@@ -14,13 +14,22 @@ describe("planningCollectionGroup", () => {
 });
 
 describe("SSE-gated refresh", () => {
-  it("uses the /orders/changes endpoint to gate heavy refreshes on SSE events", () => {
+  it("uses the /orders/changes endpoint to gate local/cross-tab refreshes", () => {
     const source = readFileSync(new URL("./PalletPlanningControl.tsx", import.meta.url), "utf8");
-    // The SSE handler must check /orders/changes before calling the heavy refreshControl()
+    // The local event handler must check /orders/changes before calling the heavy refreshControl()
     expect(source).toContain("orders/changes");
     expect(source).toContain("changes.changed");
     // The lastRefreshAtUtc ref must track the server timestamp from the latest /pallets response
     expect(source).toContain("lastRefreshAtUtc");
     expect(source).toContain("generatedAtUtc");
+  });
+
+  it("bypasses the changes gate for server-pushed SSE events", () => {
+    const source = readFileSync(new URL("./PalletPlanningControl.tsx", import.meta.url), "utf8");
+    // Server-pushed events (allocations, stop edits) must skip the orders/changes gate
+    // and trigger an immediate full refresh — the server already knows something changed.
+    expect(source).toContain("subscribeServerPlanningChanges");
+    // The server handler calls fullRefresh directly, not checkThenRefresh
+    expect(source).toContain("subscribeServerPlanningChanges(fullRefresh)");
   });
 });
