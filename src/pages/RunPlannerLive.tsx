@@ -607,11 +607,20 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
 
   async function syncStops(loadId: string, lines: RunLine[], access: string) {
     const stops = buildStops(lines);
+    // Include the RowVersion (concurrency token) so the server can detect
+    // if another session changed this run since the planner last loaded it.
+    const version = loadsRef.current.find(l => l.id === loadId)?.rowVersion;
     if (!stops.length) {
-      try { await updateRunStops(loadId, [], access); } catch { /* allocation zero remains authoritative */ }
+      try { await updateRunStops(loadId, [], access, version); } catch { /* allocation zero remains authoritative */ }
       return;
     }
-    await updateRunStops(loadId, stops, access);
+    const result = await updateRunStops(loadId, stops, access, version);
+    // Update the local version token from the response so the next save
+    // sends the latest value and avoids a false conflict.
+    if (result.rowVersion) {
+      setLoads(current => current.map(l => l.id === loadId ? { ...l, rowVersion: result.rowVersion } : l));
+      loadsRef.current = loadsRef.current.map(l => l.id === loadId ? { ...l, rowVersion: result.rowVersion } : l);
+    }
   }
 
   // Every mutation that replaces the complete stop list must share the same

@@ -64,6 +64,7 @@ export const runSchema: z.ZodType<RunDto> = z.object({
   notes: z.string().optional(),
   relayPlan: relayPlanSchema.optional().nullable().transform(value => value ?? undefined),
   createdAtUtc: z.string().optional(),
+  rowVersion: z.string().optional(),
   stops: z.array(runStopSchema),
 });
 
@@ -139,7 +140,7 @@ async function confirmPreferredVehicle(runId: string, payload: RunAllocation, to
 export async function allocateRun(id: string, payload: RunAllocation, token?: string): Promise<Run> { await confirmPreferredVehicle(id, payload, token); const result = await apiRequest(`/api/v1/runs/${encodeURIComponent(id)}/allocation`, runSchema, token, { method: 'PUT', body: JSON.stringify(payload) }); invalidateRunLists(); return result; }
 export async function updateRunOperational(id: string, payload: RunOperationalUpdateDto, token?: string): Promise<Run> { const result = await apiRequest(`/api/v1/runs/${encodeURIComponent(id)}/operational`, runSchema, token, { method: 'PUT', body: JSON.stringify(payload) }); invalidateRunLists(); return result; }
 export async function updateRunRelay(id: string, payload: RunRelayPlanDto, token?: string): Promise<Run> { const result = await apiRequest(`/api/v1/runs/${encodeURIComponent(id)}/relay`, runSchema, token, { method: 'PUT', body: JSON.stringify(payload) }); invalidateRunLists(); return result; }
-export async function updateRunStops(id: string, stops: CreateRun['stops'], token?: string): Promise<Run> { const path = stops.length === 0 ? `/api/v1/planning-control/runs/${encodeURIComponent(id)}/stops` : `/api/v1/runs/${encodeURIComponent(id)}/stops`; const result = await apiRequest(path, runSchema, token, { method: 'PUT', body: JSON.stringify(stops) }); invalidateRunLists(); return result; }
+export async function updateRunStops(id: string, stops: CreateRun['stops'], token?: string, rowVersion?: string): Promise<Run> { const path = stops.length === 0 ? `/api/v1/planning-control/runs/${encodeURIComponent(id)}/stops` : `/api/v1/runs/${encodeURIComponent(id)}/stops`; const headers: Record<string, string> = { 'Content-Type': 'application/json' }; if (rowVersion) headers['If-Match'] = `"${rowVersion}"`; const result = await apiRequest(path, runSchema, token, { method: 'PUT', headers, body: JSON.stringify(stops) }); invalidateRunLists(); return result; }
 export function getRunRoute(id: string, token?: string): Promise<Record<string, unknown>> { return apiRequest(`/api/v1/runs/${encodeURIComponent(id)}/route`, unknownObjectSchema, token); }
 export function getDriverDispatchRoute(id: string, token?: string): Promise<Record<string, unknown>> { return apiRequest(`/api/v1/driver-dispatch-routes/${encodeURIComponent(id)}`, unknownObjectSchema, token); }
 export function getRunDispatch(id: string, token?: string): Promise<RunDispatch> { return apiRequest(`/api/v1/runs/${encodeURIComponent(id)}/dispatch`, dispatchSchema, token); }

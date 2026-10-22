@@ -47,6 +47,7 @@ export interface RunDto {
   notes?: string;
   relayPlan?: RunRelayPlanDto;
   createdAtUtc?: string;
+  rowVersion?: string;
   stops: RunStopDto[];
 }
 
