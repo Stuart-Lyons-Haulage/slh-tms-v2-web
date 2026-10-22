@@ -6,7 +6,8 @@ import { Link, useSearchParams } from "react-router-dom";
 import { SouthboundCollections } from "./BookingReservations";
 import { request } from "../lib/api";
 import { useAccessToken } from "../lib/auth";
-import { signalPlanningChange, subscribePlanningChanges, subscribeServerPlanningChanges } from "../lib/planningEvents";
+import { signalPlanningChange, subscribePlanningChanges } from "../lib/planningEvents";
+import { subscribeServerPlanningChanges } from "../lib/planningEvents";
 import { useTmsQuery } from "../lib/useTmsQuery";
 import { startVisiblePolling } from "../lib/visiblePolling";
 import { planningDeliveryLocation } from "../lib/planningLocations";
@@ -102,7 +103,7 @@ export function PalletPlanningControl() {
     const unsubscribeServer = subscribeServerPlanningChanges(fullRefresh);
     // Reconciliation poll always does a full refresh — it runs every 15 s and is the
     // safety net that catches any state SSE missed (a reconnect gap, a tab waking up).
-    const stopReconciliation = startVisiblePolling(() => pendingSaves.current > 0 ? Promise.resolve() : Promise.allSettled([refreshControl(), refreshRegions()]).then(() => undefined), 15_000);
+    const stopReconciliation = startVisiblePolling(() => pendingSaves.current > 0 ? Promise.resolve() : Promise.allSettled([refreshControl(), refreshRegions()]).then(() => undefined), 30_000);
     return () => { unsubscribeLocal(); unsubscribeServer(); stopReconciliation(); };
   }, [refreshControl, refreshRegions, date, token]);
 
