@@ -105,6 +105,28 @@ async function enrichStopsWithSiteTimings(
 }
 
 const DISPATCH_READ_TIMEOUT_MS = 60_000;
+
+async function readAuthoritativeDispatch(
+  planningDate: string,
+  token: string,
+): Promise<DriverDispatchAuthority> {
+  const encoded = encodeURIComponent(planningDate);
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      return await request<DriverDispatchAuthority>(
+        `/api/v1/driver-dispatch?date=${encoded}`,
+        token,
+        undefined,
+        DISPATCH_READ_TIMEOUT_MS,
+      );
+    } catch (error) {
+      lastError = error;
+      if (attempt === 0) await new Promise(resolve => window.setTimeout(resolve, 1_000));
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("Authoritative Driver Dispatch refresh failed.");
+}
 const DISPATCH_TACHO_TIMEOUT_MS = 180_000;
 // Supporting feeds must not hold the authoritative driver board hostage. They
 // still complete in the background at the HTTP layer, but the UI uses a
@@ -352,7 +374,7 @@ export async function getSmartDispatch(
   // Tacho/availability state and they competed for the same SQL/provider resources,
   // causing the mobile gateway to return 504 and an empty limited-mode board.
   const authorityResult = await Promise.allSettled([
-    request<DriverDispatchAuthority>(`/api/v1/driver-dispatch?date=${encoded}`, token, undefined, DISPATCH_READ_TIMEOUT_MS)
+    readAuthoritativeDispatch(planningDate, token)
   ]);
   const rosterHealth = (await rosterHealthPromise) || {
     healthy: false,
