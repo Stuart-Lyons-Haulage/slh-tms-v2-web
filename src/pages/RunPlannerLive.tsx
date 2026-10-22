@@ -985,8 +985,8 @@ export function RunPlannerLive({ planningDate }: { planningDate?: string } = {})
     </div>
 
     {message && <p className="notice inline-notice simple-planner-notice">{message}</p>}
-    {finalRunSavings.length > 0 && <details className="simple-plan-check" data-testid="planner-final-run-check">
-      <summary><span><strong>Plan check</strong><small>{finalRunSavings.length} possible run saving{finalRunSavings.length === 1 ? "" : "s"}</small></span><span>Review</span></summary>
+    {finalRunSavings.length > 0 && <details className="simple-plan-check" data-testid="planner-final-run-check" open>
+      <summary><span><strong>Planner suggestions</strong><small>{finalRunSavings.length} possible capacity saving{finalRunSavings.length === 1 ? "" : "s"}</small></span><span>Review</span></summary>
       <div className="simple-plan-check-list">{finalRunSavings.map((suggestion) => <article key={suggestion.id}>
         <div className="simple-plan-check-title"><span><strong>Could remove {suggestion.sourceRunLabel}</strong><small>Capacity-safe pallet move; route order and timing still need your confirmation.</small></span><button type="button" onClick={() => setDismissedPlanChecks((current) => new Set([...current, suggestion.id]))}>Dismiss</button></div>
         <ol>{suggestion.movements.map((movement, index) => <li key={`${movement.fromRunKey}:${movement.toRunKey}:${index}`}><strong>{movement.pallets} {movement.palletLabel}</strong> · {movement.collectionSite} → {movement.deliverySite} · {movement.fromRunLabel} to {movement.toRunLabel}</li>)}</ol>
