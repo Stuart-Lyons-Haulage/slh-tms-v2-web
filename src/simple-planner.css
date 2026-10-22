@@ -258,7 +258,7 @@
 
 .simple-run-columns {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 88px minmax(0, 1fr) minmax(150px, .9fr) 38px;
+  grid-template-columns: minmax(0, 1fr) 88px minmax(0, 1fr) 88px minmax(150px, .9fr) 38px;
   gap: 7px;
   padding: 7px 12px 2px 40px;
   color: #657985;
@@ -283,7 +283,7 @@
 
 .simple-run-line {
   display: grid;
-  grid-template-columns: 24px minmax(0, 1fr) 88px minmax(0, 1fr) minmax(150px, .9fr) 34px;
+  grid-template-columns: 24px minmax(0, 1fr) 88px minmax(0, 1fr) 88px minmax(150px, .9fr) 34px;
   gap: 7px;
   align-items: center;
 }
@@ -349,8 +349,21 @@
   font-weight: 850;
 }
 
+.simple-run-line .simple-time-input {
+  text-align: center;
+  font-size: .82rem;
+  font-weight: 700;
+  color: #173d50;
+  padding: 7px 4px;
+}
+
+.simple-run-line .simple-time-input::-webkit-calendar-picker-indicator {
+  opacity: .5;
+  cursor: pointer;
+}
+
 .simple-line-match {
-  grid-column: 2 / 6;
+  grid-column: 2 / 7;
   margin-top: -2px;
   color: #637782;
   font-size: .68rem;
@@ -582,16 +595,21 @@
     grid-row: 2;
   }
 
-  .simple-run-line input:nth-of-type(4) { grid-column: 2 / 4; grid-row: 3; }
+  .simple-run-line .simple-time-input {
+    grid-column: 2 / 3;
+    grid-row: 3;
+  }
+
+  .simple-run-line input:nth-of-type(4) { grid-column: 2 / 4; grid-row: 4; }
 
   .simple-clear-line {
     grid-column: 4;
-    grid-row: 1 / 4;
+    grid-row: 1 / 5;
   }
 
   .simple-line-match {
     grid-column: 2 / 4;
-    grid-row: 4;
+    grid-row: 5;
   }
 
   .simple-run-details { grid-template-columns: 1fr; }
