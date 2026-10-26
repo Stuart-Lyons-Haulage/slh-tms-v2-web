@@ -17,7 +17,7 @@
   "dependencies": {
     "@azure/msal-browser": "^4.18.0",
     "@azure/msal-react": "^3.0.19",
-    "@tanstack/react-query": "^5.104.4",
+    "@tanstack/react-query": "^5.104.5",
     "@vitejs/plugin-react": "^5.2.0",
     "azure-maps-control": "^3.7.4",
     "react": "^19.0.0",
