@@ -78,7 +78,7 @@ jobs:
           echo "API health verified directly against the Azure API origin."
 \t'"$resource_group")
             fi
-          done < <(az staticwebapp list --query "[].{name:name,resourceGroup:resourceGroup}" --output tsv)
+          done < <(az staticwebapp list --query "[].[name,resourceGroup]" --output tsv)
           if [[ ${#matches[@]} -ne 1 ]]; then
             echo "Expected exactly one Azure Static Web App mapped to tms.lyonshaulage.com; found ${#matches[@]}." >&2
             exit 1
