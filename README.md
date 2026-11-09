@@ -2,16 +2,17 @@
 
 Production React and TypeScript operations portal for the [SLH TMS API](https://github.com/Stuart-Lyons-Haulage/slh-tms-api). The API and Azure SQL database remain the system of record. This repository owns the user-facing portal, planner, operations wallboard, TV wallboard, live runs, staging review, imports, reporting and operational screens.
 
-The production portal runs in Azure Container Apps and publishes automatically when `main` changes.
+The production portal is hosted as an Azure Static Web App. GitHub Actions builds and deploys it from `main` after the portal CI checks pass. The deployment workflow signs in to Azure with GitHub OIDC and resolves the Static Web App deployment token at run time.
 
 ## Production
 
 | Item | Value |
 | --- | --- |
-| Portal | `https://slh-tms-portal-prod.gentlepond-08dba66b.uksouth.azurecontainerapps.io/` |
-| API proxy | `/tms-api` |
-| API backing service | `https://slh-tms-api-prod.gentlepond-08dba66b.uksouth.azurecontainerapps.io` |
-| Runtime | Azure Container Apps with Nginx |
+| Portal | `https://tms.lyonshaulage.com/` |
+| Hosting | Azure Static Web Apps |
+| API | `https://slh-tms-api-prod.azurewebsites.net` |
+| API hosting | Azure App Service |
+| Database | Azure SQL |
 | Authentication | Microsoft Entra SPA sign-in |
 | API scope | `api://497f6ea5-9753-43ee-8ccf-afaa0a3869c2/Tms.Access` |
 

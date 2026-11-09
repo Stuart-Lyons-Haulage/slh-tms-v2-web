@@ -1,7 +1,6 @@
 name: Deploy SLH TMS Web
 
-# Deploy only after the CI build, unit tests and E2E have passed on main, so a broken
-# change can no longer reach the live site while its checks are still running.
+# Deploy only after portal CI passes on main.
 on:
   workflow_run:
     workflows: ["CI - Build, Test and E2E Portal"]
@@ -11,6 +10,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 concurrency:
   group: slh-tms-web-production
@@ -44,10 +44,48 @@ jobs:
           VITE_ENTRA_API_SCOPE: api://497f6ea5-9753-43ee-8ccf-afaa0a3869c2/Tms.Access
           VITE_AZURE_MAPS_CLIENT_ID: ${{ vars.AZURE_MAPS_CLIENT_ID }}
         run: pnpm build
+      - name: Sign in to Azure with GitHub OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Resolve production Static Web App and deployment token
+        shell: bash
+        run: |
+          set -euo pipefail
+          matching_name=""
+          matching_group=""
+          match_count=0
+          while read -r name resource_group; do
+            [[ -n "$name" && -n "$resource_group" ]] || continue
+            hostnames="$(az staticwebapp hostname list --name "$name" --resource-group "$resource_group" --output json)"
+            if grep -Fq "tms.lyonshaulage.com" <<< "$hostnames"; then
+              match_count=$((match_count + 1))
+              matching_name="$name"
+              matching_group="$resource_group"
+            fi
+          done < <(az staticwebapp list --query "[].[name,resourceGroup]" --output tsv)
+          if [[ "$match_count" -ne 1 ]]; then
+            echo "Expected one Azure Static Web App for tms.lyonshaulage.com; found $match_count." >&2
+            exit 1
+          fi
+          token="$(az staticwebapp secrets list --name "$matching_name" --resource-group "$matching_group" --query properties.apiKey --output tsv)"
+          if [[ -z "$token" || "$token" == "None" ]]; then
+            echo "Azure did not return a deployment token for the production Static Web App." >&2
+            exit 1
+          fi
+          echo "::add-mask::$token"
+          {
+            echo "SWA_DEPLOYMENT_TOKEN=$token"
+            echo "SWA_NAME=$matching_name"
+            echo "SWA_RESOURCE_GROUP=$matching_group"
+          } >> "$GITHUB_ENV"
+          echo "Resolved Azure Static Web App $matching_name in $matching_group."
       - name: Deploy to Azure Static Web Apps
         uses: Azure/static-web-apps-deploy@v1
         with:
-          azure_static_web_apps_api_token: ${{ secrets.SWA_DEPLOYMENT_TOKEN }}
+          azure_static_web_apps_api_token: ${{ env.SWA_DEPLOYMENT_TOKEN }}
           action: upload
           app_location: dist
           skip_app_build: true
