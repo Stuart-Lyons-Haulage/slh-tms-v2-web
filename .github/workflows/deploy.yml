@@ -1,7 +1,6 @@
 name: Deploy SLH TMS Web
 
-# Deploy only after the CI build, unit tests and E2E have passed on main, so a broken
-# change can no longer reach the live site while its checks are still running.
+# Deploy only after portal CI passes on main.
 on:
   workflow_run:
     workflows: ["CI - Build, Test and E2E Portal"]
@@ -51,48 +50,27 @@ jobs:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-      - name: Resolve the production Static Web App and deployment token
+      - name: Resolve production Static Web App and deployment token
         shell: bash
         run: |
           set -euo pipefail
-          matches=()
-          while IFS=
-      - name: Verify portal and API health
-        run: |
-          set -euo pipefail
-          test "$(curl -fsS -o /dev/null -w '%{http_code}' https://tms.lyonshaulage.com/)" = "200"
-          health="$(curl -fsS https://slh-tms-api-prod.azurewebsites.net/api/v1/health)"
-          echo "$health" | grep -q '"status":"healthy"'
-          echo "API health verified directly against the Azure API origin."
-\t' read -r name resource_group; do
+          matching_name=""
+          matching_group=""
+          match_count=0
+          while read -r name resource_group; do
             [[ -n "$name" && -n "$resource_group" ]] || continue
             hostnames="$(az staticwebapp hostname list --name "$name" --resource-group "$resource_group" --output json)"
             if grep -Fq "tms.lyonshaulage.com" <<< "$hostnames"; then
-              matches+=("$name"
-      - name: Verify portal and API health
-        run: |
-          set -euo pipefail
-          test "$(curl -fsS -o /dev/null -w '%{http_code}' https://tms.lyonshaulage.com/)" = "200"
-          health="$(curl -fsS https://slh-tms-api-prod.azurewebsites.net/api/v1/health)"
-          echo "$health" | grep -q '"status":"healthy"'
-          echo "API health verified directly against the Azure API origin."
-\t'"$resource_group")
+              match_count=$((match_count + 1))
+              matching_name="$name"
+              matching_group="$resource_group"
             fi
           done < <(az staticwebapp list --query "[].[name,resourceGroup]" --output tsv)
-          if [[ ${#matches[@]} -ne 1 ]]; then
-            echo "Expected exactly one Azure Static Web App mapped to tms.lyonshaulage.com; found ${#matches[@]}." >&2
+          if [[ "$match_count" -ne 1 ]]; then
+            echo "Expected one Azure Static Web App for tms.lyonshaulage.com; found $match_count." >&2
             exit 1
           fi
-          IFS=
-      - name: Verify portal and API health
-        run: |
-          set -euo pipefail
-          test "$(curl -fsS -o /dev/null -w '%{http_code}' https://tms.lyonshaulage.com/)" = "200"
-          health="$(curl -fsS https://slh-tms-api-prod.azurewebsites.net/api/v1/health)"
-          echo "$health" | grep -q '"status":"healthy"'
-          echo "API health verified directly against the Azure API origin."
-\t' read -r swa_name swa_resource_group <<< "${matches[0]}"
-          token="$(az staticwebapp secrets list --name "$swa_name" --resource-group "$swa_resource_group" --query properties.apiKey --output tsv)"
+          token="$(az staticwebapp secrets list --name "$matching_name" --resource-group "$matching_group" --query properties.apiKey --output tsv)"
           if [[ -z "$token" || "$token" == "None" ]]; then
             echo "Azure did not return a deployment token for the production Static Web App." >&2
             exit 1
@@ -100,10 +78,10 @@ jobs:
           echo "::add-mask::$token"
           {
             echo "SWA_DEPLOYMENT_TOKEN=$token"
-            echo "SWA_NAME=$swa_name"
-            echo "SWA_RESOURCE_GROUP=$swa_resource_group"
+            echo "SWA_NAME=$matching_name"
+            echo "SWA_RESOURCE_GROUP=$matching_group"
           } >> "$GITHUB_ENV"
-          echo "Resolved Azure Static Web App $swa_name in $swa_resource_group."
+          echo "Resolved Azure Static Web App $matching_name in $matching_group."
       - name: Deploy to Azure Static Web Apps
         uses: Azure/static-web-apps-deploy@v1
         with:
